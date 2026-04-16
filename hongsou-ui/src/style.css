@@ -1,0 +1,118 @@
+@import url("https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Fira+Sans:wght@400;500;600;700;800;900&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer components {
+  .hs-panel {
+    @apply border border-slate-200/50 bg-white/70 shadow-sm backdrop-blur-xl;
+  }
+
+  .hs-pill {
+    @apply inline-flex items-center gap-2 rounded-full border border-slate-200/80 bg-white/80 px-3 py-2 text-xs font-extrabold text-slate-600 transition;
+  }
+
+  .hs-pill-active {
+    @apply border-blue-300/70 bg-blue-50 text-blue-700 shadow-sm;
+  }
+
+  .hs-command-button {
+    @apply inline-flex items-center justify-center gap-2 rounded-full bg-slate-950 px-5 py-3 text-xs font-extrabold text-white shadow-glow transition;
+  }
+}
+
+:root {
+  --hs-bg: #f5f8fc;
+  --hs-surface: rgba(255, 255, 255, 0.86);
+  --hs-surface-strong: rgba(255, 255, 255, 0.96);
+  --hs-panel: #ffffff;
+  --hs-ink: #07111f;
+  --hs-muted: #65758d;
+  --hs-soft: #8a9bb3;
+  --hs-line: rgba(148, 163, 184, 0.24);
+  --hs-primary: #1e40af;
+  --hs-primary-2: #3b82f6;
+  --hs-cyan: #06b6d4;
+  --hs-amber: #f59e0b;
+  --hs-shadow: 0 18px 55px rgba(15, 23, 42, 0.08);
+  --hs-glow: 0 24px 80px rgba(37, 99, 235, 0.16);
+  --hs-radius-xl: 24px;
+  --bg-sidebar: #0f172a;
+  --hs-bg: #f8fafc;
+  color-scheme: light;
+  font-family: "Fira Sans", "PingFang SC", "Microsoft YaHei", sans-serif;
+  color: var(--hs-ink);
+  background: var(--hs-bg);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  width: 100%;
+  min-width: 0;
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 16% 8%, rgba(59, 130, 246, 0.18), transparent 28rem),
+    radial-gradient(circle at 90% 16%, rgba(6, 182, 212, 0.15), transparent 30rem),
+    linear-gradient(135deg, #f8fbff 0%, #eef4fb 54%, #f6f8fb 100%);
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+button,
+[role="button"] {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+::selection {
+  color: #ffffff;
+  background: rgba(30, 64, 175, 0.8);
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(226, 232, 240, 0.46);
+}
+
+::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(100, 116, 139, 0.38);
+  border: 2px solid rgba(248, 250, 252, 0.86);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}

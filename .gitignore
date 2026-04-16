@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Node
+hongsou-ui/node_modules/
+hongsou-ui/dist/
+
+# Runtime data
+runtime/db/*.db
+runtime/db/*.db-*
+runtime/meili/data.ms/
+runtime/meili/*.exe
+
+# Environment
+.env
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Backups
+_backups/
+app/__backup/
+*.bak
+
+# Cookies (sensitive)
+app/crawler/cookies/*.json
+
+# BERT model cache
+*.bin
+*.safetensors
