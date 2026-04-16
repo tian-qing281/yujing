@@ -6,8 +6,8 @@ __pycache__/
 venv/
 
 # Node
-hongsou-ui/node_modules/
-hongsou-ui/dist/
+yujing-ui/node_modules/
+yujing-ui/dist/
 
 # Runtime data
 runtime/db/*.db
@@ -18,9 +18,11 @@ runtime/meili/*.exe
 # Environment
 .env
 
-# IDE
+# IDE / AI config
 .vscode/
 .idea/
+.codex/
+CLAUDE.md
 
 # OS
 Thumbs.db
