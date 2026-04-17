@@ -1095,6 +1095,8 @@ def admin_rebuild_embeddings(lookback_hours: int = 720, batch_size: int = 64):
     - 已存在（article_id + 当前 EMBED_MODEL_NAME）的向量会跳过；
     - 首次调用会加载 bge-small-zh-v1.5（约 100 MB，第一次需下载）；
     - 返回处理条数与当前模型名，便于前端观测进度。
+    - 模型加载失败（常见是没网 / HF 离线模式）时返回 ok=False + 明确 hint，
+      不抛 500，避免 curl 看到堆栈；此时既不会写坏数据，也不影响旧聚类。
     """
     from app.services.embedding import EMBED_MODEL_NAME
     from app.services.semantic_cluster import ensure_embeddings
@@ -1110,7 +1112,22 @@ def admin_rebuild_embeddings(lookback_hours: int = 720, batch_size: int = 64):
         )
         if not articles:
             return {"ok": True, "total": 0, "model": EMBED_MODEL_NAME}
-        emb_map = ensure_embeddings(db, articles, batch_size=batch_size)
+        try:
+            emb_map = ensure_embeddings(db, articles, batch_size=batch_size)
+        except Exception as exc:
+            # 常见根因：HF 离线或网络不通。给前端 / curl 一个可直接照做的建议。
+            return {
+                "ok": False,
+                "error": str(exc),
+                "hint": (
+                    "embedding 模型加载失败。请在 .env 追加 EMBED_USE_MIRROR=1 后重启后端，"
+                    "或手动设置 HF_ENDPOINT=https://hf-mirror.com 并解除 HF_HUB_OFFLINE。"
+                    "该报错不影响原 Jaccard 聚类，事件列表照旧可用。"
+                ),
+                "total": len(articles),
+                "embedded": 0,
+                "model": EMBED_MODEL_NAME,
+            }
         return {
             "ok": True,
             "total": len(articles),

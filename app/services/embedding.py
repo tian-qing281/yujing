@@ -42,6 +42,15 @@ EMBED_DIM = int(os.getenv("EMBED_DIM", "512"))  # bge-small-zh-v1.5 实际是 51
 EMBED_BATCH = int(os.getenv("EMBED_BATCH", "16"))
 EMBED_MAX_LENGTH = int(os.getenv("EMBED_MAX_LENGTH", "128"))  # 标题+摘要场景 128 足够
 
+# 国内镜像自动注入：若用户设了 EMBED_USE_MIRROR=1 且没有手动指定 HF_ENDPOINT，
+# 就把 endpoint 指向 hf-mirror.com；这是国内拉 huggingface 权重的主流替代源。
+# 同时会强制关掉离线模式，解决系统级残留 HF_HUB_OFFLINE=1 的环境。
+if os.getenv("EMBED_USE_MIRROR", "0").strip() in ("1", "true", "True", "yes"):
+    if not os.getenv("HF_ENDPOINT"):
+        os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
+    os.environ["HF_HUB_OFFLINE"] = "0"
+    os.environ["TRANSFORMERS_OFFLINE"] = "0"
+
 # bge 官方建议：检索场景下 query 前加指令前缀，document 不加；
 # 聚类属于 document-document 场景，所以两边都不加前缀。
 EMBED_QUERY_INSTRUCTION = "为这个句子生成表示以用于检索相关文章："
@@ -56,6 +65,16 @@ _model = None
 _model_ready = False
 
 
+_FRIENDLY_HINT = (
+    "\n[embedding] 模型加载失败。排查建议（任选其一）：\n"
+    "  A) 国内镜像（推荐）：在 .env 追加一行 EMBED_USE_MIRROR=1 后重启后端；\n"
+    "     也可以手动 HF_ENDPOINT=https://hf-mirror.com + HF_HUB_OFFLINE=0。\n"
+    "  B) 直连 huggingface.co：保证能 ping 通，unset HF_HUB_OFFLINE / TRANSFORMERS_OFFLINE。\n"
+    "  C) 完全离线：把模型下载到本地目录，再把 EMBED_MODEL 指到该目录的绝对路径。\n"
+    '注意：该报错只影响"语义聚类"这一可选新功能；原有 Jaccard 路径继续正常工作。\n'
+)
+
+
 def _load_model_sync():
     """同步加载 tokenizer + model。首次调用会下载权重到 HF cache。"""
     global _tokenizer, _model, _model_ready
@@ -68,7 +87,11 @@ def _load_model_sync():
             import torch
             from transformers import AutoModel, AutoTokenizer
 
-            logger.info(f"[embedding] 正在加载 {EMBED_MODEL_NAME} ...")
+            logger.info(
+                f"[embedding] 正在加载 {EMBED_MODEL_NAME} "
+                f"(HF_ENDPOINT={os.getenv('HF_ENDPOINT') or 'default'}, "
+                f"HF_HUB_OFFLINE={os.getenv('HF_HUB_OFFLINE') or '0'}) ..."
+            )
             tok = AutoTokenizer.from_pretrained(EMBED_MODEL_NAME)
             mdl = AutoModel.from_pretrained(EMBED_MODEL_NAME)
             mdl.eval()
@@ -80,6 +103,8 @@ def _load_model_sync():
             _model_ready = True
             logger.info(f"[embedding] 模型就绪：dim 目标={EMBED_DIM}")
         except Exception as exc:  # noqa: BLE001
+            # 关键：把可操作的提示打出来，让运维不用翻栈
+            logger.error(_FRIENDLY_HINT)
             logger.exception(f"[embedding] 加载失败：{exc}")
             raise
 
