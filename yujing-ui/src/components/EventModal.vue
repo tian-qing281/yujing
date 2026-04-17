@@ -7,10 +7,6 @@
             <h2>{{ item.title }}</h2>
           </div>
           <div class="head-actions">
-            <button class="btn-export-pdf btn btn-outline btn-sm" type="button" @click="exportPdf" title="导出PDF">
-              <iconify-icon icon="ri:file-pdf-2-line" />
-              <span>导出PDF</span>
-            </button>
             <button class="btn-close btn btn-circle btn-ghost" type="button" @click="$emit('close')">
               <iconify-icon icon="mdi:close"></iconify-icon>
             </button>
@@ -81,21 +77,47 @@
 
           <section class="full-width-panel card bg-base-100">
             <div class="panel-head">
-              <span>全部情报卡</span>
-              <span>{{ allArticles.length }} 条</span>
+              <span>事件脉络</span>
+              <span>
+                {{ timelineArticles.length }} 条 · 按时间演化
+                <span v-if="timelineArticles.length > 0" class="timeline-window-hint">
+                  （仅显示采集窗口内 · 早期数据已按保留策略清理）
+                </span>
+              </span>
             </div>
-            <div class="timeline-list">
+            <div class="timeline-list timeline-list--rail">
               <article
-                v-for="article in allArticles"
+                v-for="(article, idx) in timelineArticles"
                 :key="article.id"
                 class="timeline-row"
                 @click="$emit('open-article', article)"
               >
-                <div class="timeline-dot"></div>
+                <div
+                  class="timeline-dot"
+                  :style="{ background: getSentimentColor(article.ai_sentiment), boxShadow: `0 0 0 4px ${getSentimentColor(article.ai_sentiment)}22` }"
+                  :title="getSentimentLabel(article.ai_sentiment)"
+                ></div>
                 <div class="timeline-copy">
+                  <div
+                    v-if="idx > 0 && formatTimeGap(timelineTimeOf(timelineArticles[0]), timelineTimeOf(article))"
+                    class="timeline-gap"
+                  >
+                    <iconify-icon icon="mdi:clock-outline" />
+                    <span>起点 {{ formatTimeGap(timelineTimeOf(timelineArticles[0]), timelineTimeOf(article)) }}</span>
+                  </div>
                   <div class="timeline-meta">
-                    <span>{{ getSourceName(article.source_id) }}</span>
-                    <span v-if="formatTime(article.fetch_time)">{{ formatTime(article.fetch_time) }}</span>
+                    <span class="timeline-platform">
+                      <iconify-icon :icon="getSourceIcon(article.source_id)" />
+                      {{ getSourceName(article.source_id) }}
+                    </span>
+                    <span v-if="formatTime(timelineTimeOf(article))">{{ formatTime(timelineTimeOf(article)) }}</span>
+                    <span
+                      v-if="getSentimentLabel(article.ai_sentiment)"
+                      class="timeline-sentiment-chip"
+                      :style="{ color: getSentimentColor(article.ai_sentiment), borderColor: `${getSentimentColor(article.ai_sentiment)}55` }"
+                    >
+                      {{ getSentimentLabel(article.ai_sentiment) }}
+                    </span>
                   </div>
                   <h4>{{ article.title }}</h4>
                   <p>{{ getArticlePreview(article) }}</p>
@@ -253,6 +275,11 @@ const fetchAiSummary = async () => {
           const payload = JSON.parse(line.slice(6));
           if (payload.type === "content") {
             aiSummaryText.value += payload.text || "";
+          } else if (payload.type === "skip_video") {
+            // 代表文章被识别为视频 → 后端已删除 event/article，关闭本 modal 让父级刷新
+            aiSummaryText.value = "此事件为视频内容，已从榜单移除。";
+            emit("close");
+            return;
           }
         } catch { /* skip */ }
       }
@@ -273,6 +300,92 @@ const fetchAiSummary = async () => {
 const getSourceName = (id) => {
   const hit = props.sourceRegistry.find((item) => item.id === id);
   return hit ? hit.name : SOURCE_LABEL_MAP[id] || "未知来源";
+};
+
+const SOURCE_ICON_MAP = {
+  weibo_hot_search: "ri:weibo-fill",
+  baidu_hot: "ri:baidu-fill",
+  toutiao_hot: "mdi:newspaper-variant",
+  bilibili_hot_video: "ri:bilibili-fill",
+  zhihu_hot_question: "ri:zhihu-fill",
+  thepaper_hot: "mdi:newspaper",
+  wallstreetcn_news: "mdi:finance",
+  cls_telegraph: "mdi:chart-line",
+};
+
+const getSourceIcon = (id) => SOURCE_ICON_MAP[id] || "mdi:web";
+
+const SENTIMENT_COLOR_MAP = {
+  neutral: "#64748b",
+  中性: "#64748b",
+  concern: "#3b82f6",
+  关注: "#3b82f6",
+  joy: "#10b981",
+  喜悦: "#10b981",
+  anger: "#ef4444",
+  愤怒: "#ef4444",
+  sadness: "#8b5cf6",
+  悲伤: "#8b5cf6",
+  doubt: "#f59e0b",
+  质疑: "#f59e0b",
+  surprise: "#eab308",
+  惊讶: "#eab308",
+  disgust: "#991b1b",
+  厌恶: "#991b1b",
+};
+
+const getSentimentColor = (sentiment) =>
+  SENTIMENT_COLOR_MAP[String(sentiment || "").trim()] || "#94a3b8";
+
+const SENTIMENT_LABEL_MAP = {
+  neutral: "中性", concern: "关注", joy: "喜悦", anger: "愤怒",
+  sadness: "悲伤", doubt: "质疑", surprise: "惊讶", disgust: "厌恶",
+};
+
+const getSentimentLabel = (sentiment) => {
+  const raw = String(sentiment || "").trim();
+  if (!raw) return "";
+  return SENTIMENT_LABEL_MAP[raw] || raw;
+};
+
+// 事件脉络：按时间升序（旧→新），讲述事件演化过程
+// 排序优先级：pub_date（真实发布时间） > fetch_time（平台抓取时间）
+// 两者都缺失的条目固定排到末尾，避免 new Date(0) 把空值顶到开头造成乱序
+const _timelineTs = (article) => {
+  const raw = article?.pub_date || article?.fetch_time;
+  if (!raw) return null;
+  const t = new Date(raw).getTime();
+  return Number.isFinite(t) ? t : null;
+};
+
+const timelineArticles = computed(() => {
+  const arr = [...(props.item?.related_articles || [])];
+  return arr.sort((a, b) => {
+    const ta = _timelineTs(a);
+    const tb = _timelineTs(b);
+    if (ta === null && tb === null) return 0;
+    if (ta === null) return 1;   // 无时间的排到后面
+    if (tb === null) return -1;
+    if (ta !== tb) return ta - tb;
+    return (a.id || 0) - (b.id || 0);  // 稳定排序：时间相同按 id
+  });
+});
+
+// 显示用：pub_date > fetch_time 的优先级保持和排序 key 一致，避免时间与顺序脱节
+const timelineTimeOf = (article) => article?.pub_date || article?.fetch_time || "";
+
+// 距事件第一条（起点）的时间差提示。> 1 天时同时展示小时，体现时间跨度
+const formatTimeGap = (prevIso, curIso) => {
+  if (!prevIso || !curIso) return "";
+  const diff = new Date(curIso).getTime() - new Date(prevIso).getTime();
+  if (!Number.isFinite(diff) || diff < 60 * 1000) return "";
+  const totalMinutes = Math.floor(diff / 60000);
+  if (totalMinutes < 60) return `${totalMinutes} 分钟后`;
+  const totalHours = Math.floor(totalMinutes / 60);
+  if (totalHours < 24) return `${totalHours} 小时后`;
+  const days = Math.floor(totalHours / 24);
+  const remainingHours = totalHours - days * 24;
+  return remainingHours > 0 ? `${days} 天 ${remainingHours} 小时后` : `${days} 天后`;
 };
 
 const prettifySourceIds = (value) => {
@@ -314,11 +427,6 @@ const getArticlePreview = (article) => {
     }
   }
   return "";
-};
-
-const exportPdf = () => {
-  if (!props.item?.id) return;
-  window.open(`http://localhost:8000/api/events/${props.item.id}/export_pdf`, '_blank');
 };
 
 const openRepresentativeArticle = () => {
@@ -366,40 +474,26 @@ const sourceBreakdown = computed(() => {
     .slice(0, 8);
 });
 
+// 关键词热度只取后端已清洗过的 event.keywords（后端 _extract_display_keywords
+// 里有完整的 blocklist + 停用词 + 片段过滤）。前端早先那段"按标点硬切 title +
+// preview"的土法分词会漏掉大量没有标点的长片段（"第7个行政区""推动国家重建"
+// "如今以"都是这样进来的），彻底弃用。
+// 权重按后端给的排序衰减，保证图表高度分布自然。
 const keywordBreakdown = computed(() => {
-  const counter = new Map();
-  const pushKeyword = (keyword, weight = 1) => {
-    const text = String(keyword || "").trim();
-    if (!text || text.length < 2 || text.length > 6) return;
-    if (KEYWORD_STOPWORDS.has(text)) return;
-    if (/^\d+$/.test(text)) return;
-    if (/[()[\]【】{}（）《》〈〉??？!！#…]/.test(text)) return;
-    if (/^[a-zA-Z]+$/.test(text)) return;
-    if (/^[0-9A-Za-z-]+$/.test(text) && text.length > 4) return;
-    if (/\d{1,2}月|\d{1,2}日|\d{4}年/.test(text)) return;
-    if (/^(hot|search|weibo|baidu|toutiao|zhihu|cls|bilibili)/i.test(text)) return;
-    if (text.includes("核心") || text.includes("研判") || text.includes("时间") || text.includes("条情报")) return;
-    if (text.includes("表示") || text.includes("跟进") || text.includes("指出") || text.includes("透露")) return;
-    if (/[称说道曰指出认为表示透露了的吗呢吧啊哦呀么过起来去着]$/.test(text)) return;
-    if (/^(该|这|那|据|从|在|对|向|把|被|让|给|为|因|但|又|也|再)/.test(text) && text.length <= 3) return;
-    counter.set(text, (counter.get(text) || 0) + weight);
-  };
-
-  for (const keyword of props.item?.keywords || []) {
-    pushKeyword(keyword, 3);
+  const raw = props.item?.keywords || [];
+  const seen = new Set();
+  const cleaned = [];
+  for (const kw of raw) {
+    const text = String(kw || "").trim();
+    if (!text) continue;
+    if (seen.has(text)) continue;
+    if (KEYWORD_STOPWORDS.has(text)) continue;
+    seen.add(text);
+    cleaned.push(text);
   }
-
-  for (const article of allArticles.value) {
-    const seed = `${article.title || ""} ${getArticlePreview(article)}`;
-    for (const token of seed.split(/[，。、“”‘’；：:、\s/|?？!！…《》【】#]+/)) {
-      pushKeyword(token, 1);
-    }
-  }
-
-  return [...counter.entries()]
-    .map(([label, value]) => ({ label, value }))
-    .sort((a, b) => b.value - a.value)
-    .slice(0, 6);
+  // 后端默认已按重要度排序；用 (N - i) 当"热度值"让条形图阶梯清晰
+  const total = cleaned.length;
+  return cleaned.slice(0, 6).map((label, i) => ({ label, value: total - i }));
 });
 
 
@@ -861,6 +955,12 @@ onUnmounted(() => {
   font-weight: 800;
 }
 
+.timeline-window-hint {
+  font-weight: 600;
+  color: #94a3b8;
+  margin-left: 4px;
+}
+
 .lead-article-card,
 .core-summary-card {
   border: 1px solid rgba(226, 232, 240, 0.95);
@@ -938,6 +1038,22 @@ onUnmounted(() => {
   overflow-y: auto;
 }
 
+.timeline-list--rail {
+  position: relative;
+}
+
+.timeline-list--rail::before {
+  content: "";
+  position: absolute;
+  top: 20px;
+  bottom: 20px;
+  left: 28px;
+  width: 2px;
+  background: linear-gradient(to bottom, #e2e8f0 0%, #cbd5e1 50%, #e2e8f0 100%);
+  border-radius: 2px;
+  pointer-events: none;
+}
+
 .timeline-row {
   display: grid;
   grid-template-columns: 20px minmax(0, 1fr);
@@ -945,6 +1061,8 @@ onUnmounted(() => {
   padding: 12px;
   border-radius: 16px;
   cursor: pointer;
+  position: relative;
+  transition: background 0.15s ease;
 }
 
 .timeline-row:hover {
@@ -952,11 +1070,57 @@ onUnmounted(() => {
 }
 
 .timeline-dot {
-  width: 10px;
-  height: 10px;
+  width: 12px;
+  height: 12px;
   border-radius: 999px;
   background: #3b82f6;
-  margin-top: 6px;
+  margin-top: 8px;
+  margin-left: 2px;
+  position: relative;
+  z-index: 1;
+  border: 2px solid #ffffff;
+  transition: transform 0.15s ease;
+}
+
+.timeline-row:hover .timeline-dot {
+  transform: scale(1.25);
+}
+
+.timeline-gap {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  margin-bottom: 6px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.timeline-gap iconify-icon {
+  font-size: 12px;
+}
+
+.timeline-platform {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.timeline-platform iconify-icon {
+  font-size: 14px;
+  color: #475569;
+}
+
+.timeline-sentiment-chip {
+  padding: 1px 8px;
+  border: 1px solid;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  background: #ffffff;
 }
 
 .timeline-meta {

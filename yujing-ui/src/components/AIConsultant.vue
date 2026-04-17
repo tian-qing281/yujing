@@ -68,23 +68,30 @@
           </button>
         </div>
 
-        <div v-if="briefReady && !briefDismissed" class="brief-banner">
+        <div
+          v-if="briefStatus !== 'loading'"
+          class="brief-banner"
+          :class="`brief-banner--${briefStatus}`"
+        >
           <div class="brief-banner-icon">
-            <iconify-icon icon="ri:sun-line" />
+            <iconify-icon
+              :icon="briefStatus === 'ready' ? 'ri:sun-line' : 'ri:loader-4-line'"
+              :class="briefStatus !== 'ready' ? 'brief-icon-spin' : ''"
+            />
           </div>
           <div class="brief-banner-text">
-            <strong>今日舆情早报已就绪</strong>
-            <span>{{ briefDate }}</span>
+            <strong v-if="briefStatus === 'ready'">今日舆情早报已就绪</strong>
+            <strong v-else>今日早报正在生成…</strong>
+            <span>{{ briefDate || todayLabel }}</span>
           </div>
-          <button class="brief-banner-btn" type="button" :disabled="isActivePending" @click="openBrief">
-            查看早报
-          </button>
-          <button class="brief-banner-pdf" type="button" @click="exportBriefPdf" title="导出PDF">
-            <iconify-icon icon="ri:file-pdf-2-line" />
-          </button>
-          <button class="brief-banner-close" type="button" @click="briefDismissed = true">
-            <iconify-icon icon="mdi:close" />
-          </button>
+          <template v-if="briefStatus === 'ready'">
+            <button class="brief-banner-btn" type="button" :disabled="isActivePending" @click="openBrief">
+              查看早报
+            </button>
+            <button class="brief-banner-pdf" type="button" @click="exportBriefPdf" title="导出PDF">
+              <iconify-icon icon="ri:file-pdf-2-line" />
+            </button>
+          </template>
         </div>
 
         <div v-if="alerts.length" class="alerts-panel">
@@ -136,13 +143,22 @@
           v-for="(msg, index) in history"
           :key="`${activeSessionId}-${index}`"
           :class="['message-row', msg.role]"
+          :data-msg-index="index"
         >
           <article class="message-block card" :class="msg.role === 'assistant' ? 'bg-base-100' : 'bg-primary text-primary-content'">
             <div class="message-meta badge badge-ghost" v-if="msg.role === 'assistant'">AI 回复</div>
+
+            <!-- 对比仪表盘：当消息携带 compare_metrics 时，在正文之上渲染双列对比卡 -->
+            <CompareDashboard
+              v-if="msg.role === 'assistant' && msg.compare_metrics"
+              :metrics="msg.compare_metrics"
+              @open-article="$emit('open-item', $event)"
+            />
+
             <div class="msg-text" v-html="formatMessage(msg.content)"></div>
 
             <div v-if="msg.role === 'assistant' && msg.content && !isActivePending" class="msg-actions">
-              <button class="msg-action-btn" type="button" @click="exportMessagePdf(msg)" title="导出PDF">
+              <button class="msg-action-btn" type="button" @click="exportMessagePdf(msg, index)" title="导出PDF">
                 <iconify-icon icon="ri:file-pdf-2-line" />
                 <span>导出PDF</span>
               </button>
@@ -230,8 +246,13 @@
 
 <script setup>
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
+import html2canvas from "html2canvas";
+import CompareDashboard from "./CompareDashboard.vue";
 
-const STORAGE_KEY = "hongsou_mcp_sessions_v1";
+// 迁移说明：老 key 为 hongsou_mcp_sessions_v1。这里改为 yujing_ 前缀后首次加载
+// 时会出现一次"空会话"列表，属于预期；旧历史如需保留，可手动 localStorage
+// 改名。考虑到这是本地开发痕迹，不做运行时迁移以降低代码复杂度。
+const STORAGE_KEY = "yujing_mcp_sessions_v1";
 const API_URL = "http://localhost:8000/api/mcp/ask";
 
 const props = defineProps({
@@ -247,34 +268,67 @@ const activeSessionId = ref("");
 const pendingSessionIds = ref([]);
 const chatScroll = ref(null);
 const inputQuery = ref("");
-const briefReady = ref(false);
+// 早报 banner 三态：
+//   'loading'    前端首次轮询尚未返回（banner 不渲染，避免闪烁）
+//   'ready'      后端 cache 命中今日早报，banner 显示"查看早报"+PDF
+//   'generating' 后端仍在跑生成，banner 显示占位"生成中…"
+// 合并掉了旧 briefDismissed 逻辑：用户要求"显示在上面"本来就意味着常驻。
+const briefStatus = ref("loading");
 const briefDate = ref("");
-const briefDismissed = ref(false);
+const todayLabel = new Date().toISOString().slice(0, 10);
 
 let briefPollTimer = null;
+const BRIEF_POLL_INTERVAL_MS = 3000; // 工业级轮询频率
+
+// 工业级流程：POST trigger → 立即拿状态；后端若 started/running 就继续每 3s
+// GET /status 轮询，直到 has_brief=true。全程不 hold 长连接，不 push 任何东西。
+const triggerMorningBrief = async () => {
+  try {
+    const resp = await fetch("http://localhost:8000/api/ai/morning_brief/trigger", {
+      method: "POST",
+    });
+    if (!resp.ok) return { status: "error" };
+    return await resp.json(); // { status: 'ready' | 'running' | 'started' }
+  } catch {
+    return { status: "error" };
+  }
+};
 
 const checkMorningBrief = async () => {
   try {
     const res = await fetch("http://localhost:8000/api/ai/morning_brief/status");
     const data = await res.json();
     if (data.has_brief) {
-      briefReady.value = true;
+      briefStatus.value = "ready";
       briefDate.value = data.date;
-      // 已就绪，停止轮询
       if (briefPollTimer) { clearInterval(briefPollTimer); briefPollTimer = null; }
+    } else if (data.generating) {
+      briefStatus.value = "generating";
     }
   } catch {
-    // 静默失败
+    // 网络抖动：保持当前态，不清空 banner
   }
 };
 
-const startBriefPolling = () => {
-  checkMorningBrief();
-  // 每15秒检查一次，直到早报就绪
+const startBriefPolling = async () => {
+  // 第一跳：用 trigger 把状态一次性搞清楚
+  const first = await triggerMorningBrief();
+  if (first.status === "ready") {
+    briefStatus.value = "ready";
+    briefDate.value = first.date || todayLabel;
+    return;
+  }
+  // started / running / error → 进入 3s 轮询直至 ready
+  briefStatus.value = "generating";
+  if (briefPollTimer) clearInterval(briefPollTimer);
   briefPollTimer = setInterval(() => {
-    if (!briefReady.value) checkMorningBrief();
-    else { clearInterval(briefPollTimer); briefPollTimer = null; }
-  }, 15000);
+    if (briefStatus.value === "ready") {
+      clearInterval(briefPollTimer);
+      briefPollTimer = null;
+      return;
+    }
+    checkMorningBrief();
+  }, BRIEF_POLL_INTERVAL_MS);
 };
 
 // --- 舆情异动告警 ---
@@ -310,42 +364,139 @@ const startAlertPolling = () => {
   alertPollTimer = setInterval(fetchAlerts, 60000); // 每60秒
 };
 
+// 调 `/api/ai/morning_brief` SSE 端点，把 chunk 流式填入 session。
+// 全局统一路径：openBrief 的 fallback 和 onMounted 的 fallback 都走这里，
+// 避免出现"把'查看今日舆情早报'当用户问题塞给普通 chat"的提示词回显 bug。
+const generateBriefViaSSE = async (session) => {
+  if (!session) return;
+  const assistantMsg = { role: "assistant", content: "", streaming: true };
+  session.messages.push(assistantMsg);
+  await nextTick();
+  scrollToBottom();
+
+  try {
+    const resp = await fetch("http://localhost:8000/api/ai/morning_brief");
+    if (!resp.ok || !resp.body) throw new Error(`HTTP ${resp.status}`);
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let sepIdx;
+      while ((sepIdx = buffer.indexOf("\n\n")) !== -1) {
+        const raw = buffer.slice(0, sepIdx).trim();
+        buffer = buffer.slice(sepIdx + 2);
+        if (!raw.startsWith("data:")) continue;
+        try {
+          const payload = JSON.parse(raw.slice(5).trim());
+          if (payload.type === "content" && payload.text) {
+            assistantMsg.content += payload.text;
+            scrollToBottom(false); // 柔性滚动：允许用户上滑阅读
+          }
+        } catch {}
+      }
+    }
+  } catch (err) {
+    assistantMsg.content = assistantMsg.content || `早报生成失败: ${err?.message || err}`;
+  } finally {
+    assistantMsg.streaming = false;
+    session.title = session.title || `舆情早报 ${new Date().toISOString().slice(0, 10)}`;
+    saveSessions();
+    await nextTick();
+    scrollToBottom();
+    // 流结束后后端已写缓存 → 刷新 banner 状态
+    try { await checkMorningBrief(); } catch {}
+  }
+};
+
 const openBrief = async () => {
-  briefDismissed.value = true;
+  ensureSession();
+  const session = activeSession.value;
+  if (!session) return;
+
+  // 1) 先读缓存（避免重复 LLM 请求）
   try {
     const res = await fetch("http://localhost:8000/api/ai/morning_brief/content");
     const data = await res.json();
     if (data.ok && data.content) {
-      // 直接插入缓存内容，不走 LLM
-      const session = activeSession.value;
-      if (session) {
-        session.messages.push({ role: "user", content: "查看今日舆情早报" });
-        session.messages.push({ role: "assistant", content: data.content });
-        session.title = session.title || `舆情早报 ${data.date}`;
-        saveSessions();
-        await nextTick();
-        scrollToBottom();
-      }
+      session.messages.push({ role: "user", content: "查看今日舆情早报" });
+      session.messages.push({ role: "assistant", content: data.content });
+      session.title = session.title || `舆情早报 ${data.date}`;
+      saveSessions();
+      await nextTick();
+      scrollToBottom();
       return;
     }
   } catch {}
-  // 缓存不可用时回退到 AI 查询
-  sendMessage("查看今日舆情早报");
+
+  // 2) 缓存为空 → 调用正确的早报生成 SSE 端点
+  session.messages.push({ role: "user", content: "查看今日舆情早报" });
+  await generateBriefViaSSE(session);
 };
 
 const exportBriefPdf = () => {
   window.open("http://localhost:8000/api/ai/morning_brief/pdf", "_blank");
 };
 
-const exportMessagePdf = async (msg) => {
-  if (!msg.content) return;
+// 对含可视化（如对比仪表盘）的消息，用 html2canvas 截取 DOM 并嵌入 PDF
+// 关键坑：CompareDashboard 内部 .cmp-col / .cmp-metric / .cmp-chart-wrap
+// 都是 animation-fill-mode: backwards 的渐入动画；html2canvas 克隆 DOM 后
+// 会让动画"从头重放"，截图瞬间这些元素都处在 opacity:0 的初始帧 → 结果就是
+// PDF 里只剩 header 能看见，中间全是白的。用 onclone 在克隆树上关掉所有动画
+// 并强制"终态可见"即可彻底修好。
+const captureDashboardImage = async (msgIndex) => {
   try {
+    const row = document.querySelector(`[data-msg-index="${msgIndex}"]`);
+    if (!row) return null;
+    const target = row.querySelector(".compare-dashboard");
+    if (!target) return null;
+    // 确保 ECharts 这类异步渲染器已出完第一帧
+    await nextTick();
+    await new Promise((r) => requestAnimationFrame(() => r()));
+
+    const canvas = await html2canvas(target, {
+      backgroundColor: "#ffffff",
+      scale: 2,
+      useCORS: true,
+      logging: false,
+      // clone 时注入 CSS：禁用所有动画、过渡，强制终态显示
+      onclone: (clonedDoc) => {
+        const style = clonedDoc.createElement("style");
+        style.textContent = `
+          .compare-dashboard, .compare-dashboard * {
+            animation: none !important;
+            transition: none !important;
+            opacity: 1 !important;
+            transform: none !important;
+          }
+        `;
+        clonedDoc.head.appendChild(style);
+      },
+    });
+    return canvas.toDataURL("image/png");
+  } catch (err) {
+    console.warn("[PDF] dashboard 截图失败:", err);
+    return null;
+  }
+};
+
+const exportMessagePdf = async (msg, msgIndex) => {
+  if (!msg.content && !msg.compare_metrics) return;
+  try {
+    const images = [];
+    if (msg.compare_metrics) {
+      const dataUrl = await captureDashboardImage(msgIndex);
+      if (dataUrl) images.push(dataUrl);
+    }
     const res = await fetch("http://localhost:8000/api/ai/export_pdf", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         title: activeSession.value?.title || "AI 对话报告",
-        content: msg.content,
+        content: msg.content || "",
+        images: images.length ? images : undefined,
       }),
     });
     if (!res.ok) return;
@@ -395,6 +546,10 @@ const getSessionById = (sessionId) =>
 const sortSessions = () => {
   sessions.value = [...sessions.value].sort((a, b) => b.updatedAt - a.updatedAt);
 };
+
+// saveSessions 是代码中的历史别名，实际实现走 persistSessions。
+// 下方 watch(sessions, persistSessions, deep: true) 也会自动兜底持久化。
+const saveSessions = () => persistSessions();
 
 const persistSessions = () => {
   localStorage.setItem(
@@ -475,11 +630,18 @@ const setSessionDraft = (sessionId, draft) => {
   session.draft = draft;
 };
 
-const scrollToBottom = async () => {
+// force=true: 用户主动操作（发送、切换会话）必须贴底
+// force=false: 流式输出时仅在用户已贴近底部时才滚；否则保持当前位置，允许用户上翻阅读历史
+const NEAR_BOTTOM_THRESHOLD = 120;
+const scrollToBottom = async (force = true) => {
   await nextTick();
-  if (chatScroll.value) {
-    chatScroll.value.scrollTop = chatScroll.value.scrollHeight;
+  const el = chatScroll.value;
+  if (!el) return;
+  if (!force) {
+    const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
+    if (distance > NEAR_BOTTOM_THRESHOLD) return; // 用户已上翻：不打断
   }
+  el.scrollTop = el.scrollHeight;
 };
 
 const createSession = async (activate = true) => {
@@ -630,13 +792,19 @@ const sendMessage = async (presetText = null) => {
           patchMessage(sessionId, index, { content: contentBuffer, summoned_items: itemsBuffer });
         }
 
+        if (payload.type === "compare_metrics") {
+          // 挂载对比仪表盘数据到当前消息，前端用 CompareDashboard 渲染
+          const index = ensureAssistantMessage();
+          patchMessage(sessionId, index, { compare_metrics: { a: payload.a, b: payload.b } });
+        }
+
         if (payload.type === "suggestions") {
           const index = ensureAssistantMessage();
           patchMessage(sessionId, index, { suggestions: payload.items || [] });
         }
       }
 
-      await scrollToBottom();
+      await scrollToBottom(false); // 流式期间柔性滚动
     }
 
     if (assistantIndex < 0) {
@@ -705,23 +873,8 @@ onMounted(async () => {
   inputQuery.value = activeSession.value?.draft || "";
   await scrollToBottom();
 
-  if (activeSession.value && !activeSession.value.messages?.length) {
-    // 尝试用缓存早报填充，避免重复 LLM 请求
-    let usedCache = false;
-    try {
-      const res = await fetch("http://localhost:8000/api/ai/morning_brief/content");
-      const data = await res.json();
-      if (data.ok && data.content) {
-        activeSession.value.messages.push({ role: "user", content: "查看今日舆情早报" });
-        activeSession.value.messages.push({ role: "assistant", content: data.content });
-        activeSession.value.title = `舆情早报 ${data.date}`;
-        saveSessions();
-        usedCache = true;
-      }
-    } catch {}
-    if (!usedCache) await sendMessage("生成今日日报");
-  }
-
+  // 早报不自动灌到会话里：只启动轮询 → 出 banner → 用户点击"查看早报"才加载。
+  // 这正是用户"显示在上面但不自动发送"的要求。
   startBriefPolling();
   startAlertPolling();
 });
@@ -939,6 +1092,18 @@ onUnmounted(() => {
   display: flex; align-items: center; transition: 0.2s;
 }
 .brief-banner-close:hover { opacity: 1; }
+/* 生成中态：降饱和色调，避免占"已就绪"的视觉强调 */
+.brief-banner--generating {
+  background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%);
+  border-color: rgba(14, 165, 233, 0.25);
+}
+.brief-banner--generating .brief-banner-icon { color: #0284c7; }
+.brief-banner--generating .brief-banner-text strong { color: #0c4a6e; }
+.brief-banner--generating .brief-banner-text span { color: #075985; }
+.brief-icon-spin { animation: briefSpin 1.1s linear infinite; }
+@keyframes briefSpin {
+  to { transform: rotate(360deg); }
+}
 @keyframes briefSlideIn {
   from { opacity: 0; transform: translateY(-8px); }
   to { opacity: 1; transform: translateY(0); }

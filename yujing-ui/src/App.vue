@@ -1232,6 +1232,13 @@ const triggerAI = async (force = false) => {
             syncArticleState({ id: articleId, ai_summary: summaryBuffer });
           } else if (data.type === "content_end") {
             syncArticleState({ id: articleId, isAnalyzing: false });
+          } else if (data.type === "skip_video") {
+            // 后端已识别为视频并从库中移除 → 关闭 modal + 刷新列表
+            syncArticleState({ id: articleId, isAnalyzing: false });
+            activeItem.value = null;
+            statusMsg.value = data.msg || "此热点为视频内容，已从榜单移除";
+            await fetchUnifiedSearch(eventQuery.value, activeTimeRange.value === null ? 720 : activeTimeRange.value);
+            return;
           }
         } catch (error) {
         }

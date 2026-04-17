@@ -37,10 +37,6 @@
                 <iconify-icon icon="mdi:reload" :class="{ 'anim-spin': item.isAnalyzing }"></iconify-icon>
                 <span>{{ item.isAnalyzing ? "分析中..." : "开始深度分析" }}</span>
               </button>
-              <button class="btn-export-pdf btn btn-outline btn-sm" @click="exportPdf" title="导出PDF">
-                <iconify-icon icon="ri:file-pdf-2-line" />
-                <span>导出PDF</span>
-              </button>
             </div>
           </div>
 
@@ -201,11 +197,6 @@ const preferredSourceUrl = computed(() => {
 
 const changeTab = (tab) => {
   emit('update:activeTab', tab)
-}
-
-const exportPdf = () => {
-  if (!props.item?.id) return;
-  window.open(`http://localhost:8000/api/articles/${props.item.id}/export_pdf`, '_blank');
 }
 
 const getHashColor = (word) => {
