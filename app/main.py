@@ -21,6 +21,17 @@ if BASE_DIR not in sys.path:
 
 load_dotenv(os.path.join(BASE_DIR, ".env"))
 
+
+# v0.10: HF 环境早期注入
+# 必须在 app.api / app.services 等任何可能 import transformers / huggingface_hub 的模块之前执行，
+# 否则那些库会把 HF_HUB_OFFLINE / HF_ENDPOINT 读成模块常量并定格。
+if os.getenv("EMBED_USE_MIRROR", "0").strip() in ("1", "true", "True", "yes"):
+    os.environ.setdefault("HF_ENDPOINT", "https://hf-mirror.com")
+    os.environ["HF_HUB_OFFLINE"] = "0"
+    os.environ["TRANSFORMERS_OFFLINE"] = "0"
+    os.environ["HF_DATASETS_OFFLINE"] = "0"
+
+
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 

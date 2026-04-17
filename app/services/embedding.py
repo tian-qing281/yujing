@@ -75,6 +75,42 @@ _FRIENDLY_HINT = (
 )
 
 
+def _force_online_constants():
+    """
+    关键的防御性 monkey-patch：
+    huggingface_hub / transformers 在被首次 import 时，就把
+        HF_HUB_OFFLINE / ENDPOINT / _TRANSFORMERS_OFFLINE
+    读成"模块常量"，之后再改 os.environ 已经来不及。
+    这里在实际加载模型前，**强制重置**那些常量，确保 bge 能联网或走镜像。
+    """
+    target_endpoint = os.getenv("HF_ENDPOINT") or "https://huggingface.co"
+
+    # 1) huggingface_hub 的三个关键模块
+    for mod_path in ("huggingface_hub.constants", "huggingface_hub.file_download"):
+        try:
+            mod = __import__(mod_path, fromlist=["*"])
+            if hasattr(mod, "HF_HUB_OFFLINE"):
+                mod.HF_HUB_OFFLINE = False
+            if hasattr(mod, "ENDPOINT"):
+                mod.ENDPOINT = target_endpoint
+            if hasattr(mod, "HUGGINGFACE_CO_URL_TEMPLATE"):
+                mod.HUGGINGFACE_CO_URL_TEMPLATE = target_endpoint + "/{repo_id}/resolve/{revision}/{filename}"
+        except Exception:
+            pass
+
+    # 2) transformers 的离线标记
+    try:
+        import transformers.utils.hub as _thub
+        if hasattr(_thub, "_is_offline_mode"):
+            # 是函数就用 monkey-patch 覆盖
+            try:
+                _thub._is_offline_mode = lambda: False  # type: ignore
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+
 def _load_model_sync():
     """同步加载 tokenizer + model。首次调用会下载权重到 HF cache。"""
     global _tokenizer, _model, _model_ready
@@ -84,6 +120,12 @@ def _load_model_sync():
         if _model_ready:
             return
         try:
+            # 如果启用了镜像或显式关闭离线，先强制重置 huggingface_hub 的定格常量
+            if os.getenv("EMBED_USE_MIRROR", "0").strip() in ("1", "true", "True", "yes") \
+               or os.getenv("HF_ENDPOINT") \
+               or os.getenv("HF_HUB_OFFLINE", "1") == "0":
+                _force_online_constants()
+
             import torch
             from transformers import AutoModel, AutoTokenizer
 
@@ -92,8 +134,9 @@ def _load_model_sync():
                 f"(HF_ENDPOINT={os.getenv('HF_ENDPOINT') or 'default'}, "
                 f"HF_HUB_OFFLINE={os.getenv('HF_HUB_OFFLINE') or '0'}) ..."
             )
-            tok = AutoTokenizer.from_pretrained(EMBED_MODEL_NAME)
-            mdl = AutoModel.from_pretrained(EMBED_MODEL_NAME)
+            # 显式 local_files_only=False，覆盖任何全局默认值（防 emotion.py 历史污染残留）
+            tok = AutoTokenizer.from_pretrained(EMBED_MODEL_NAME, local_files_only=False)
+            mdl = AutoModel.from_pretrained(EMBED_MODEL_NAME, local_files_only=False)
             mdl.eval()
             # CPU 推理即可；如有 CUDA 由上层显式管理（避免本地占显存）
             device = torch.device("cpu")

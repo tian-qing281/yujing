@@ -3,10 +3,11 @@ import re
 import threading
 
 
-os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
-os.environ["TRANSFORMERS_OFFLINE"] = "1"
-os.environ["HF_DATASETS_OFFLINE"] = "1"
-os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"
+# 只保留"静默噪声"相关的开关；不再把整个进程钉成离线模式。
+# 原先的 TRANSFORMERS_OFFLINE=1 / HF_DATASETS_OFFLINE=1 会污染其他模块（如 embedding.py 的 bge 下载），
+# 而每个 from_pretrained 已显式传 local_files_only=True，精确达成离线加载，全局污染多此一举。
+os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
+os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
 
 
 class EmotionEngine:
