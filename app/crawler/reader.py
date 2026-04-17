@@ -223,7 +223,248 @@ def _extract_toutiao_story_digest(markdown: str) -> str:
     return "\n".join(lines)
 
 
+def _extract_toutiao_render_data(html: str) -> dict:
+    """从头条页面 <script id="RENDER_DATA"> 提取 URL 编码的 JSON。"""
+    if not html:
+        return {}
+    match = re.search(r'<script id="RENDER_DATA"[^>]*>(.*?)</script>', html, re.DOTALL)
+    if not match:
+        return {}
+    try:
+        from urllib.parse import unquote
+        decoded = unquote(match.group(1).strip())
+        return json.loads(decoded)
+    except Exception:
+        return {}
+
+
+def _html_block_to_text(html: str) -> str:
+    """清洗 HTML 片段为纯文本。"""
+    if not html:
+        return ""
+    soup = BeautifulSoup(html, "html.parser")
+    for node in soup(["script", "style", "img", "video", "svg"]):
+        node.decompose()
+    return soup.get_text(separator="\n", strip=True)
+
+
+async def _fetch_toutiao_html_direct(url: str, timeout: float = 12.0) -> str:
+    """用登录态 Cookie 直连头条拉 HTML（不走 Jina）。"""
+    cookie_header = _load_cookie_header("toutiao_hot")
+    if not cookie_header:
+        return ""
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36 Edg/147.0.0.0"
+        ),
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        "Accept-Language": "zh-CN,zh;q=0.9",
+        "Referer": "https://www.toutiao.com/",
+        "Cookie": cookie_header,
+    }
+    try:
+        async with httpx.AsyncClient(
+            timeout=timeout,
+            follow_redirects=True,
+            trust_env=False,
+            verify=True,
+        ) as client:
+            response = await client.get(url, headers=headers)
+            if response.status_code == 200 and response.text:
+                return response.text
+    except Exception:
+        return ""
+    return ""
+
+
+async def _extract_toutiao_article_direct(url: str) -> str:
+    """直连头条 article 页，解析 RENDER_DATA.data.content 拿正文。"""
+    html = await _fetch_toutiao_html_direct(url)
+    if not html:
+        return ""
+    payload = _extract_toutiao_render_data(html)
+    data = (payload or {}).get("data") or {}
+    content_html = data.get("content") or ""
+    if not content_html:
+        return ""
+    body_text = _html_block_to_text(content_html)
+    if not body_text or len(body_text) < 50:
+        return ""
+
+    lines: list[str] = []
+    lines.append("平台: 今日头条")
+    lines.append("数据来源: 头条 article 页 RENDER_DATA（直连）")
+
+    seo = data.get("seoTDK") or {}
+    title = seo.get("title") or data.get("title") or ""
+    title = re.sub(r"\s*-\s*今日头条\s*$", "", title).strip()
+    if title:
+        lines.append(f"标题: {title}")
+
+    media_info = data.get("mediaInfo") or {}
+    author = (media_info.get("name") or "").strip()
+    if author:
+        auth_info = (media_info.get("userAuthInfo") or {}).get("auth_info", "")
+        lines.append(f"作者: {author}" + (f"（{auth_info}）" if auth_info else ""))
+
+    counter = ((data.get("itemCell") or {}).get("itemCounter") or {})
+    if counter:
+        lines.append(
+            f"阅读: {counter.get('readCount', 0)} · "
+            f"点赞: {counter.get('diggCount', 0)} · "
+            f"评论: {counter.get('commentCount', 0)} · "
+            f"分享: {counter.get('shareCount', 0)}"
+        )
+
+    abstract = seo.get("description") or ""
+    if abstract and abstract not in body_text:
+        lines.append(f"摘要: {abstract}")
+
+    lines.append("")
+    lines.append(body_text)
+    return "\n".join(lines)[:8000]
+
+
+async def _extract_toutiao_trending_direct(url: str) -> str:
+    """
+    直连头条 trending 聚合页：
+    1) 先从 HTML 找 /article/\\d+/ 链接 → 跟进拿正文
+    2) 如果全是视频则从 RENDER_DATA.topicMetaInfo + seoTDK + topicFeedList 构造事件摘要
+    """
+    html = await _fetch_toutiao_html_direct(url)
+    if not html:
+        return ""
+
+    # 策略 1：找 article 链接跟进正文
+    seen_ids: set[str] = set()
+    article_ids: list[str] = []
+    for match in re.finditer(r"/article/(\d+)/?", html):
+        aid = match.group(1)
+        if aid in seen_ids:
+            continue
+        seen_ids.add(aid)
+        article_ids.append(aid)
+
+    for aid in article_ids[:3]:
+        art_url = f"https://www.toutiao.com/article/{aid}/"
+        try:
+            text = await _extract_toutiao_article_direct(art_url)
+            if text and len(text) > 200:
+                return text
+        except Exception:
+            continue
+
+    # 策略 2：只有视频或链接提取失败 → 用 RENDER_DATA 构造事件摘要
+    payload = _extract_toutiao_render_data(html)
+    data = (payload or {}).get("data") or {}
+    if not data:
+        return ""
+
+    # 视频事件标记：此分支只在 trending 页没找到任何 /article/ 链接时触发，
+    # 这种 trending 事件通常主体是视频/微头条内容，加前缀让 analyze 层可识别并从列表过滤
+    lines: list[str] = [
+        "🎬 [视频事件]",
+        "平台: 今日头条（事件聚合页）",
+        "数据来源: 头条 trending RENDER_DATA（直连）",
+    ]
+
+    topic_meta = data.get("topicMetaInfo") or {}
+    topic_title = (topic_meta.get("title") or "").strip()
+    if topic_title:
+        lines.append(f"事件: {topic_title}")
+
+    seo = data.get("seoTDK") or {}
+    desc = (seo.get("description") or "").strip()
+    if desc:
+        lines.append(f"摘要: {desc}")
+
+    # 从 topicFeedList 里提取每条 sub_item 的标题与摘要
+    snippets: list[str] = []
+    for topic in (data.get("topicFeedList") or [])[:3]:
+        for item in (topic.get("sub_items") or [])[:5]:
+            cell = (item or {}).get("stream_cell") or {}
+            title = cell.get("title") or cell.get("display_title") or ""
+            abstract = cell.get("abstract") or cell.get("desc") or ""
+            if title:
+                snippet = title.strip()
+                if abstract:
+                    snippet += f"\n  摘要：{abstract.strip()}"
+                snippets.append(f"- {snippet}")
+
+    if snippets:
+        lines.append("")
+        lines.append("相关内容：")
+        lines.extend(snippets)
+
+    result = "\n".join(lines).strip()
+    # 必须包含实际信息（标题或摘要）才返回，避免只有外壳
+    if topic_title or desc or snippets:
+        return result[:8000]
+    return ""
+
+
+async def _extract_toutiao_w_meta(url: str) -> str:
+    """
+    头条 /w/数字/ 微头条/视频页：直连拿 RENDER_DATA，输出标题 + 摘要 + 计数。
+    没有正文（视频为主），返回简短 meta 文本让 LLM 有基础上下文。
+    """
+    html = await _fetch_toutiao_html_direct(url)
+    if not html:
+        return ""
+    payload = _extract_toutiao_render_data(html)
+    data = (payload or {}).get("data") or {}
+    if not data:
+        return ""
+
+    # /w/ 微头条 ≈ 视频/图片短内容；主体无可分析正文，加前缀让 analyze 层识别并从列表过滤
+    lines: list[str] = [
+        "🎬 [视频事件]",
+        "平台: 今日头条（微头条/视频）",
+        "数据来源: 头条 /w/ 页 RENDER_DATA（直连）",
+    ]
+
+    seo = data.get("seoTDK") or {}
+    title = (seo.get("title") or data.get("title") or "").strip()
+    title = re.sub(r"\s*-\s*今日头条\s*$", "", title)
+    if title:
+        lines.append(f"标题: {title}")
+
+    desc = (seo.get("description") or "").strip()
+    if desc:
+        lines.append(f"摘要: {desc}")
+
+    media_info = data.get("mediaInfo") or {}
+    author = (media_info.get("name") or "").strip()
+    if author:
+        lines.append(f"作者: {author}")
+
+    counter = ((data.get("itemCell") or {}).get("itemCounter") or {})
+    if counter:
+        lines.append(
+            f"阅读: {counter.get('readCount', 0)} · "
+            f"点赞: {counter.get('diggCount', 0)} · "
+            f"评论: {counter.get('commentCount', 0)}"
+        )
+
+    lines.append("")
+    lines.append("说明: 本条为视频/微头条，无文字正文，以上为平台提供的元信息。")
+
+    if title or desc:
+        return "\n".join(lines).strip()[:4000]
+    return ""
+
+
 async def _extract_toutiao_content(url: str) -> str:
+    # 优先走登录态直连，比 Jina 快 10-20 倍
+    try:
+        direct = await _extract_toutiao_trending_direct(url)
+        if direct:
+            return direct
+    except Exception:
+        pass
+
+    # 兜底：Jina 镜像
     markdown = await asyncio.to_thread(_extract_markdown_via_jina_sync, url, 20.0)
     if not markdown:
         return ""
@@ -824,7 +1065,23 @@ async def extract_article_content(url: str) -> str:
             pass
         return "❌ [抓取失败] 头条热点聚合页为纯 JS 渲染，当前无法直接提取正文。"
 
-    if "toutiao.com" in url and "/article/" in url:
+    if "toutiao.com" in url and re.search(r"/(article|w)/\d+", url):
+        # /article/ 图文页 + /w/ 微头条/短内容页，统一走直连（RENDER_DATA.data.content）
+        try:
+            direct_text = await _extract_toutiao_article_direct(url)
+            if direct_text and len(direct_text) > 100:
+                return direct_text[:8000]
+        except Exception:
+            pass
+        # /w/ 页若直连无正文，大概率是视频微头条，输出 meta 方便 LLM 给出合理说明
+        if "/w/" in url:
+            try:
+                meta_text = await _extract_toutiao_w_meta(url)
+                if meta_text:
+                    return meta_text
+            except Exception:
+                pass
+            return "❌ [跳过视频] 头条 /w/ 链接无可提取正文（通常为视频或纯图片微头条）。"
         try:
             article_md = await asyncio.to_thread(_extract_markdown_via_jina_sync, url, 20.0)
             if article_md and len(article_md) > 200:

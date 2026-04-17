@@ -1,4 +1,5 @@
 import json
+import math
 import re
 from collections import Counter
 from datetime import datetime, timedelta
@@ -11,6 +12,46 @@ from sqlalchemy.orm import Session
 
 from app.database import Article, Event, EventArticle
 from app.services.search_engine import meili
+
+
+# IDF 加权共享 token 相似度：替代纯 Jaccard 抑制"美国/伊朗"等高频 token 的虚高权重
+# rebuild_events 在聚类前预计算全语料 IDF 并赋值给 _CURRENT_IDF_MAP；未预计算时退化为纯 Jaccard。
+_CURRENT_IDF_MAP: Dict[str, float] = {}
+
+
+def _compute_idf_map(tokens_per_doc: List[List[str]]) -> Dict[str, float]:
+    """计算每个 token 的逆文档频率：idf(t) = log((N+1)/(df(t)+1)) + 1。
+
+    平滑项避免除零；+1 让单文档出现的词也有正值。
+    """
+    N = len(tokens_per_doc)
+    if N == 0:
+        return {}
+    df: Counter = Counter()
+    for tokens in tokens_per_doc:
+        for t in set(tokens):
+            df[t] += 1
+    return {t: math.log((N + 1) / (c + 1)) + 1.0 for t, c in df.items()}
+
+
+def _idf_weighted_jaccard(set_a: set, set_b: set) -> float:
+    """IDF 加权 Jaccard：共享 token 的 IDF 权重和 / 并集 IDF 权重和。
+
+    当 `_CURRENT_IDF_MAP` 为空时退化为普通 Jaccard，保证向后兼容。
+    """
+    if not set_a and not set_b:
+        return 0.0
+    shared = set_a & set_b
+    union = set_a | set_b
+    if not union:
+        return 0.0
+    if not _CURRENT_IDF_MAP:
+        return len(shared) / len(union)
+    w_shared = sum(_CURRENT_IDF_MAP.get(t, 1.0) for t in shared)
+    w_union = sum(_CURRENT_IDF_MAP.get(t, 1.0) for t in union)
+    if w_union <= 0:
+        return 0.0
+    return w_shared / w_union
 
 
 STOPWORDS = {
@@ -107,10 +148,12 @@ DISPLAY_KEYWORD_FRAGMENTS = {
 EVENT_STABLE_MIN_ARTICLES = 2
 EVENT_STABLE_MIN_PLATFORMS = 1
 EVENT_EMERGING_MIN_ARTICLES = 1
-EVENT_CLUSTER_SCORE_THRESHOLD = 0.14
-EVENT_CLUSTER_ENTITY_THRESHOLD = 0.10
-EVENT_CLUSTER_SHARED_TOKEN_THRESHOLD = 0.10
-EVENT_CLUSTER_MERGE_THRESHOLD = 0.22
+# 聚合相似度阈值（2026-04-17 收紧）
+# 原 0.14 偏低，容易把共享"美国/中国"等高频 token 的无关事件合到一起
+EVENT_CLUSTER_SCORE_THRESHOLD = 0.18
+EVENT_CLUSTER_ENTITY_THRESHOLD = 0.14
+EVENT_CLUSTER_SHARED_TOKEN_THRESHOLD = 0.14
+EVENT_CLUSTER_MERGE_THRESHOLD = 0.26
 
 
 def _safe_json_loads(value: Optional[str]) -> Dict:
@@ -385,8 +428,9 @@ def _cluster_similarity(tokens_a: List[str], tokens_b: List[str], title_a: str, 
     exp_b = _expand_with_synonyms(tokens_b)
     syn_shared = exp_a & exp_b
 
-    jaccard_raw = len(shared) / max(1, len(set_a | set_b)) if (set_a or set_b) else 0.0
-    jaccard_syn = len(syn_shared) / max(1, len(exp_a | exp_b)) if (exp_a or exp_b) else 0.0
+    # IDF 加权 Jaccard：比纯 Jaccard 更严谨，降低"美国/伊朗"等高频 token 的贡献
+    jaccard_raw = _idf_weighted_jaccard(set_a, set_b) if (set_a or set_b) else 0.0
+    jaccard_syn = _idf_weighted_jaccard(exp_a, exp_b) if (exp_a or exp_b) else 0.0
     jaccard = max(jaccard_raw, jaccard_syn)
 
     bonus = 0.0
@@ -423,20 +467,26 @@ def _cluster_similarity(tokens_a: List[str], tokens_b: List[str], title_a: str, 
 
 
 def _should_attach_to_cluster(tokens: List[str], title: str, cluster: Dict, score: float) -> bool:
-    if score >= EVENT_CLUSTER_SCORE_THRESHOLD:
-        return True
-
     cluster_tokens = cluster["tokens"]
     cluster_title = cluster["title_norm"]
     shared = set(tokens) & set(cluster_tokens)
     canonical_a = _canonicalize_title(title)
     canonical_b = _canonicalize_title(cluster_title)
 
+    # 硬约束 0：canonical title 完全相同 → 必定合并（同一事件不同表述）
     if canonical_a and canonical_b and canonical_a == canonical_b:
         return True
 
     entities_a = _extract_entities(title, tokens)
     entities_b = _extract_entities(cluster_title, cluster_tokens)
+
+    # 硬约束 1：两边都识别到实体但无交集 → 直接拒绝（防"美伊谈判"与"美以冲突"被共享美国 token 聚到一起）
+    if entities_a and entities_b and not (entities_a & entities_b):
+        return False
+
+    if score >= EVENT_CLUSTER_SCORE_THRESHOLD:
+        return True
+
     if entities_a and entities_b and (entities_a & entities_b) and len(shared) >= 1 and score >= EVENT_CLUSTER_ENTITY_THRESHOLD:
         return True
 
@@ -604,6 +654,14 @@ def rebuild_events(db: Session, lookback_hours: int = 720) -> int:
         meili.clear_index("events")
         return 0
 
+    # 预计算全语料 IDF，用于本轮聚类的加权 Jaccard 相似度
+    global _CURRENT_IDF_MAP
+    try:
+        tokens_per_doc = [_extract_tokens(a) for a in articles]
+        _CURRENT_IDF_MAP = _compute_idf_map(tokens_per_doc)
+    except Exception:
+        _CURRENT_IDF_MAP = {}
+
     clusters = _merge_near_duplicate_clusters(_cluster_articles(articles))
     event_count = 0
 
@@ -656,6 +714,8 @@ def rebuild_events(db: Session, lookback_hours: int = 720) -> int:
 
     meili.clear_index("events")
     meili.sync_events(db, db.query(Event).all())
+    # 清理本轮 IDF，避免被后续非聚类调用意外复用
+    _CURRENT_IDF_MAP = {}
     return event_count
 
 

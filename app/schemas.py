@@ -29,6 +29,7 @@ class ChatRequest(BaseModel):
 class CompareRequest(BaseModel):
     a: str
     b: str
+    topic: Optional[str] = None  # 主题过滤词（可选），例如"对比微博和知乎对伊朗事件的看法" → topic="伊朗事件"
     history: Optional[List[dict]] = []
 
 class ChatResponse(BaseModel):

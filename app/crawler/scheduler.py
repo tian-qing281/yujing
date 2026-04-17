@@ -87,6 +87,7 @@ def start_scheduler():
             minutes=brief_interval,
             id="morning_brief",
             replace_existing=True,
+            misfire_grace_time=60,  # 解除 "Run time missed" 警告：允许最多 60s 抖动
         )
         print(f"[早报定时] 调试模式: 每 {brief_interval} 分钟生成一次早报")
     else:

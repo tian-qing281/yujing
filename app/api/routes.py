@@ -6,7 +6,7 @@ import re
 import threading
 import time
 from datetime import datetime, timedelta
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Response
 from fastapi.responses import StreamingResponse
@@ -119,6 +119,13 @@ _shutting_down = threading.Event()
 unified_search_cache = {}
 
 analysis_cache = {}
+
+# -- analyze 并发控制 --------------------------------------------------------
+# 全局并发上限：同时最多 3 篇在跑深度分析（抓取+BERT+LLM），保护线程池与下游 API
+_analyze_global_semaphore = asyncio.Semaphore(3)
+# article_id -> asyncio.Event，相同文章二次请求等首次完成后直接读缓存
+_analyze_inflight: dict[int, asyncio.Event] = {}
+_analyze_inflight_lock = asyncio.Lock()
 
 
 def _invalidate_event_hub_cache():
@@ -911,21 +918,23 @@ async def _schedule_refresh(background_tasks: BackgroundTasks):
 
 
 async def warmup_runtime_dependencies():
+    """
+    启动预热：只做必须立即就绪、且低成本的组件。
+    - jieba 分词（<1s, 后续分析请求立即可用）
+    - emotion_engine 后台异步加载 BERT（不阻塞）
+    - LLM 客户端改为首次调用时 lazy 加载（其 import 开销 ~30s，启动时付出不划算）
+    - 数据清理：不再自动执行；调用 POST /api/admin/cleanup_articles 按需触发
+    """
     print(f"[{datetime.now().strftime('%H:%M:%S')}] [预热] 正在初始化 NLP 引擎与 AI 组件...")
     start_time = time.time()
 
-    try:
-        await asyncio.to_thread(get_word_frequencies, "启动预热", "启动预热文本，用于预热 jieba 分词。")
-        print(f"[{datetime.now().strftime('%H:%M:%S')}] [预热] 分词组件已就绪")
-    except Exception as exc:
-        print(f"[{datetime.now().strftime('%H:%M:%S')}] [预热] 分词组件跳过: {exc}")
-
-    try:
-        from app.llm import get_llm
-        await asyncio.to_thread(get_llm)
-        print(f"[{datetime.now().strftime('%H:%M:%S')}] [预热] LLM 客户端已就绪")
-    except Exception as exc:
-        print(f"[{datetime.now().strftime('%H:%M:%S')}] [预热] LLM 客户端跳过: {exc}")
+    # 并行预热：jieba + emotion（后台线程，立即返回）
+    async def _warm_jieba():
+        try:
+            await asyncio.to_thread(get_word_frequencies, "启动预热", "启动预热文本，用于预热 jieba 分词。")
+            print(f"[{datetime.now().strftime('%H:%M:%S')}] [预热] 分词组件已就绪")
+        except Exception as exc:
+            print(f"[{datetime.now().strftime('%H:%M:%S')}] [预热] 分词组件跳过: {exc}")
 
     try:
         emotion_engine._start_background_load()
@@ -933,13 +942,10 @@ async def warmup_runtime_dependencies():
     except Exception as exc:
         print(f"[{datetime.now().strftime('%H:%M:%S')}] [预热] 情绪引擎跳过: {exc}")
 
-    try:
-        await asyncio.to_thread(cleanup_stale_articles)
-    except Exception as exc:
-        print(f"[{datetime.now().strftime('%H:%M:%S')}] [预热] 数据清理跳过: {exc}")
+    await _warm_jieba()
 
     duration = time.time() - start_time
-    print(f"[{datetime.now().strftime('%H:%M:%S')}] [预热] 全系统预热完成 (耗时: {duration:.1f}秒)")
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] [预热] 全系统预热完成 (耗时: {duration:.1f}秒; LLM 客户端将在首次使用时 lazy 加载)")
 
 
 @router.get("/sync/status")
@@ -992,23 +998,89 @@ def _refresh_events_cache():
             db.close()
 
 
-def cleanup_stale_articles():
+def cleanup_stale_articles(days: int = 7, dry_run: bool = False):
+    """
+    清理"已掉出热榜（rank=999）、从未被 AI 分析（content 为空）、fetch_time > days 天"
+    **且未被任何 Event 聚合引用**的历史条目。
+    - 强制保护：被 EventArticle 引用的 Article 永远不删（避免产生孤儿，这是历史教训）
+    - dry_run=True 时只统计不删
+    - 破坏性操作前自动做一次 DB 快照到 runtime/db/yujing.db.cleanup_bak_{ts}
+    """
+    import shutil
+    from pathlib import Path
+
     db = SessionLocal()
     try:
-        cutoff = datetime.utcnow() - timedelta(days=7)
-        deleted = db.query(Article).filter(
+        cutoff = datetime.utcnow() - timedelta(days=days)
+        # 被事件引用的 article_id 集合（保护名单）
+        referenced_ids = {
+            r[0] for r in db.query(EventArticle.article_id).distinct().all()
+        }
+
+        candidate_query = db.query(Article).filter(
             Article.rank == 999,
             (Article.content == None) | (Article.content == ""),
             Article.fetch_time < cutoff,
-        ).delete(synchronize_session=False)
-        if deleted:
-            db.commit()
-            print(f"[数据清理] 已清除 {deleted} 条过期无效文章 (rank=999, 无内容, >7天)")
+        )
+        candidates = candidate_query.all()
+        # 过滤掉被引用的
+        to_delete = [a for a in candidates if a.id not in referenced_ids]
+        protected = len(candidates) - len(to_delete)
+
+        if dry_run:
+            print(
+                f"[数据清理][dry-run] 候选 {len(candidates)} 条, "
+                f"保护 {protected} 条（被事件引用）, 将删 {len(to_delete)} 条"
+            )
+            return len(to_delete)
+
+        if not to_delete:
+            print("[数据清理] 无可删除条目")
+            return 0
+
+        # 破坏性操作前做一次快照
+        try:
+            # 用 DATABASE_PATH 环境变量 / database.py 的 DATABASE_PATH 作为权威来源，
+            # 避免硬编码在项目改名时再次失联。
+            from app.database import DATABASE_PATH
+            db_path = Path(DATABASE_PATH)
+            if db_path.exists():
+                ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+                bak = db_path.parent / f"{db_path.name}.cleanup_bak_{ts}"
+                shutil.copy2(db_path, bak)
+                print(f"[数据清理] 已创建快照: {bak}")
+        except Exception as exc:
+            print(f"[数据清理] 快照失败（但继续执行）: {exc}")
+
+        ids_to_delete = [a.id for a in to_delete]
+        deleted = db.query(Article).filter(Article.id.in_(ids_to_delete)).delete(
+            synchronize_session=False
+        )
+        db.commit()
+        print(
+            f"[数据清理] 已删除 {deleted} 条 (rank=999, 无内容, >{days}天); "
+            f"保护了 {protected} 条被事件引用的条目"
+        )
+        return int(deleted or 0)
     except Exception as exc:
         db.rollback()
-        print(f"[数据清理] 清理失败: {exc}")
+        print(f"[数据清理] 失败: {exc}")
+        return 0
     finally:
         db.close()
+
+
+@router.post("/admin/cleanup_articles")
+def admin_cleanup_articles(days: int = 7, dry_run: bool = False):
+    """
+    手动触发历史脏数据清理。
+    - days: 删除 fetch_time 早于 N 天前的 rank=999 无内容记录（默认 7）
+    - dry_run: 只统计不删（默认 False）
+    - 自动保护被 EventArticle 引用的条目
+    - 破坏性操作前自动做 DB 快照到 runtime/db/yujing.db.cleanup_bak_<ts>
+    """
+    removed = cleanup_stale_articles(days=days, dry_run=dry_run)
+    return {"ok": True, "removed": removed, "days": days, "dry_run": dry_run}
 
 
 def _has_recent_event_hub_data(window_minutes: int = 20) -> bool:
@@ -1518,23 +1590,37 @@ async def get_event_detail(event_id: int, db: Session = Depends(get_db)):
     article_ids = [row.article_id for row in link_rows]
     db_articles = db.query(Article).filter(Article.id.in_(article_ids)).all()
 
-    # 对无情绪标注的文章用规则引擎补全
-    from app.services.emotion import emotion_engine
-    _sentiment_label_map = {
-        "中性": "neutral", "关注": "concern", "喜悦": "joy",
-        "愤怒": "anger", "悲伤": "sadness", "质疑": "doubt",
-        "惊讶": "surprise", "厌恶": "disgust",
-    }
-    for article in db_articles:
-        if not article.ai_sentiment and article.title:
-            results = emotion_engine.analyze(article.title)
-            if results:
-                article.ai_sentiment = _sentiment_label_map.get(results[0]["label"], results[0]["label"])
+    # 情绪补全：**绝不**在请求链路上同步跑 BERT（会把 CPU 打满 → 饿死其他请求）。
+    # 两层策略：
+    #   1. 请求链路内用 emotion_engine._fallback_analyze（纯字符串关键词匹配，
+    #      几十篇标题总耗时 <50ms），仅覆盖到响应 dict，**不写库**，保证
+    #      舆情倾向饼图当场就有数据，不会再出现全中性。
+    #   2. 同时调度后台单线程 BERT 精细补全；下次请求同一事件时读到 BERT 结果，
+    #      更精准。
+    pending_ids = [a.id for a in db_articles if (not a.ai_sentiment) and a.title]
+    if pending_ids:
+        _schedule_event_emotion_backfill(event_id, pending_ids)
 
-    article_lookup = {
-        article.id: marshal_article(article)
-        for article in db_articles
-    }
+    fallback_sentiment: dict[int, str] = {}
+    for art in db_articles:
+        if art.ai_sentiment or not art.title:
+            continue
+        try:
+            results = emotion_engine._fallback_analyze(art.title)
+            if results:
+                fallback_sentiment[art.id] = _EMOTION_LABEL_MAP.get(
+                    results[0]["label"], "neutral"
+                )
+        except Exception:
+            continue
+
+    article_lookup = {}
+    for article in db_articles:
+        marshaled = marshal_article(article)
+        # 响应级兜底：不改 ORM 对象、不触发 commit
+        if not marshaled.get("ai_sentiment") and article.id in fallback_sentiment:
+            marshaled["ai_sentiment"] = fallback_sentiment[article.id]
+        article_lookup[article.id] = marshaled
     related_articles = [article_lookup[article_id] for article_id in article_ids if article_id in article_lookup]
     related_articles.sort(key=lambda a: a.get("fetch_time") or "", reverse=True)
 
@@ -1641,6 +1727,78 @@ async def analyze_topic_macro(topic_id: int, db: Session = Depends(get_db)):
 
 
 # ---------------------------------------------------------------------------
+# 事件情绪后台补全（单线程队列 + 并发去重）
+# ---------------------------------------------------------------------------
+# 关键设计：
+# - 专用 max_workers=1 executor，保证同一时刻只跑 1 个 BERT 推理批次，
+#   避免 torch 多核 inference 把整机 CPU 打满饿死其他请求。
+# - in-flight set 去重：同一 event_id 已经排队/运行中就不再入队。
+# - 任务内部独立开 SessionLocal() 写回，避免与请求 session 生命周期耦合。
+from concurrent.futures import ThreadPoolExecutor as _EmoThreadPool
+
+_emotion_backfill_executor = _EmoThreadPool(
+    max_workers=1,
+    thread_name_prefix="emotion-backfill",
+)
+_emotion_backfill_inflight: set = set()
+_emotion_backfill_lock = threading.Lock()
+
+_EMOTION_LABEL_MAP = {
+    "中性": "neutral", "关注": "concern", "喜悦": "joy",
+    "愤怒": "anger", "悲伤": "sadness", "质疑": "doubt",
+    "惊讶": "surprise", "厌恶": "disgust",
+}
+
+
+def _run_emotion_backfill(event_id: int, article_ids: list[int]):
+    """在专属单线程 executor 中运行；独立 Session，写完即 commit。"""
+    session = SessionLocal()
+    try:
+        articles = session.query(Article).filter(Article.id.in_(article_ids)).all()
+        dirty = False
+        for art in articles:
+            if art.ai_sentiment or not art.title:
+                continue
+            try:
+                results = emotion_engine.analyze(art.title)
+                if results:
+                    art.ai_sentiment = _EMOTION_LABEL_MAP.get(
+                        results[0]["label"], results[0]["label"]
+                    )
+                    dirty = True
+            except Exception as exc:
+                print(f"[emotion-backfill] article={art.id} 失败: {exc}")
+        if dirty:
+            try:
+                session.commit()
+            except Exception as exc:
+                session.rollback()
+                print(f"[emotion-backfill] commit 失败: {exc}")
+    finally:
+        session.close()
+        with _emotion_backfill_lock:
+            _emotion_backfill_inflight.discard(event_id)
+
+
+def _schedule_event_emotion_backfill(event_id: int, pending_ids: list[int]):
+    """请求链路上调用；幂等、非阻塞，立即返回。"""
+    if not pending_ids:
+        return
+    with _emotion_backfill_lock:
+        if event_id in _emotion_backfill_inflight:
+            return
+        _emotion_backfill_inflight.add(event_id)
+    try:
+        _emotion_backfill_executor.submit(
+            _run_emotion_backfill, event_id, list(pending_ids)
+        )
+    except Exception as exc:
+        with _emotion_backfill_lock:
+            _emotion_backfill_inflight.discard(event_id)
+        print(f"[emotion-backfill] 调度失败: {exc}")
+
+
+# ---------------------------------------------------------------------------
 # 定时早报
 # ---------------------------------------------------------------------------
 _morning_brief_cache: dict = {"date": "", "content": "", "generating": False}
@@ -1666,24 +1824,8 @@ def morning_brief_content():
     return {"ok": False, "content": "", "date": ""}
 
 
-@router.get("/ai/morning_brief")
-async def get_morning_brief(db: Session = Depends(get_db)):
-    from app.llm import chat_with_news_stream
-
-    today = datetime.now().strftime("%Y-%m-%d")
-
-    # 命中缓存：直接返回已生成的早报
-    if _morning_brief_cache["date"] == today and _morning_brief_cache["content"]:
-        cached = _morning_brief_cache["content"]
-
-        async def cached_gen():
-            yield f"data: {json.dumps({'type': 'content_start'}, ensure_ascii=False)}\n\n"
-            yield f"data: {json.dumps({'type': 'content', 'text': cached}, ensure_ascii=False)}\n\n"
-            yield f"data: {json.dumps({'type': 'content_end'}, ensure_ascii=False)}\n\n"
-
-        return StreamingResponse(cached_gen(), media_type="text/event-stream")
-
-    # 构建早报上下文
+def _build_morning_brief_prompt(db: Session) -> str:
+    """构造早报 system prompt，供 SSE 和后台触发共享。"""
     cutoff = datetime.utcnow() - timedelta(hours=24)
     events = (
         db.query(Event)
@@ -1700,7 +1842,6 @@ async def get_morning_brief(db: Session = Depends(get_db)):
         .all()
     )
 
-    # 平台分布统计
     platform_counts: dict = {}
     for a in articles:
         name = SOURCE_NAME_MAP.get(a.source_id, a.source_id)
@@ -1715,16 +1856,14 @@ async def get_morning_brief(db: Session = Depends(get_db)):
             except Exception:
                 pass
         ctx_lines.append(f"- {e.title}（{e.platform_count}个平台，{e.article_count}条）{f'  关键词:{kw}' if kw else ''}")
-
-    ctx_lines.append(f"\n平台覆盖统计：")
+    ctx_lines.append("\n平台覆盖统计：")
     for name, count in sorted(platform_counts.items(), key=lambda x: -x[1]):
         ctx_lines.append(f"- {name}: {count}条")
-
     ctx_lines.append(f"\n最新热搜摘要 {min(len(articles), 30)} 条")
     for a in articles[:30]:
         ctx_lines.append(f"[{SOURCE_NAME_MAP.get(a.source_id, a.source_id)}] {a.title}")
 
-    system_prompt = (
+    return (
         "你是舆镜AI早报生成器。根据下方数据生成一份结构化的每日舆情早报。\n"
         "格式要求：\n"
         "1. 【今日概览】用2-3句话总结过去24小时的整体舆论态势和情绪基调\n"
@@ -1735,22 +1874,90 @@ async def get_morning_brief(db: Session = Depends(get_db)):
         f"数据：\n" + "\n".join(ctx_lines)
     )
 
+
+async def _run_morning_brief_background():
+    """在 asyncio.create_task 中运行；独立 Session，drain LLM 流 → 写 cache。
+    全部异常都被捕获 —— 这是 fire-and-forget task，千万不能把异常泄露给事件循环。"""
+    from app.llm import chat_with_news_stream
+
+    today = datetime.now().strftime("%Y-%m-%d")
+    pieces: list[str] = []
+    try:
+        # 构造 prompt 用独立 session，用完即 close；LLM 阶段不占用 DB 连接
+        session = SessionLocal()
+        try:
+            system_prompt = _build_morning_brief_prompt(session)
+        finally:
+            session.close()
+
+        async for chunk in chat_with_news_stream(system_prompt, [], "请生成今日舆情早报"):
+            pieces.append(chunk)
+    except Exception as exc:
+        print(f"[早报-后台] 生成失败: {exc}")
+    finally:
+        full_text = "".join(pieces).strip()
+        if full_text:
+            _morning_brief_cache["date"] = today
+            _morning_brief_cache["content"] = full_text
+            print(f"[早报-后台] 已缓存今日早报（{len(full_text)} chars）")
+        _morning_brief_cache["generating"] = False
+
+
+@router.post("/ai/morning_brief/trigger")
+async def trigger_morning_brief():
+    """工业级触发端点：立即返回，不 hold 连接。
+    状态机：
+      - has_brief=True  → 'ready'  （前端停止轮询）
+      - generating=True → 'running'（前端继续每 3s 轮询 /status）
+      - 其他            → 启动后台任务 → 'started'（同上）
+    这是整个早报生成链路的唯一入口，替代老的"前端 drain SSE"方案。
+    """
+    today = datetime.now().strftime("%Y-%m-%d")
+    if _morning_brief_cache["date"] == today and _morning_brief_cache["content"]:
+        return {"status": "ready", "date": today}
+    if _morning_brief_cache.get("generating"):
+        return {"status": "running"}
+    # 入队前先占位，防止并发两个 trigger 同时起任务
+    _morning_brief_cache["generating"] = True
+    asyncio.create_task(_run_morning_brief_background())
+    return {"status": "started"}
+
+
+@router.get("/ai/morning_brief")
+async def get_morning_brief(db: Session = Depends(get_db)):
+    """保留原 SSE 入口（定时任务 / 调试用途）。优先返回缓存。"""
+    from app.llm import chat_with_news_stream
+
+    today = datetime.now().strftime("%Y-%m-%d")
+
+    # 命中缓存：直接返回已生成的早报
+    if _morning_brief_cache["date"] == today and _morning_brief_cache["content"]:
+        cached = _morning_brief_cache["content"]
+
+        async def cached_gen():
+            yield f"data: {json.dumps({'type': 'content_start'}, ensure_ascii=False)}\n\n"
+            yield f"data: {json.dumps({'type': 'content', 'text': cached}, ensure_ascii=False)}\n\n"
+            yield f"data: {json.dumps({'type': 'content_end'}, ensure_ascii=False)}\n\n"
+
+        return StreamingResponse(cached_gen(), media_type="text/event-stream")
+
+    system_prompt = _build_morning_brief_prompt(db)
     _morning_brief_cache["generating"] = True
 
     async def brief_generator():
         pieces = []
         yield f"data: {json.dumps({'type': 'content_start'}, ensure_ascii=False)}\n\n"
-        async for chunk in chat_with_news_stream(system_prompt, [], "请生成今日舆情早报"):
-            yield f"data: {json.dumps({'type': 'content', 'text': chunk}, ensure_ascii=False)}\n\n"
-            pieces.append(chunk)
-        yield f"data: {json.dumps({'type': 'content_end'}, ensure_ascii=False)}\n\n"
-
-        # 缓存结果
-        full_text = "".join(pieces)
-        if full_text.strip():
-            _morning_brief_cache["date"] = today
-            _morning_brief_cache["content"] = full_text
-        _morning_brief_cache["generating"] = False
+        try:
+            async for chunk in chat_with_news_stream(system_prompt, [], "请生成今日舆情早报"):
+                yield f"data: {json.dumps({'type': 'content', 'text': chunk}, ensure_ascii=False)}\n\n"
+                pieces.append(chunk)
+            yield f"data: {json.dumps({'type': 'content_end'}, ensure_ascii=False)}\n\n"
+        finally:
+            full_text = "".join(pieces).strip()
+            if full_text:
+                _morning_brief_cache["date"] = today
+                _morning_brief_cache["content"] = full_text
+            _morning_brief_cache["generating"] = False
 
     return StreamingResponse(brief_generator(), media_type="text/event-stream")
 
@@ -1814,7 +2021,8 @@ async def analyze_article(article_id: int, force_refresh: bool = False, db: Sess
         article.ai_sentiment = None
         db.commit()
 
-    async def event_generator():
+    async def _analyze_core():
+        """实际的分析流程（原 event_generator 的 body）。为支持外层去重/限流，抽成独立生成器。"""
         started_at = time.perf_counter()
         can_use_cached_content = bool(article.content) and not _is_invalid_cached_content(article.content) and not force_refresh
 
@@ -1840,6 +2048,35 @@ async def analyze_article(article_id: int, force_refresh: bool = False, db: Sess
             markdown_content = article.content
 
         _print_analysis_debug(article, markdown_content)
+
+        # 视频事件识别：reader 返回以 🎬 开头 → 说明此热点主体为视频/微头条
+        # → 级联删除（article + event_articles；事件若因此 article_count=0 也删）
+        if isinstance(markdown_content, str) and markdown_content.startswith("🎬"):
+            try:
+                ea_rows = db.query(EventArticle).filter(EventArticle.article_id == article.id).all()
+                affected_event_ids = {r.event_id for r in ea_rows}
+                for r in ea_rows:
+                    db.delete(r)
+                db.delete(article)
+                db.commit()
+                # 清理因此而变空的事件
+                for eid in affected_event_ids:
+                    remaining = db.query(EventArticle).filter(EventArticle.event_id == eid).count()
+                    if remaining == 0:
+                        ev = db.query(Event).filter(Event.id == eid).first()
+                        if ev:
+                            db.delete(ev)
+                    else:
+                        # 仍有其他文章 → 同步更新 article_count
+                        ev = db.query(Event).filter(Event.id == eid).first()
+                        if ev:
+                            ev.article_count = remaining
+                db.commit()
+            except Exception as exc:
+                db.rollback()
+                print(f"[视频清理] 失败: {exc}")
+            yield f"data: {json.dumps({'type': 'skip_video', 'msg': '此热点为视频内容，已从榜单移除'}, ensure_ascii=False)}\n\n"
+            return
 
         if isinstance(markdown_content, str) and (markdown_content.startswith("❌") or markdown_content.startswith("鉂")):
             try:
@@ -1942,6 +2179,68 @@ async def analyze_article(article_id: int, force_refresh: bool = False, db: Sess
         except Exception as exc:
             yield f"data: {json.dumps({'type': 'error', 'msg': f'研判链路中断: {exc}'}, ensure_ascii=False)}\n\n"
 
+    async def event_generator():
+        """
+        外层去重 + 限流包装：
+        - 相同 article_id 并发请求只跑一次，其余等待后读缓存
+        - 全局同时最多 3 个分析任务在跑，保护线程池 / LLM / 下游抓取
+        """
+        # 1) Dedup：注册或复用 inflight
+        inflight_event = None
+        is_leader = False
+        async with _analyze_inflight_lock:
+            existing = _analyze_inflight.get(article_id)
+            if existing and not force_refresh:
+                inflight_event = existing
+            else:
+                inflight_event = asyncio.Event()
+                _analyze_inflight[article_id] = inflight_event
+                is_leader = True
+
+        if not is_leader:
+            yield f"data: {json.dumps({'type': 'status', 'msg': '检测到相同分析在进行中，等待复用结果...'}, ensure_ascii=False)}\n\n"
+            try:
+                await asyncio.wait_for(inflight_event.wait(), timeout=180.0)
+            except asyncio.TimeoutError:
+                yield f"data: {json.dumps({'type': 'error', 'msg': '等待上游分析超时'}, ensure_ascii=False)}\n\n"
+                return
+            cached_data = analysis_cache.get(article_id)
+            summary = (cached_data or {}).get("summary")
+            if summary:
+                yield f"data: {json.dumps({'type': 'metadata', 'wordcloud': cached_data.get('wordcloud'), 'emotions': cached_data.get('emotions')}, ensure_ascii=False)}\n\n"
+                if article.content:
+                    yield f"data: {json.dumps({'type': 'raw_content', 'text': article.content}, ensure_ascii=False)}\n\n"
+                yield f"data: {json.dumps({'type': 'content_start'}, ensure_ascii=False)}\n\n"
+                yield f"data: {json.dumps({'type': 'content', 'text': summary}, ensure_ascii=False)}\n\n"
+                yield "data: {\"type\": \"content_end\"}\n\n"
+            else:
+                yield f"data: {json.dumps({'type': 'error', 'msg': '上游分析未产出可用结果'}, ensure_ascii=False)}\n\n"
+            return
+
+        # 2) Leader：等待全局并发令牌（同时最多 3 篇）
+        sem_acquired = False
+        try:
+            # 告知客户端排队情况
+            try:
+                waiting = _analyze_global_semaphore._value <= 0
+            except Exception:
+                waiting = False
+            if waiting:
+                yield f"data: {json.dumps({'type': 'status', 'msg': '系统负载较高，已进入队列等待...'}, ensure_ascii=False)}\n\n"
+            await _analyze_global_semaphore.acquire()
+            sem_acquired = True
+
+            async for chunk in _analyze_core():
+                yield chunk
+        finally:
+            if sem_acquired:
+                _analyze_global_semaphore.release()
+            # 唤醒等待者，清除 inflight 注册
+            inflight_event.set()
+            async with _analyze_inflight_lock:
+                if _analyze_inflight.get(article_id) is inflight_event:
+                    _analyze_inflight.pop(article_id, None)
+
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
@@ -1959,7 +2258,9 @@ async def chat_with_article(article_id: int, req: ChatRequest, db: Session = Dep
         f"正文参考: {article.content[:2000] if article.content else '暂无'}"
     )
     custom_query = f"基于以下背景信息，请回答我的问题：\n\n【背景】\n{context}\n\n【追问】\n{req.query}"
-    return {"answer": chat_with_news(custom_query)}
+    # chat_with_news 是同步 httpx 调用（可能 5~30s），不能直接在 async 路由里阻塞事件循环。
+    answer = await asyncio.to_thread(chat_with_news, custom_query)
+    return {"answer": answer}
 
 
 @router.post("/ai/chat", response_model=ChatResponse)
@@ -2164,13 +2465,32 @@ async def mcp_query_engine(req: ChatRequest, db: Session = Depends(get_db)):
 
     # 智能路由：检测日报/周报/对比指令
     q_lower = query.strip()
+    # 预清洗口语化前缀：把"对比一下"、"比较一下"等中文助词剥离，保证后续正则稳定
+    q_lower = _re.sub(r"(对比|比较)\s*一下\s*", r"\1 ", q_lower)
     if _re.search(r"日报|今日[总汇报]|今天[总汇报]", q_lower):
         return await ai_report(report_type="daily", db=db)
     if _re.search(r"周报|本周[总汇报]|这周[总汇报]", q_lower):
         return await ai_report(report_type="weekly", db=db)
+    # 对比意图识别：先尝试三元模式"对比 A 和 B 对 Z 的看法/态度/评论..."
+    topic_pattern = _re.search(
+        r"对比\s*[「「]?(.+?)[」」]?\s*[和与]\s*[「「]?(.+?)[」」]?\s*对\s*[「「]?(.+?)[」」]?\s*的\s*(?:看法|评论|态度|反应|观点|声音|报道|立场|讨论|情绪|情感|报导|评价)",
+        q_lower,
+    )
+    if topic_pattern:
+        compare_req = CompareRequest(
+            a=topic_pattern.group(1).strip(),
+            b=topic_pattern.group(2).strip(),
+            topic=topic_pattern.group(3).strip(),
+            history=req.history,
+        )
+        return await ai_compare(compare_req, db=db)
     compare_match = _re.search(r"对比\s*[「「]?(.+?)[」」]?\s*[和与vs]\s*[「「]?(.+?)[」」]?\s*$", q_lower)
     if compare_match:
-        compare_req = CompareRequest(a=compare_match.group(1).strip(), b=compare_match.group(2).strip(), history=req.history)
+        compare_req = CompareRequest(
+            a=compare_match.group(1).strip(),
+            b=compare_match.group(2).strip(),
+            history=req.history,
+        )
         return await ai_compare(compare_req, db=db)
 
     if _re.search(r"统计[分报]|数据报告|平台.*对比.*数量|TOP\s*\d|情绪分布", q_lower):
@@ -2309,17 +2629,136 @@ async def ai_report(report_type: str = "daily", db: Session = Depends(get_db)):
 # ---------------------------------------------------------------------------
 # AI 对比分析
 # ---------------------------------------------------------------------------
+def _build_compare_metrics(label: str, articles: list, events: list) -> dict:
+    """把 articles/events 聚合为前端仪表盘所需的结构化对比数据。"""
+    from collections import Counter
+
+    now = datetime.utcnow()
+    cutoff_24h = now - timedelta(hours=24)
+    cutoff_48h = now - timedelta(hours=48)
+
+    # 情绪分布
+    sentiment_counter = Counter()
+    platform_counter = Counter()
+    for a in articles:
+        sent = (a.ai_sentiment or "neutral").lower()
+        # 归一化到 5 类
+        if sent in ("positive", "joy", "喜悦", "positive_low", "anticipation", "trust"):
+            bucket = "positive"
+        elif sent in ("negative", "anger", "愤怒", "sadness", "悲伤", "fear", "恐惧", "disgust", "厌恶"):
+            bucket = "negative"
+        elif sent in ("surprise", "惊讶"):
+            bucket = "surprise"
+        else:
+            bucket = "neutral"
+        sentiment_counter[bucket] += 1
+        platform_counter[SOURCE_NAME_MAP.get(a.source_id, a.source_id)] += 1
+
+    # 7 天时间轴（逐日文章数）
+    timeline_counts = Counter()
+    for a in articles:
+        t = a.pub_date or a.fetch_time
+        if not t:
+            continue
+        key = t.strftime("%m-%d")
+        timeline_counts[key] += 1
+    # 最近 7 天从新到旧展示；若不足 7 天只展示实际天数
+    days = []
+    for i in range(6, -1, -1):
+        day = (now - timedelta(days=i)).strftime("%m-%d")
+        days.append({"date": day, "count": timeline_counts.get(day, 0)})
+
+    # 24h 变化：0-24h 文章数 vs 24-48h 文章数
+    c_0_24 = sum(1 for a in articles if (a.pub_date or a.fetch_time or datetime.min) >= cutoff_24h)
+    c_24_48 = sum(1 for a in articles if cutoff_48h <= (a.pub_date or a.fetch_time or datetime.min) < cutoff_24h)
+    if c_24_48 > 0:
+        trend_pct = round((c_0_24 - c_24_48) / c_24_48 * 100, 1)
+    else:
+        trend_pct = None
+
+    # 代表情报 top3
+    rep = [marshal_article(a) for a in articles[:3]]
+
+    return {
+        "label": label,
+        "article_count": len(articles),
+        "event_count": len(events),
+        "platform_count": len(platform_counter),
+        "platforms": [{"name": k, "count": v} for k, v in platform_counter.most_common(6)],
+        "sentiment": dict(sentiment_counter),
+        "timeline": days,
+        "trend_24h": {"current": c_0_24, "previous": c_24_48, "pct": trend_pct},
+        "representative_articles": rep,
+        "events": [
+            {"id": e.id, "title": e.title, "article_count": e.article_count, "platform_count": e.platform_count}
+            for e in events
+        ],
+    }
+
+
+_PLATFORM_NAME_TO_SOURCE_ID = {
+    "微博": "weibo_hot_search",
+    "知乎": "zhihu_hot_question",
+    "头条": "toutiao_hot",
+    "今日头条": "toutiao_hot",
+    "百度": "baidu_hot",
+    "百度热搜": "baidu_hot",
+    "澎湃": "thepaper_hot",
+    "澎湃新闻": "thepaper_hot",
+    "哔哩哔哩": "bilibili_hot_video",
+    "b站": "bilibili_hot_video",
+    "B站": "bilibili_hot_video",
+    "财联社": "cls_hot",
+    "华尔街": "wallstreetcn_hot",
+    "华尔街见闻": "wallstreetcn_hot",
+    "36氪": "36kr_quick",
+    "少数派": "sspai_hot",
+    "虎扑": "hupu_bxj",
+}
+
+
+def _resolve_compare_source(name: str) -> Optional[str]:
+    """把用户输入的平台别名归一化到 source_id；非平台名返回 None。"""
+    key = (name or "").strip().lower()
+    for alias, sid in _PLATFORM_NAME_TO_SOURCE_ID.items():
+        if alias.lower() == key:
+            return sid
+    return None
+
+
 @router.post("/ai/compare")
 async def ai_compare(req: CompareRequest, db: Session = Depends(get_db)):
     from app.llm import chat_with_news_stream
 
-    def gather(keyword: str):
-        items = db.query(Article).filter(Article.title.like(f"%{keyword}%")).order_by(Article.fetch_time.desc()).limit(20).all()
-        evts = search_events(db, keyword, limit=5)
+    topic = (req.topic or "").strip()
+
+    def gather(name: str):
+        """根据输入解析查询条件：
+        - 若 name 是已知平台别名（微博/知乎/...）→ 按 source_id 过滤 + topic LIKE（如有）
+        - 否则 → 按 name LIKE（原行为）；若 topic 提供也叠加 LIKE topic
+        """
+        source_id = _resolve_compare_source(name)
+        q = db.query(Article)
+        if source_id:
+            q = q.filter(Article.source_id == source_id)
+            if topic:
+                q = q.filter(Article.title.like(f"%{topic}%"))
+        else:
+            q = q.filter(Article.title.like(f"%{name}%"))
+            if topic:
+                q = q.filter(Article.title.like(f"%{topic}%"))
+        items = q.order_by(Article.fetch_time.desc()).limit(40).all()
+
+        # 事件搜索：平台模式下用 topic 当查询词，否则用 name
+        search_query = topic if (source_id and topic) else name
+        evts = search_events(db, search_query, limit=5) if search_query else []
         return items, evts
 
     a_articles, a_events = gather(req.a)
     b_articles, b_events = gather(req.b)
+
+    metrics_a = _build_compare_metrics(req.a, a_articles, a_events)
+    metrics_b = _build_compare_metrics(req.b, b_articles, b_events)
 
     def fmt_block(label, arts, evts):
         lines = [f"【{label}】"]
@@ -2331,17 +2770,26 @@ async def ai_compare(req: CompareRequest, db: Session = Depends(get_db)):
 
     ctx = fmt_block(req.a, a_articles, a_events) + "\n\n" + fmt_block(req.b, b_articles, b_events)
 
+    # 用数值 metrics 明确注入 prompt，让 LLM 总结基于量化数据而非"盲猜"
+    quant_a = f"{req.a}: {metrics_a['article_count']}条 / {metrics_a['platform_count']}平台 / 情绪{metrics_a['sentiment']}"
+    quant_b = f"{req.b}: {metrics_b['article_count']}条 / {metrics_b['platform_count']}平台 / 情绪{metrics_b['sentiment']}"
+
     system_prompt = (
-        "你是舆镜舆情对比分析引擎。根据下方两组本地数据，从以下维度对比：\n"
-        "1. 热度对比：哪个话题/平台讨论量更大\n"
-        "2. 情绪差异：各自的舆论倾向\n"
-        "3. 关键差异点：最显著的不同\n"
-        "4. 总结：一句话结论\n"
-        "使用中文，保持紧凑。\n\n"
-        f"数据：\n{ctx}"
+        "你是舆镜舆情对比分析引擎。用户已经在界面看到量化数据卡片（热度/情绪/平台/趋势），\n"
+        "你负责在卡片下方给出专业研判文字，**无需重复数值指标**，聚焦定性分析：\n"
+        "1. 关键差异点：两个话题最显著的叙事/立场/议题分歧\n"
+        "2. 平台差异：哪些平台更关注哪一方\n"
+        "3. 风险与建议：给出一句最有价值的研判结论\n"
+        "中文、紧凑、不用 Markdown 表格。\n\n"
+        f"量化摘要：\n{quant_a}\n{quant_b}\n\n"
+        f"原始内容：\n{ctx}"
     )
 
     async def compare_event_generator():
+        # 先推送结构化 metrics（前端据此渲染仪表盘）
+        payload = {"type": "compare_metrics", "a": metrics_a, "b": metrics_b}
+        yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
         yield f"data: {json.dumps({'type': 'content_start'}, ensure_ascii=False)}\n\n"
         async for chunk in chat_with_news_stream(system_prompt, req.history or [], f"对比 {req.a} 和 {req.b}"):
             yield f"data: {json.dumps({'type': 'content', 'text': chunk}, ensure_ascii=False)}\n\n"
@@ -2356,21 +2804,117 @@ async def ai_compare(req: CompareRequest, db: Session = Depends(get_db)):
 # ---------------------------------------------------------------------------
 # PDF 报告导出
 # ---------------------------------------------------------------------------
-def _build_pdf(title: str, sections: list[dict]) -> bytes:
+def _render_markdown_line_with_bold(pdf, line: str, base_size: int, line_h: float = 6):
+    """
+    手动处理行内 `**xxx**` 粗体（fpdf2 的 markdown=True 与中文字体存在渲染异常）。
+    将一行拆为 [普通, 粗体, 普通, ...] 片段，逐段以 write() 输出以保留行内粗体，
+    遇到超宽自动折行。
+    """
+    # 孤立的 ** 不渲染
+    if line.count("**") % 2 != 0:
+        line = line.replace("**", "")
+
+    import re as _re
+    segments = _re.split(r"\*\*(.+?)\*\*", line)
+    for idx, seg in enumerate(segments):
+        if not seg:
+            continue
+        style = "B" if idx % 2 == 1 else ""
+        pdf.set_font("msyh", style, base_size)
+        # write() 自动换行、保持光标在行内；最后 ln() 结束
+        pdf.write(line_h, seg)
+    pdf.ln(line_h)
+
+
+def _normalize_pdf_body(body: str) -> str:
+    """
+    清洗 LLM 输出的常见排版噪声：
+    1. "\\n3.\\n2026年..." 这种数字/中文序号独占一行 → 合并到下一行，防止 PDF 出现孤立序号
+    2. 连续 3 个以上空行 → 压缩为 2 个
+    3. 行尾空白清除
+    """
+    import re as _re
+    if not body:
+        return body
+
+    # 把 "\n<序号>\n<正文>" 合并为 "\n<序号> <正文>"
+    # 序号：数字+. / 数字、/ 一二三+. / 一二三、
+    pat = _re.compile(r"\n([0-9]+[\.、]|[一二三四五六七八九十]+[\.、])\s*\n[ \t]*(?=\S)")
+    prev = None
+    while prev != body:
+        prev = body
+        body = pat.sub(r"\n\1 ", body)
+
+    # 多余空行压缩
+    body = _re.sub(r"\n{3,}", "\n\n", body)
+    # 行尾空白
+    body = _re.sub(r"[ \t]+\n", "\n", body)
+    return body
+
+
+def _render_markdown_body(pdf, body: str, base_size: int = 10):
+    """把 body 按行扫描，渲染 Markdown 标题 / 粗体等常见语法到 PDF。"""
+    if not body:
+        return
+
+    body = _normalize_pdf_body(body)
+
+    for raw_line in body.splitlines():
+        line = raw_line.rstrip()
+        stripped = line.lstrip()
+
+        if not stripped:
+            pdf.ln(3)
+            continue
+
+        # 标题：#/##/###（去掉 # 和可能残留的 *）
+        if stripped.startswith("### "):
+            pdf.set_font("msyh", "B", base_size + 1)
+            pdf.multi_cell(0, 7, stripped[4:].strip(" *"))
+            continue
+        if stripped.startswith("## "):
+            pdf.set_font("msyh", "B", base_size + 3)
+            pdf.multi_cell(0, 9, stripped[3:].strip(" *"))
+            pdf.ln(1)
+            continue
+        if stripped.startswith("# "):
+            pdf.set_font("msyh", "B", base_size + 5)
+            pdf.multi_cell(0, 10, stripped[2:].strip(" *"))
+            pdf.ln(2)
+            continue
+
+        # 普通行：行内 `**xxx**` 渲染为粗体
+        _render_markdown_line_with_bold(pdf, line, base_size, line_h=6)
+
+
+def _build_pdf(title: str, sections: list[dict], images: Optional[list[str]] = None) -> bytes:
     """
     生成 PDF 文档。
     sections: [{"heading": str, "body": str}, ...]
+    images: 可选的 base64 PNG dataURL 列表，按序插入正文之前，用于承载前端截图（如对比仪表盘）。
+    body 支持基础 Markdown 语法（标题、粗体）。
     """
     from fpdf import FPDF
+    import base64
+    import io
+    import logging as _logging
+    # 压制 fontTools 的 "MERG NOT subset; don't know how to subset; dropped" 警告
+    # 这是中文字体子集化时的已知噪声，不影响 PDF 生成
+    _logging.getLogger("fontTools.subset").setLevel(_logging.ERROR)
 
     pdf = FPDF()
     pdf.set_auto_page_break(auto=True, margin=20)
     pdf.add_page()
 
-    # 注册中文字体（微软雅黑）
+    # 注册中文字体（微软雅黑）。同时注册 I/BI 变体（复用常规/粗体字重），
+    # 否则启用 markdown=True 时 fpdf2 切换到未注册字体会抛 FPDFException。
     font_path = "C:/Windows/Fonts/msyh.ttc"
+    bold_path = "C:/Windows/Fonts/msyhbd.ttc"
     pdf.add_font("msyh", "", font_path)
-    pdf.add_font("msyh", "B", "C:/Windows/Fonts/msyhbd.ttc")
+    pdf.add_font("msyh", "B", bold_path)
+    pdf.add_font("msyh", "I", font_path)
+    pdf.add_font("msyh", "BI", bold_path)
+    pdf.set_font("msyh", "", 10)
 
     # 标题
     pdf.set_font("msyh", "B", 18)
@@ -2381,14 +2925,29 @@ def _build_pdf(title: str, sections: list[dict]) -> bytes:
     pdf.set_text_color(0, 0, 0)
     pdf.ln(6)
 
+    # 先插入截图（若有）：让可视化在文字研判之前，读者更容易抓住重点
+    if images:
+        page_width = pdf.w - pdf.l_margin - pdf.r_margin
+        for data_url in images:
+            try:
+                # 支持形如 "data:image/png;base64,xxxxx" 或裸 base64
+                if "," in data_url:
+                    b64_part = data_url.split(",", 1)[1]
+                else:
+                    b64_part = data_url
+                raw = base64.b64decode(b64_part)
+                pdf.image(io.BytesIO(raw), w=page_width)
+                pdf.ln(4)
+            except Exception as exc:
+                print(f"[PDF] 嵌入截图失败（忽略）: {exc}")
+
     for section in sections:
         if section.get("heading"):
             pdf.set_font("msyh", "B", 13)
             pdf.cell(0, 10, section["heading"], new_x="LMARGIN", new_y="NEXT")
             pdf.ln(2)
         if section.get("body"):
-            pdf.set_font("msyh", "", 10)
-            pdf.multi_cell(0, 6, section["body"])
+            _render_markdown_body(pdf, section["body"], base_size=10)
             pdf.ln(4)
 
     return bytes(pdf.output())
@@ -2568,15 +3127,16 @@ def clear_alerts():
 class ExportChatPdfRequest(BaseModel):
     title: str = "AI 对话报告"
     content: str
+    images: Optional[List[str]] = None  # base64 dataURL 列表，用于嵌入前端截图（对比仪表盘等）
 
 
 @router.post("/ai/export_pdf")
 def export_chat_pdf(req: ExportChatPdfRequest):
-    if not req.content.strip():
+    if not req.content.strip() and not req.images:
         return Response(content="内容为空", status_code=400)
 
-    sections = [{"heading": "", "body": req.content}]
-    pdf_bytes = _build_pdf(req.title, sections)
+    sections = [{"heading": "", "body": req.content}] if req.content.strip() else []
+    pdf_bytes = _build_pdf(req.title, sections, images=req.images)
     ts = datetime.now().strftime("%Y%m%d_%H%M")
     fname = re.sub(r'[\\/:*?"<>|]', '_', req.title[:30]) + f"_{ts}.pdf"
     return Response(
