@@ -1083,6 +1083,63 @@ def admin_cleanup_articles(days: int = 7, dry_run: bool = False):
     return {"ok": True, "removed": removed, "days": days, "dry_run": dry_run}
 
 
+# ============================================================
+# v0.10 · 语义聚类管理接口
+# ============================================================
+
+@router.post("/admin/rebuild_embeddings")
+def admin_rebuild_embeddings(lookback_hours: int = 720, batch_size: int = 64):
+    """
+    管理接口：对最近 lookback_hours 小时内的 Article 增量生成语义向量。
+
+    - 已存在（article_id + 当前 EMBED_MODEL_NAME）的向量会跳过；
+    - 首次调用会加载 bge-small-zh-v1.5（约 100 MB，第一次需下载）；
+    - 返回处理条数与当前模型名，便于前端观测进度。
+    """
+    from app.services.embedding import EMBED_MODEL_NAME
+    from app.services.semantic_cluster import ensure_embeddings
+
+    db = SessionLocal()
+    try:
+        cutoff = datetime.utcnow() - timedelta(hours=lookback_hours)
+        articles = (
+            db.query(Article)
+            .filter(Article.fetch_time >= cutoff)
+            .order_by(Article.fetch_time.desc())
+            .all()
+        )
+        if not articles:
+            return {"ok": True, "total": 0, "model": EMBED_MODEL_NAME}
+        emb_map = ensure_embeddings(db, articles, batch_size=batch_size)
+        return {
+            "ok": True,
+            "total": len(articles),
+            "embedded": len(emb_map),
+            "model": EMBED_MODEL_NAME,
+            "lookback_hours": lookback_hours,
+        }
+    finally:
+        db.close()
+
+
+@router.post("/admin/rebuild_events_semantic")
+def admin_rebuild_events_semantic(lookback_hours: int = 720):
+    """
+    管理接口：使用 Sentence-BERT 语义聚类强制重建事件（不依赖 .env 的开关）。
+
+    - 会先调用 ensure_embeddings 保证向量齐全；
+    - 然后用 cluster_articles_semantic → _merge_near_duplicate_clusters → 写 events 表；
+    - 失败时自动 fallback 到旧 Jaccard 路径（由 rebuild_events 内部处理）。
+    """
+    from app.services.events import rebuild_events
+    db = SessionLocal()
+    try:
+        count = rebuild_events(db, lookback_hours=lookback_hours, use_semantic=True)
+        return {"ok": True, "event_count": count, "mode": "semantic"}
+    finally:
+        db.close()
+
+
 def _has_recent_event_hub_data(window_minutes: int = 20) -> bool:
     db = SessionLocal()
     try:

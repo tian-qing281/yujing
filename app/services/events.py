@@ -1,5 +1,7 @@
 import json
+import logging
 import math
+import os
 import re
 from collections import Counter
 from datetime import datetime, timedelta
@@ -12,6 +14,12 @@ from sqlalchemy.orm import Session
 
 from app.database import Article, Event, EventArticle
 from app.services.search_engine import meili
+
+logger = logging.getLogger(__name__)
+
+# v0.10: Sentence-BERT 聚类升级开关（默认关闭，保持旧行为）。
+# 可通过 .env 的 SEMANTIC_CLUSTER=1 启用，或调用 admin 接口时传 semantic=1 临时启用。
+SEMANTIC_CLUSTER_ENABLED = os.getenv("SEMANTIC_CLUSTER", "0").strip() in ("1", "true", "True", "yes")
 
 
 # IDF 加权共享 token 相似度：替代纯 Jaccard 抑制"美国/伊朗"等高频 token 的虚高权重
@@ -638,7 +646,15 @@ def _cluster_articles(articles: List[Article]) -> List[Dict]:
     return clusters
 
 
-def rebuild_events(db: Session, lookback_hours: int = 720) -> int:
+def rebuild_events(db: Session, lookback_hours: int = 720, use_semantic: Optional[bool] = None) -> int:
+    """
+    重建事件聚合。
+
+    use_semantic:
+      - None (默认)  ：按 `SEMANTIC_CLUSTER_ENABLED` 决定路径
+      - True        ：强制走 Sentence-BERT 语义聚类（失败自动 fallback 回 Jaccard）
+      - False       ：强制走旧 IDF 加权 Jaccard 聚类
+    """
     cutoff = datetime.utcnow() - timedelta(hours=lookback_hours)
     articles = (
         db.query(Article)
@@ -662,7 +678,22 @@ def rebuild_events(db: Session, lookback_hours: int = 720) -> int:
     except Exception:
         _CURRENT_IDF_MAP = {}
 
-    clusters = _merge_near_duplicate_clusters(_cluster_articles(articles))
+    # 路径选择：显式参数 > 环境变量；任何异常自动回落到 Jaccard，保证不破坏线上功能。
+    want_semantic = SEMANTIC_CLUSTER_ENABLED if use_semantic is None else bool(use_semantic)
+    clusters = None
+    if want_semantic:
+        try:
+            from app.services.semantic_cluster import cluster_articles_semantic
+            clusters = cluster_articles_semantic(db, articles)
+            logger.info(f"[rebuild_events] 使用语义聚类，得到 {len(clusters)} 个初始簇")
+        except Exception:
+            logger.exception("[rebuild_events] 语义聚类失败，回退到 Jaccard 路径")
+            clusters = None
+
+    if clusters is None:
+        clusters = _cluster_articles(articles)
+
+    clusters = _merge_near_duplicate_clusters(clusters)
     event_count = 0
 
     try:

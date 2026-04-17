@@ -1,5 +1,5 @@
 import os
-from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, Float, Boolean
+from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, Float, Boolean, LargeBinary
 from sqlalchemy.orm import sessionmaker, declarative_base
 from datetime import datetime
 
@@ -126,3 +126,23 @@ class VirtualFTS(Base):
     id = Column(Integer, primary_key=True)
     title = Column(Text)
     # This is a dummy model just to let SQLAlchemy know about it if needed
+
+
+class ArticleEmbedding(Base):
+    """
+    语义向量存储（v0.10 新增，用于事件聚类升级为 Sentence-BERT）。
+
+    设计要点：
+    - 独立出新表而不是膨胀 Article，避免主表迁移风险；
+    - vector 列存 float32 的 numpy bytes（dim * 4 bytes），读取时 np.frombuffer 复原；
+    - 多模型共存：同一 article_id + 不同 model_name 可以并存（便于做对照实验）；
+    - 以 (article_id, model_name) 为业务主键，通过 Index 保证唯一性。
+    """
+    __tablename__ = "article_embeddings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    article_id = Column(Integer, nullable=False, index=True)
+    model_name = Column(String(80), nullable=False, index=True)
+    dim = Column(Integer, nullable=False)
+    vector = Column(LargeBinary, nullable=False)  # float32 bytes, len == dim * 4
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
