@@ -17,9 +17,11 @@ def _resolve_project_path(path_value: str, fallback: str) -> str:
 
 
 os.makedirs(DB_DIR, exist_ok=True)
+# 数据库文件默认名与项目对齐为 yujing.db；保留 DATABASE_PATH 环境变量覆盖入口，
+# 便于老部署通过 .env 指回历史文件（例如 runtime/db/hongsou.db）。
 DATABASE_PATH = _resolve_project_path(
     os.getenv("DATABASE_PATH"),
-    os.path.join(DB_DIR, "hongsou.db"),
+    os.path.join(DB_DIR, "yujing.db"),
 )
 DATABASE_URL = f"sqlite:///{DATABASE_PATH}"
 

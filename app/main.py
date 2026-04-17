@@ -91,7 +91,7 @@ def start_meilisearch():
         logging.warning(f"未找到 MeiliSearch 可执行文件：{binary}，已跳过自动启动。")
         return
 
-    master_key = os.getenv("MEILI_MASTER_KEY", "hongsou-master-secret-key-123456")
+    master_key = os.getenv("MEILI_MASTER_KEY", "yujing-master-secret-key-123456")
     logging.info(f"正在启动 MeiliSearch：{binary}")
     
     # Start MeiliSearch in background
@@ -128,6 +128,14 @@ def stop_meilisearch():
 
 @contextlib.asynccontextmanager
 async def lifespan(app: FastAPI):
+    # 0. 扩大默认线程池：避免 Jina 抓取/BERT 推理占满 12-worker 默认池
+    # 导致 db.commit / 调度器 callback / 其他 to_thread 调用排队等待
+    import concurrent.futures
+    loop = asyncio.get_running_loop()
+    loop.set_default_executor(
+        concurrent.futures.ThreadPoolExecutor(max_workers=32, thread_name_prefix="yj-worker")
+    )
+
     # 1. 启动基础服务
     start_meilisearch()
     start_scheduler()
@@ -192,17 +200,17 @@ def read_root():
 
 
 if __name__ == "__main__":
-    import signal
     import uvicorn
 
-    def _force_exit(sig, frame):
-        logging.warning("二次中断信号，强制退出。")
-        os._exit(1)
-
-    def _graceful_exit(sig, frame):
-        logging.info("收到 Ctrl+C，正在优雅停机…（再按一次强制退出）")
-        signal.signal(signal.SIGINT, _force_exit)
-
-    signal.signal(signal.SIGINT, _graceful_exit)
-
-    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=False)
+    # 不再自定义 SIGINT handler：原先的实现只是替换 handler 但没通知 uvicorn，
+    # 导致首次 Ctrl+C 被 Python 信号处理器吞掉、uvicorn 永远不进入停机流程（表现为"按 Ctrl+C 无反应"）。
+    # uvicorn 原生的 SIGINT 行为：第一次触发 lifespan shutdown（2~5 秒）；第二次强制 kill。
+    # lifespan 里所有清理动作均带 2~3 秒超时，不会卡死。
+    uvicorn.run(
+        "app.main:app",
+        host="0.0.0.0",
+        port=8000,
+        reload=False,
+        # 把 uvicorn 等待 app 完成的超时缩短为 5 秒，避免清理脚本吊死
+        timeout_graceful_shutdown=5,
+    )

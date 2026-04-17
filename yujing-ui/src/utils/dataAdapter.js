@@ -1,6 +1,7 @@
 /**
- * Hongsou Data Standard (HDS) Adapter
+ * Yujing Data Standard (YDS) Adapter
  * 统一各平台爬虫数据结构，实现归一化处理
+ * （历史别名：HDS / Hongsou Data Standard）
  */
 
 const SOURCE_CONFIG = {

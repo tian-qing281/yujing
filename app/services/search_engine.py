@@ -107,7 +107,7 @@ def _build_filter(source_id: str = "", time_field: str = "", time_range: Optiona
 class MeiliSearchClient:
     def __init__(self):
         host = os.getenv("MEILI_HOST", "http://localhost:7700")
-        key = os.getenv("MEILI_MASTER_KEY", "hongsou-master-secret-key-123456")
+        key = os.getenv("MEILI_MASTER_KEY", "yujing-master-secret-key-123456")
         self.client = meilisearch.Client(host, key)
         self.enabled = False
         self._check_health()

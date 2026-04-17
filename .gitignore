@@ -33,6 +33,10 @@ _backups/
 app/__backup/
 *.bak
 
+# 根目录遗留数据库 / 临时调试资产（包含 hongsou.db 历史文件）
+/*.db
+_bug_images/
+
 # Cookies (sensitive)
 app/crawler/cookies/*.json
 

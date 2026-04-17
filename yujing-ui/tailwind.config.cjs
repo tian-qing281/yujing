@@ -16,7 +16,7 @@ module.exports = {
   daisyui: {
     themes: [
       {
-        hongsou: {
+        yujing: {
           primary: "#1E40AF",
           secondary: "#06B6D4",
           accent: "#F59E0B",

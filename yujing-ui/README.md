@@ -1,6 +1,6 @@
-# Hongsou UI
+# Yujing UI
 
-这是 `hongsou-next` 的前端工作台，基于 Vue 3 + Vite。
+这是 `yujing`（舆镜）项目的前端工作台，基于 Vue 3 + Vite。
 
 当前前端不是模板页，而是一个已经拆成多工作区的分析界面：
 
