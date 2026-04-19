@@ -47,7 +47,7 @@ def _resolve_project_path(path_value: str, fallback: str) -> str:
         return path_value
     return os.path.join(BASE_DIR, path_value)
 
-from app.api import proxy, routes  # noqa: E402
+from app.api import agent_routes, proxy, routes  # noqa: E402
 from app.crawler.scheduler import start_scheduler, stop_scheduler  # noqa: E402
 from app.crawler.sources.base import BaseSource  # noqa: E402
 from app.database import Base, engine  # noqa: E402
@@ -204,6 +204,7 @@ app.add_middleware(
 
 app.include_router(routes.router, prefix="/api")
 app.include_router(proxy.router, prefix="/api")
+app.include_router(agent_routes.router, prefix="/api")
 
 
 @app.get("/")

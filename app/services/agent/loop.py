@@ -68,8 +68,33 @@ class AgentLoop:
         else:
             self._llm_caller = llm_caller
 
-    def run(self, query: str) -> AgentTrajectory:
-        """跑一个 query 到结束，返回完整 trajectory。"""
+    def run(
+        self,
+        query: str,
+        on_event: Optional[Callable[[Dict[str, Any]], None]] = None,
+    ) -> AgentTrajectory:
+        """跑一个 query 到结束，返回完整 trajectory。
+
+        Args:
+            query: 用户问题
+            on_event: 可选回调，每个关键节点会被调用一次，参数为 dict：
+                - {"type":"llm_thinking","step":i}                在每次 LLM 调用前
+                - {"type":"tool_call","step":i,"name":...,"args":...}
+                - {"type":"tool_result","step":i,"name":...,"ok":bool,
+                   "output":..., "error":..., "latency_ms":int}
+                - {"type":"final","text":...}
+                - {"type":"error","message":...,"terminated_reason":...}
+                - {"type":"done","terminated_reason":...,"total_latency_ms":int}
+            回调异常不会影响主循环；SSE 场景下回调会把事件塞进 asyncio.Queue。
+        """
+        def _emit(event: Dict[str, Any]) -> None:
+            if on_event is None:
+                return
+            try:
+                on_event(event)
+            except Exception:  # noqa: BLE001
+                logger.exception("[agent.loop] on_event 回调失败，已忽略")
+
         trajectory = AgentTrajectory(query=query)
         t0 = time.time()
         messages: List[Dict[str, Any]] = [
@@ -79,6 +104,7 @@ class AgentLoop:
         consecutive_errors = 0
 
         for step_idx in range(self.max_steps):
+            _emit({"type": "llm_thinking", "step": step_idx})
             try:
                 resp = self._llm_caller(
                     messages=messages,
@@ -92,6 +118,7 @@ class AgentLoop:
                     assistant_content=f"LLM 调用失败: {exc}",
                 ))
                 trajectory.terminated_reason = "error"
+                _emit({"type": "error", "message": f"LLM 调用失败: {exc}", "terminated_reason": "error"})
                 break
 
             if resp.tool_calls:
@@ -118,6 +145,12 @@ class AgentLoop:
                 # 执行每个 tool_call，把 observation append 到 messages
                 had_error = False
                 for tc in resp.tool_calls:
+                    _emit({
+                        "type": "tool_call",
+                        "step": step_idx,
+                        "name": tc.name,
+                        "args": tc.arguments or {},
+                    })
                     result = self._dispatch_tool(tc)
                     step.tool_results.append(result)
                     if result.error:
@@ -127,28 +160,54 @@ class AgentLoop:
                         "tool_call_id": tc.call_id,
                         "content": self._serialize_observation(result),
                     })
+                    _emit({
+                        "type": "tool_result",
+                        "step": step_idx,
+                        "name": tc.name,
+                        "ok": result.error is None,
+                        "output": result.output,
+                        "error": result.error,
+                        "latency_ms": result.latency_ms,
+                    })
 
                 trajectory.steps.append(step)
                 consecutive_errors = consecutive_errors + 1 if had_error else 0
                 if consecutive_errors > self.max_consecutive_errors:
                     trajectory.terminated_reason = "too_many_errors"
+                    _emit({
+                        "type": "error",
+                        "message": "连续工具调用失败过多",
+                        "terminated_reason": "too_many_errors",
+                    })
                     break
                 continue
 
             # 无 tool_calls → final
+            final_text = resp.content or ""
             trajectory.steps.append(AgentStep(
                 index=step_idx,
                 kind="final",
-                assistant_content=resp.content or "",
+                assistant_content=final_text,
             ))
-            trajectory.final_answer = resp.content or ""
+            trajectory.final_answer = final_text
             trajectory.finished = True
             trajectory.terminated_reason = "final"
+            _emit({"type": "final", "text": final_text})
             break
         else:
             trajectory.terminated_reason = "max_steps"
+            _emit({
+                "type": "error",
+                "message": "已达最大步数上限，未收敛",
+                "terminated_reason": "max_steps",
+            })
 
         trajectory.total_latency_ms = int((time.time() - t0) * 1000)
+        _emit({
+            "type": "done",
+            "terminated_reason": trajectory.terminated_reason,
+            "total_latency_ms": trajectory.total_latency_ms,
+        })
         return trajectory
 
     # ---- 内部辅助 ---------------------------------------------------------
