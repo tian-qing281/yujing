@@ -38,7 +38,7 @@ from typing import Dict, List, Tuple
 import numpy as np
 from sqlalchemy.orm import Session
 
-from app.database import Article, ArticleEmbedding
+from app.database import Article, ArticleEmbedding, utcnow
 from app.services.embedding import (
     EMBED_DIM,
     EMBED_MODEL_NAME,
@@ -164,7 +164,7 @@ def _time_decay(hours_diff: float, half_life: float) -> float:
 
 def _article_hour(article: Article) -> float:
     """article 时间戳（小时级 epoch）。"""
-    t = article.pub_date or article.fetch_time or datetime.utcnow()
+    t = article.pub_date or article.fetch_time or utcnow()
     return t.timestamp() / 3600.0
 
 

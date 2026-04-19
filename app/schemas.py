@@ -1,8 +1,10 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from datetime import datetime
 from typing import Optional, List
 
 class ArticleResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     source_id: str
     item_id: str
@@ -18,9 +20,6 @@ class ArticleResponse(BaseModel):
     search_match_reasons: List[str] = Field(default_factory=list)
     search_highlight_title: Optional[str] = None
     search_highlight_excerpt: Optional[str] = None
-
-    class Config:
-        from_attributes = True
 
 class ChatRequest(BaseModel):
     query: str
@@ -60,7 +59,7 @@ class EventResponse(BaseModel):
 
 
 class EventDetailResponse(EventResponse):
-    related_articles: List[ArticleResponse] = Field(default_factory=list)
+    related_articles: List[dict] = Field(default_factory=list)
 
 
 class TopicResponse(BaseModel):

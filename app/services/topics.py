@@ -4,10 +4,10 @@ from collections import Counter
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 
-import jieba.analyse
 from sqlalchemy.orm import Session
 
-from app.database import Article, Event, EventArticle, Topic, TopicEvent
+from app.database import Article, Event, EventArticle, Topic, TopicEvent, utcnow
+from app.keyword_extraction import extract_tags
 from app.services.events import (
     LOW_VALUE_TOKENS,
     STOPWORDS,
@@ -111,7 +111,7 @@ def _extract_event_tokens(event: Event) -> List[str]:
     if 2 <= len(title_norm) <= 20:
         push(title_norm)
 
-    for tag in jieba.analyse.extract_tags(payload, topK=10):
+    for tag in extract_tags(payload, topK=10):
         push(tag)
 
     for token in re.findall(r"[\u4e00-\u9fff]{2,}|[a-z0-9]{2,}", normalized):
@@ -131,7 +131,7 @@ def _event_score(event: Event) -> float:
     freshness_bonus = 0.0
     latest = event.latest_article_time
     if latest:
-        age_hours = max((datetime.utcnow() - latest).total_seconds() / 3600, 0)
+        age_hours = max((utcnow() - latest).total_seconds() / 3600, 0)
         freshness_bonus = max(0.0, 16 - min(age_hours, 16))
     return article_bonus + platform_bonus + freshness_bonus
 
@@ -268,7 +268,7 @@ def _build_topic_payload(cluster: Dict, included_events: List[Event], stable_eve
     entity = cluster["super_entity"]
     stats = _collect_topic_stats(included_events, event_articles)
     representative = max(stable_events or included_events, key=_event_score)
-    latest_time = max((event.latest_article_time or datetime.utcnow()) for event in included_events)
+    latest_time = max((event.latest_article_time or utcnow()) for event in included_events)
     keywords = _topic_keywords(included_events, entity)
     return {
         "title": _build_topic_title(entity),
@@ -285,7 +285,7 @@ def _build_topic_payload(cluster: Dict, included_events: List[Event], stable_eve
 
 
 def rebuild_topics(db: Session, lookback_hours: int = TOPIC_LOOKBACK_HOURS) -> int:
-    cutoff = datetime.utcnow() - timedelta(hours=lookback_hours)
+    cutoff = utcnow() - timedelta(hours=lookback_hours)
     events = (
         db.query(Event)
         .filter(Event.latest_article_time >= cutoff)
@@ -381,7 +381,7 @@ def rebuild_topics(db: Session, lookback_hours: int = TOPIC_LOOKBACK_HOURS) -> i
 
 def ensure_topics(db: Session, stale_minutes: int = 20) -> int:
     latest_topic = db.query(Topic).order_by(Topic.updated_at.desc()).first()
-    if latest_topic and latest_topic.updated_at and latest_topic.updated_at >= datetime.utcnow() - timedelta(minutes=stale_minutes):
+    if latest_topic and latest_topic.updated_at and latest_topic.updated_at >= utcnow() - timedelta(minutes=stale_minutes):
         return db.query(Topic).count()
     return rebuild_topics(db)
 
@@ -391,7 +391,7 @@ def search_topics(db: Session, query: str, limit: int = 24, time_range: int = No
 
     q_obj = db.query(Topic)
     if time_range is not None:
-        cutoff = datetime.utcnow() - timedelta(hours=time_range)
+        cutoff = utcnow() - timedelta(hours=time_range)
         q_obj = q_obj.filter(Topic.latest_event_time >= cutoff)
     if source_id:
         q_obj = q_obj.filter(Topic.primary_source_id == source_id)

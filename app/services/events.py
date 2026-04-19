@@ -7,12 +7,10 @@ from collections import Counter
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Union
 
-import jieba.analyse
-import jieba
-import jieba.posseg as pseg
 from sqlalchemy.orm import Session
 
-from app.database import Article, Event, EventArticle
+from app.database import Article, Event, EventArticle, utcnow
+from app.keyword_extraction import extract_tags, pseg
 from app.services.search_engine import meili
 
 logger = logging.getLogger(__name__)
@@ -275,7 +273,7 @@ def _extract_tokens(article: Article) -> List[str]:
     if 4 <= len(title) <= 18:
         push(title)
 
-    for tag in jieba.analyse.extract_tags(combined, topK=12):
+    for tag in extract_tags(combined, topK=12):
         push(tag)
 
     raw_tokens = re.findall(r"[\u4e00-\u9fff]{2,}|[a-z0-9]{2,}", normalized_combined)
@@ -339,9 +337,9 @@ def _extract_display_keywords(articles: List[Article]) -> List[str]:
         seed = " ".join(str(extra.get(key, "")) for key in ("excerpt", "desc") if extra.get(key))
         push_entities(title)
         push_quoted_phrases(title)
-        for tag in jieba.analyse.extract_tags(title, topK=6):
+        for tag in extract_tags(title, topK=6):
             push(tag, 5)
-        for tag in jieba.analyse.extract_tags(seed, topK=4):
+        for tag in extract_tags(seed, topK=4):
             push(tag, 2)
 
         for word, flag in pseg.cut(title):
@@ -403,7 +401,7 @@ def _extract_heat(article: Article) -> float:
 
 
 def _article_time(article: Article) -> datetime:
-    return article.pub_date or article.fetch_time or datetime.utcnow()
+    return article.pub_date or article.fetch_time or utcnow()
 
 
 def _score_article(article: Article) -> float:
@@ -544,13 +542,28 @@ def _build_cluster_payload(articles: List[Article]) -> Dict:
     representative = max(articles, key=_score_article)
     latest_time = max(_article_time(article) for article in articles)
     primary_source = Counter(article.source_id for article in articles).most_common(1)[0][0]
+    # 事件热度评分：综合文章热度 + 跨平台覆盖 + 数量
+    article_scores = sorted([_score_article(a) for a in articles], reverse=True)
+    # 取 top-3 文章热度均值（避免长尾噪声拉高）
+    top_scores = article_scores[:3]
+    avg_top_heat = sum(top_scores) / len(top_scores) if top_scores else 0
+    platform_count = len({article.source_id for article in articles})
+    # heat = 文章热度(0-300) + 跨平台奖励(每多一个平台+30, 上限150) + 数量奖励(log)
+    heat_score = round(
+        avg_top_heat
+        + min((platform_count - 1) * 30, 150)
+        + math.log2(max(len(articles), 1)) * 15,
+        2,
+    )
+
     return {
         "title": representative.title,
         "summary": _build_event_summary(articles, keywords),
         "keywords": keywords,
         "sentiment": _pick_sentiment(articles),
         "article_count": len(articles),
-        "platform_count": len({article.source_id for article in articles}),
+        "platform_count": platform_count,
+        "heat_score": heat_score,
         "latest_article_time": latest_time,
         "representative_article_id": representative.id,
         "primary_source_id": primary_source,
@@ -655,7 +668,7 @@ def rebuild_events(db: Session, lookback_hours: int = 720, use_semantic: Optiona
       - True        ：强制走 Sentence-BERT 语义聚类（失败自动 fallback 回 Jaccard）
       - False       ：强制走旧 IDF 加权 Jaccard 聚类
     """
-    cutoff = datetime.utcnow() - timedelta(hours=lookback_hours)
+    cutoff = utcnow() - timedelta(hours=lookback_hours)
     articles = (
         db.query(Article)
         .filter(Article.fetch_time >= cutoff)
@@ -681,19 +694,29 @@ def rebuild_events(db: Session, lookback_hours: int = 720, use_semantic: Optiona
     # 路径选择：显式参数 > 环境变量；任何异常自动回落到 Jaccard，保证不破坏线上功能。
     want_semantic = SEMANTIC_CLUSTER_ENABLED if use_semantic is None else bool(use_semantic)
     clusters = None
+    semantic_meta = None
     if want_semantic:
         try:
-            from app.services.semantic_cluster import cluster_articles_semantic
-            clusters = cluster_articles_semantic(db, articles)
-            logger.info(f"[rebuild_events] 使用语义聚类，得到 {len(clusters)} 个初始簇")
+            from app.services.semantic_index import cluster_articles_semantic_faiss
+            clusters, semantic_meta = cluster_articles_semantic_faiss(db, articles)
+            logger.info(
+                "[rebuild_events] 使用 FAISS 语义聚类，初始簇=%s threshold=%s nlist=%s nprobe=%s",
+                len(clusters),
+                semantic_meta.get("threshold") if semantic_meta else None,
+                semantic_meta.get("nlist") if semantic_meta else None,
+                semantic_meta.get("nprobe") if semantic_meta else None,
+            )
         except Exception:
             logger.exception("[rebuild_events] 语义聚类失败，回退到 Jaccard 路径")
             clusters = None
+            semantic_meta = None
 
     if clusters is None:
         clusters = _cluster_articles(articles)
+        # Jaccard 路径需要二次合并来弥补贪心单遍扫描的不足
+        clusters = _merge_near_duplicate_clusters(clusters)
+    # 语义路径已通过 Union-Find 全局聚类，不再做 Jaccard 二次合并，避免干扰语义精度
 
-    clusters = _merge_near_duplicate_clusters(clusters)
     event_count = 0
 
     try:
@@ -709,6 +732,7 @@ def rebuild_events(db: Session, lookback_hours: int = 720, use_semantic: Optiona
                 sentiment=payload["sentiment"],
                 article_count=payload["article_count"],
                 platform_count=payload["platform_count"],
+                heat_score=payload.get("heat_score", 0.0),
                 latest_article_time=payload["latest_article_time"],
                 representative_article_id=payload["representative_article_id"],
                 primary_source_id=payload["primary_source_id"],
@@ -719,19 +743,25 @@ def rebuild_events(db: Session, lookback_hours: int = 720, use_semantic: Optiona
             representative_id = payload["representative_article_id"]
             cluster_tokens = _extract_tokens(cluster["representative"])
             cluster_title = _normalize_title(cluster["representative"].title)
+            cluster_relation_scores = cluster.get("relation_scores") or {}
+            cluster_importance_scores = cluster.get("importance_scores") or {}
 
             for article in cluster["articles"]:
-                relation_score = _cluster_similarity(
-                    _extract_tokens(article),
-                    cluster_tokens,
-                    _normalize_title(article.title),
-                    cluster_title,
-                )
+                if cluster_relation_scores and article.id in cluster_relation_scores:
+                    relation_score = float(cluster_relation_scores[article.id])
+                else:
+                    relation_score = _cluster_similarity(
+                        _extract_tokens(article),
+                        cluster_tokens,
+                        _normalize_title(article.title),
+                        cluster_title,
+                    )
                 db.add(
                     EventArticle(
                         event_id=event.id,
                         article_id=article.id,
                         relation_score=round(relation_score, 4),
+                        importance_score=cluster_importance_scores.get(article.id, 0.0),
                         is_primary=article.id == representative_id,
                     )
                 )
@@ -745,6 +775,13 @@ def rebuild_events(db: Session, lookback_hours: int = 720, use_semantic: Optiona
 
     meili.clear_index("events")
     meili.sync_events(db, db.query(Event).all())
+    if semantic_meta:
+        logger.info(
+            "[rebuild_events] 语义聚类落库完成 event_count=%s threshold=%s pairs=%s",
+            event_count,
+            semantic_meta.get("threshold"),
+            semantic_meta.get("candidate_pairs"),
+        )
     # 清理本轮 IDF，避免被后续非聚类调用意外复用
     _CURRENT_IDF_MAP = {}
     return event_count
@@ -753,7 +790,7 @@ def rebuild_events(db: Session, lookback_hours: int = 720, use_semantic: Optiona
 def ensure_events(db: Session, stale_minutes: int = 15) -> int:
     latest_event = db.query(Event).order_by(Event.updated_at.desc()).first()
     # 如果库里一个事件都没有，或者数据太旧，或者数据量明显不对，执行重构
-    if latest_event and latest_event.updated_at and latest_event.updated_at >= datetime.utcnow() - timedelta(minutes=stale_minutes):
+    if latest_event and latest_event.updated_at and latest_event.updated_at >= utcnow() - timedelta(minutes=stale_minutes):
         return db.query(Event).count()
     return rebuild_events(db, lookback_hours=720)
 

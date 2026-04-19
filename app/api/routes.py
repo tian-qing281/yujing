@@ -27,7 +27,7 @@ from app.crawler.sources.toutiao import ToutiaoHotBoard
 from app.crawler.sources.weibo import WeiboHotSearch
 from app.crawler.sources.wallstreetcn import WallstreetcnNews
 from app.crawler.sources.zhihu import ZhihuHotQuestion
-from app.database import Article, Event, EventArticle, SessionLocal, Topic, TopicEvent
+from app.database import Article, Event, EventArticle, SessionLocal, Topic, TopicEvent, utcnow
 from app.schemas import (
     ArticleResponse,
     ChatRequest,
@@ -41,6 +41,12 @@ from app.schemas import (
 from app.services.emotion import emotion_engine
 from app.services.events import classify_event_confidence, ensure_events, rebuild_events, search_events
 from app.services.search_engine import meili
+from app.services.semantic_index import (
+    build_semantic_index,
+    get_semantic_cluster_preview,
+    get_semantic_index_status,
+    get_semantic_neighbors,
+)
 from app.services.topics import ensure_topics, rebuild_topics, search_topics
 
 
@@ -805,6 +811,7 @@ def marshal_event(event: Event, query: str = "", search_hit: dict | None = None,
         "representative_article_id": event.representative_article_id,
         "primary_source_id": event.primary_source_id,
         "source_ids": _source_ids_override if _source_ids_override is not None else collect_event_source_ids(db, event),
+        "heat_score": event.heat_score or 0,
         "confidence": confidence,
         "confidence_label": confidence_label,
         "match_reasons": _build_match_reasons(query, event.title, event.summary, keywords),
@@ -979,7 +986,7 @@ def _refresh_events_cache():
         try:
             if _shutting_down.is_set():
                 return
-            recent_cutoff = datetime.utcnow() - timedelta(hours=168)
+            recent_cutoff = utcnow() - timedelta(hours=168)
             meili.sync_articles(db.query(Article).filter(Article.fetch_time >= recent_cutoff).all())
             if _shutting_down.is_set():
                 return
@@ -1011,7 +1018,7 @@ def cleanup_stale_articles(days: int = 7, dry_run: bool = False):
 
     db = SessionLocal()
     try:
-        cutoff = datetime.utcnow() - timedelta(days=days)
+        cutoff = utcnow() - timedelta(days=days)
         # 被事件引用的 article_id 集合（保护名单）
         referenced_ids = {
             r[0] for r in db.query(EventArticle.article_id).distinct().all()
@@ -1103,7 +1110,7 @@ def admin_rebuild_embeddings(lookback_hours: int = 720, batch_size: int = 64):
 
     db = SessionLocal()
     try:
-        cutoff = datetime.utcnow() - timedelta(hours=lookback_hours)
+        cutoff = utcnow() - timedelta(hours=lookback_hours)
         articles = (
             db.query(Article)
             .filter(Article.fetch_time >= cutoff)
@@ -1142,10 +1149,10 @@ def admin_rebuild_embeddings(lookback_hours: int = 720, batch_size: int = 64):
 @router.post("/admin/rebuild_events_semantic")
 def admin_rebuild_events_semantic(lookback_hours: int = 720):
     """
-    管理接口：使用 Sentence-BERT 语义聚类强制重建事件（不依赖 .env 的开关）。
+    管理接口：使用正式接入主链的 Sentence-BERT + FAISS 语义聚类强制重建事件。
 
-    - 会先调用 ensure_embeddings 保证向量齐全；
-    - 然后用 cluster_articles_semantic → _merge_near_duplicate_clusters → 写 events 表；
+    - 会先调用 embedding/FAISS 语义链路保证向量与索引齐备；
+    - 然后用正式事件聚合路径落库 Event / EventArticle；
     - 失败时自动 fallback 到旧 Jaccard 路径（由 rebuild_events 内部处理）。
     """
     from app.services.events import rebuild_events
@@ -1157,13 +1164,66 @@ def admin_rebuild_events_semantic(lookback_hours: int = 720):
         db.close()
 
 
+@router.post("/admin/semantic_index/build")
+def admin_build_semantic_index(
+    lookback_hours: int = 720,
+    topk: int = 20,
+    nlist: int = 64,
+    nprobe: int = 8,
+    batch_size: int = 64,
+):
+    """
+    语义索引构建入口。
+
+    目标：
+    - 预热正式接入主链所使用的 Sentence-BERT + FAISS IVF-Flat 流程；
+    - 单独观察索引规模、P95 自适应阈值和聚类预览统计；
+    - 不直接写 events 表，适合调参与论文实验。
+    """
+    db = SessionLocal()
+    try:
+        return build_semantic_index(
+            db,
+            lookback_hours=lookback_hours,
+            topk=topk,
+            requested_nlist=nlist,
+            nprobe=nprobe,
+            batch_size=batch_size,
+        )
+    finally:
+        db.close()
+
+
+@router.get("/admin/semantic_index/status")
+def admin_semantic_index_status():
+    return get_semantic_index_status()
+
+
+@router.get("/admin/semantic_index/neighbors")
+def admin_semantic_index_neighbors(article_id: int, limit: int = 10):
+    try:
+        return get_semantic_neighbors(article_id=article_id, limit=limit)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+
+
+@router.get("/admin/semantic_index/clusters")
+def admin_semantic_index_clusters(limit: int = 10):
+    try:
+        return get_semantic_cluster_preview(limit=limit)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+
+
 def _has_recent_event_hub_data(window_minutes: int = 20) -> bool:
     db = SessionLocal()
     try:
         latest_article = db.query(Article).order_by(Article.fetch_time.desc()).first()
         if not latest_article or not latest_article.fetch_time:
             return False
-        if latest_article.fetch_time < datetime.utcnow() - timedelta(minutes=window_minutes):
+        if latest_article.fetch_time < utcnow() - timedelta(minutes=window_minutes):
             return False
         return db.query(Event).count() > 0
     finally:
@@ -1374,7 +1434,7 @@ async def unified_search_endpoint(
         
         is_all_range = (time_range is None)
         if not is_all_range:
-            cutoff = datetime.utcnow() - timedelta(hours=int(time_range))
+            cutoff = utcnow() - timedelta(hours=int(time_range))
             q_events = q_events.filter(Event.latest_article_time >= cutoff)
             q_articles = q_articles.filter(Article.fetch_time >= cutoff)
 
@@ -1472,7 +1532,7 @@ async def unified_search_endpoint(
             sql_article_total = db.query(Article).filter(Article.title.contains(query))
             sql_event_total = _cached_search_events_count(db, query, time_range=time_range, source_id=normalized_source or None)
             if time_range is not None:
-                cutoff = datetime.utcnow() - timedelta(hours=int(time_range))
+                cutoff = utcnow() - timedelta(hours=int(time_range))
                 sql_article_total = sql_article_total.filter(Article.fetch_time >= cutoff)
             if normalized_source:
                 sql_article_total = sql_article_total.filter(Article.source_id == normalized_source)
@@ -1506,7 +1566,7 @@ async def unified_search_endpoint(
     fallback_articles_query = db.query(Article).filter(Article.title.contains(query))
 
     if time_range is not None:
-        cutoff = datetime.utcnow() - timedelta(hours=int(time_range))
+        cutoff = utcnow() - timedelta(hours=int(time_range))
         fallback_events_query = fallback_events_query.filter(Event.latest_article_time >= cutoff)
         fallback_topics_query = fallback_topics_query.filter(Topic.latest_event_time >= cutoff)
         fallback_articles_query = fallback_articles_query.filter(Article.fetch_time >= cutoff)
@@ -1559,23 +1619,27 @@ async def unified_search_endpoint(
 
 
 @router.get("/events")
-async def get_events(response: Response, db: Session = Depends(get_db), force_refresh: bool = False, q: str = "", time_range: int = None, source_id: str = ""):
+async def get_events(response: Response, db: Session = Depends(get_db), force_refresh: bool = False, q: str = "", time_range: int = None, source_id: str = "", sort: str = "heat"):
     current_time = time.time()
     query = (q or "").strip()
     normalized_source = (source_id or "").strip()
+    sort_mode = (sort or "heat").strip().lower()
     
     q_obj = db.query(Event)
     
     is_all_range = (time_range is None or int(time_range) >= 720)
     if not is_all_range:
-        cutoff = datetime.utcnow() - timedelta(hours=int(time_range))
+        cutoff = utcnow() - timedelta(hours=int(time_range))
         q_obj = q_obj.filter(Event.latest_article_time >= cutoff)
 
     if normalized_source:
         q_obj = q_obj.filter(Event.primary_source_id == normalized_source)
     
     total = q_obj.count()
-    events = q_obj.order_by(Event.article_count.desc(), Event.latest_article_time.desc()).limit(9).all()
+    if sort_mode == "time":
+        events = q_obj.order_by(Event.latest_article_time.desc(), Event.heat_score.desc()).limit(9).all()
+    else:
+        events = q_obj.order_by(Event.heat_score.desc(), Event.latest_article_time.desc()).limit(9).all()
     batch_sids = batch_collect_event_source_ids(db, [e.id for e in events])
     payload = [marshal_event(e, query=query, db=db, _source_ids_override=batch_sids.get(e.id, [])) for e in events]
     response.headers["X-Total-Count"] = str(total)
@@ -1610,11 +1674,13 @@ async def search_events_page_endpoint(
     q: str = "",
     time_range: int = None,
     source_id: str = "",
+    sort: str = "heat",
     limit: int = 18,
     offset: int = 0,
 ):
     query = (q or "").strip()
     normalized_source = (source_id or "").strip()
+    sort_mode = (sort or "heat").strip().lower()
     limit = max(1, min(int(limit or 18), 60))
     offset = max(0, int(offset or 0))
     is_all_range = (time_range is None or int(time_range) >= 720)
@@ -1632,17 +1698,16 @@ async def search_events_page_endpoint(
 
     q_obj = db.query(Event)
     if time_range is not None:
-        cutoff = datetime.utcnow() - timedelta(hours=time_range)
+        cutoff = utcnow() - timedelta(hours=time_range)
         q_obj = q_obj.filter(Event.latest_article_time >= cutoff)
     if normalized_source:
         q_obj = q_obj.filter(Event.primary_source_id == normalized_source)
     total = q_obj.count()
     
-    # 逻辑分流：限时模式看新鲜度，全部模式看总热度
-    if is_all_range:
-        q_obj = q_obj.order_by(Event.article_count.desc(), Event.latest_article_time.desc())
+    if sort_mode == "time":
+        q_obj = q_obj.order_by(Event.latest_article_time.desc(), Event.heat_score.desc())
     else:
-        q_obj = q_obj.order_by(Event.latest_article_time.desc(), Event.article_count.desc())
+        q_obj = q_obj.order_by(Event.heat_score.desc(), Event.latest_article_time.desc())
 
     rows = q_obj.offset(offset).limit(limit).all()
     sp_batch_sids = batch_collect_event_source_ids(db, [r.id for r in rows])
@@ -1662,6 +1727,7 @@ async def get_event_detail(event_id: int, db: Session = Depends(get_db)):
         .all()
     )
     article_ids = [row.article_id for row in link_rows]
+    importance_map = {row.article_id: row.importance_score or 0.0 for row in link_rows}
     db_articles = db.query(Article).filter(Article.id.in_(article_ids)).all()
 
     # 情绪补全：**绝不**在请求链路上同步跑 BERT（会把 CPU 打满 → 饿死其他请求）。
@@ -1694,6 +1760,7 @@ async def get_event_detail(event_id: int, db: Session = Depends(get_db)):
         # 响应级兜底：不改 ORM 对象、不触发 commit
         if not marshaled.get("ai_sentiment") and article.id in fallback_sentiment:
             marshaled["ai_sentiment"] = fallback_sentiment[article.id]
+        marshaled["importance_score"] = importance_map.get(article.id, 0.0)
         article_lookup[article.id] = marshaled
     related_articles = [article_lookup[article_id] for article_id in article_ids if article_id in article_lookup]
     related_articles.sort(key=lambda a: a.get("fetch_time") or "", reverse=True)
@@ -1900,7 +1967,7 @@ def morning_brief_content():
 
 def _build_morning_brief_prompt(db: Session) -> str:
     """构造早报 system prompt，供 SSE 和后台触发共享。"""
-    cutoff = datetime.utcnow() - timedelta(hours=24)
+    cutoff = utcnow() - timedelta(hours=24)
     events = (
         db.query(Event)
         .filter(Event.latest_article_time >= cutoff)
@@ -2037,8 +2104,7 @@ async def get_morning_brief(db: Session = Depends(get_db)):
 
 
 def get_word_frequencies(title: str, markdown_content: str) -> List[List]:
-    import jieba
-    import jieba.analyse
+    from app.keyword_extraction import extract_tags, jieba, textrank
 
     try:
         text_content = re.sub(r"<[^>]+>", "", f"{title} {markdown_content}")
@@ -2061,8 +2127,8 @@ def get_word_frequencies(title: str, markdown_content: str) -> List[List]:
             "百度",
         }
 
-        tags_tfidf = jieba.analyse.extract_tags(text_content, topK=40, withWeight=True)
-        tags_rank = jieba.analyse.textrank(text_content, topK=40, withWeight=True)
+        tags_tfidf = extract_tags(text_content, topK=40, withWeight=True)
+        tags_rank = textrank(text_content, topK=40, withWeight=True)
 
         unique_map = {}
         for word, weight in tags_tfidf + tags_rank:
@@ -2657,7 +2723,7 @@ async def ai_report(report_type: str = "daily", db: Session = Depends(get_db)):
 
     hours = 24 if report_type == "daily" else 168
     label = "日报" if report_type == "daily" else "周报"
-    cutoff = datetime.utcnow() - timedelta(hours=hours)
+    cutoff = utcnow() - timedelta(hours=hours)
 
     events = (
         db.query(Event)
@@ -2707,7 +2773,7 @@ def _build_compare_metrics(label: str, articles: list, events: list) -> dict:
     """把 articles/events 聚合为前端仪表盘所需的结构化对比数据。"""
     from collections import Counter
 
-    now = datetime.utcnow()
+    now = utcnow()
     cutoff_24h = now - timedelta(hours=24)
     cutoff_48h = now - timedelta(hours=48)
 

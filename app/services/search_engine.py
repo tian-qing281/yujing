@@ -7,7 +7,7 @@ from typing import Dict, List, Optional
 
 import meilisearch
 
-from app.database import Article, Event, EventArticle, Topic, TopicEvent
+from app.database import Article, Event, EventArticle, Topic, TopicEvent, utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -97,7 +97,7 @@ def _build_filter(source_id: str = "", time_field: str = "", time_range: Optiona
     if source_id:
         filters.append(f'{time_field and ""}primary_source_id = "{source_id}"')
     if time_range is not None and time_field:
-        cutoff = int((datetime.utcnow() - timedelta(hours=time_range)).timestamp())
+        cutoff = int((utcnow() - timedelta(hours=time_range)).timestamp())
         filters.append(f"{time_field} >= {cutoff}")
     if not filters:
         return None
@@ -406,7 +406,7 @@ class MeiliSearchClient:
         if source_id:
             filter_expr.append(f'source_id = "{source_id}"')
         if time_range is not None:
-            cutoff = int((datetime.utcnow() - timedelta(hours=time_range)).timestamp())
+            cutoff = int((utcnow() - timedelta(hours=time_range)).timestamp())
             filter_expr.append(f"fetch_ts >= {cutoff}")
         return self.search(
             "articles",

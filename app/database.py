@@ -1,11 +1,16 @@
 import os
+from datetime import UTC, datetime
+
 from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, Float, Boolean, LargeBinary
 from sqlalchemy.orm import sessionmaker, declarative_base
-from datetime import datetime
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RUNTIME_DIR = os.path.join(BASE_DIR, "runtime")
 DB_DIR = os.path.join(RUNTIME_DIR, "db")
+
+
+def utcnow() -> datetime:
+    return datetime.now(UTC).replace(tzinfo=None)
 
 
 def _resolve_project_path(path_value: str, fallback: str) -> str:
@@ -55,8 +60,8 @@ class Article(Base):
     rank = Column(Integer, default=99) # 榜单原始排名
     title = Column(String(255), nullable=False)
     url = Column(String(500))
-    pub_date = Column(DateTime, default=datetime.utcnow)
-    fetch_time = Column(DateTime, default=datetime.utcnow)
+    pub_date = Column(DateTime, default=utcnow)
+    fetch_time = Column(DateTime, default=utcnow)
     extra_info = Column(Text) # JSON string for views, likes, etc
     # 供后续 AI 使用的扩展字段
     ai_summary = Column(Text, nullable=True) 
@@ -73,11 +78,12 @@ class Event(Base):
     sentiment = Column(String(20), nullable=True, default="neutral")
     article_count = Column(Integer, default=0)
     platform_count = Column(Integer, default=0)
-    latest_article_time = Column(DateTime, default=datetime.utcnow, index=True)
+    heat_score = Column(Float, default=0.0, index=True)
+    latest_article_time = Column(DateTime, default=utcnow, index=True)
     representative_article_id = Column(Integer, nullable=True, index=True)
     primary_source_id = Column(String(50), nullable=True, index=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
 
 
 class EventArticle(Base):
@@ -87,8 +93,9 @@ class EventArticle(Base):
     event_id = Column(Integer, nullable=False, index=True)
     article_id = Column(Integer, nullable=False, index=True)
     relation_score = Column(Float, default=0.0)
+    importance_score = Column(Float, default=0.0)
     is_primary = Column(Boolean, default=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utcnow)
 
 
 class Topic(Base):
@@ -102,11 +109,11 @@ class Topic(Base):
     event_count = Column(Integer, default=0)
     article_count = Column(Integer, default=0)
     platform_count = Column(Integer, default=0)
-    latest_event_time = Column(DateTime, default=datetime.utcnow, index=True)
+    latest_event_time = Column(DateTime, default=utcnow, index=True)
     representative_event_id = Column(Integer, nullable=True, index=True)
     primary_source_id = Column(String(50), nullable=True, index=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
 
 
 class TopicEvent(Base):
@@ -117,7 +124,7 @@ class TopicEvent(Base):
     event_id = Column(Integer, nullable=False, index=True)
     relation_score = Column(Float, default=0.0)
     is_primary = Column(Boolean, default=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utcnow)
 
 
 class VirtualFTS(Base):
@@ -145,4 +152,4 @@ class ArticleEmbedding(Base):
     model_name = Column(String(80), nullable=False, index=True)
     dim = Column(Integer, nullable=False)
     vector = Column(LargeBinary, nullable=False)  # float32 bytes, len == dim * 4
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)

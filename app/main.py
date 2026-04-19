@@ -3,14 +3,10 @@ import contextlib
 import logging
 import os
 import sys
-import warnings
 
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-
-warnings.filterwarnings("ignore")
-logging.getLogger("jieba").setLevel(logging.ERROR)
 
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -18,6 +14,11 @@ RUNTIME_DIR = os.path.join(BASE_DIR, "runtime")
 MEILI_DIR = os.path.join(RUNTIME_DIR, "meili")
 if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
+
+from app.runtime_warnings import suppress_known_dependency_warnings
+
+suppress_known_dependency_warnings()
+logging.getLogger("jieba").setLevel(logging.ERROR)
 
 load_dotenv(os.path.join(BASE_DIR, ".env"))
 
