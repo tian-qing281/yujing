@@ -299,7 +299,15 @@ def _prepare_semantic_materials(
     requested_nlist: int,
     nprobe: int,
     batch_size: int,
+    *,
+    fixed_threshold: Optional[float] = None,
+    disable_canonical_merge: bool = False,
 ) -> Dict[str, object]:
+    """
+    fixed_threshold: 非 None 时旁路双层 Otsu 的 L2（合并阈值），用给定的固定值代替；
+                     L1（过滤阈值）仍来自 Otsu。仅用于消融实验，生产路径保持 None。
+    disable_canonical_merge: 为 True 时跳过 canonical-title 硬合并边注入；消融用。
+    """
     embedding_map = ensure_embeddings(db, articles, batch_size=batch_size)
     encoded_articles = [article for article in articles if article.id in embedding_map]
     if not encoded_articles:
@@ -319,16 +327,22 @@ def _prepare_semantic_materials(
     thresholds = _compute_adaptive_thresholds(all_topk_cosines)
     p_filter = thresholds["p_filter"]
     p_merge = thresholds["p_merge"]
+    if fixed_threshold is not None:
+        p_merge = float(fixed_threshold)
 
     # 用 P75 过滤 pair_scores（去噪 + 减少内存）
     pair_scores = {pair: cos for pair, cos in raw_pair_scores.items() if cos >= p_filter}
 
-    injected_title_pairs = _augment_exact_title_pairs(pair_scores, articles_by_id)
+    if disable_canonical_merge:
+        injected_title_pairs = 0
+    else:
+        injected_title_pairs = _augment_exact_title_pairs(pair_scores, articles_by_id)
 
     logger.info(
-        "[semantic_index] 自适应阈值: P75(过滤)=%.4f, P90(合并)=%.4f, "
+        "[semantic_index] 自适应阈值: L1(过滤)=%.4f, L2(合并)=%.4f%s, "
         "过滤前 %d 对 → 过滤后 %d 对, 同标题补边 %d 对",
-        p_filter, p_merge, len(raw_pair_scores), len(pair_scores), injected_title_pairs,
+        p_filter, p_merge, " [fixed]" if fixed_threshold is not None else "",
+        len(raw_pair_scores), len(pair_scores), injected_title_pairs,
     )
 
     clusters = _preview_clusters(article_ids, pair_scores, p_merge)
@@ -455,14 +469,23 @@ def cluster_articles_semantic_faiss(
     requested_nlist: int = SEMANTIC_INDEX_NLIST,
     nprobe: int = SEMANTIC_INDEX_NPROBE,
     batch_size: int = 64,
+    *,
+    fixed_threshold: Optional[float] = None,
+    skip_verification: bool = False,
+    disable_canonical_merge: bool = False,
 ) -> Tuple[List[Dict[str, object]], Dict[str, object]]:
     """
     正式事件聚合入口：返回与旧 `_cluster_articles` 兼容的簇结构。
 
     说明：
-    - 底层走 Sentence-BERT + FAISS IVF-Flat + P95 自适应阈值；
+    - 底层走 Sentence-BERT + FAISS IVF-Flat + 双层 Otsu 自适应阈值；
     - 返回 clusters 时额外附带 `relation_scores`，供 events.py 落 EventArticle 时优先使用；
     - 不改写 Event/Article 表结构，保持对现有项目的最小侵入。
+
+    消融实验参数（默认全关，对生产零影响）：
+    - fixed_threshold:          非 None 时旁路 L2 Otsu，用固定合并阈值
+    - skip_verification:        跳过簇内复核（放弃链式传染的兜底）
+    - disable_canonical_merge:  跳过 canonical title 硬合并边
     """
     from app.services.events import _canonicalize_title, _extract_tokens, _normalize_title, _score_article
 
@@ -484,6 +507,8 @@ def cluster_articles_semantic_faiss(
         requested_nlist=requested_nlist,
         nprobe=nprobe,
         batch_size=batch_size,
+        fixed_threshold=fixed_threshold,
+        disable_canonical_merge=disable_canonical_merge,
     )
     articles_by_id: Dict[int, Article] = materials["articles_by_id"]  # type: ignore[assignment]
     pair_scores: Dict[Tuple[int, int], float] = materials["pair_scores"]  # type: ignore[assignment]
@@ -540,6 +565,7 @@ def cluster_articles_semantic_faiss(
 
         # 簇内复核：成员与代表的 cosine 必须 >= threshold，
         # 否则踢出。解决 Union-Find 链式传染（A≈B, B≈C 但 A≠C）。
+        # skip_verification=True 时（消融）直接收所有成员，不再剔除离群。
         rep_vec = vectors.get(representative.id)
         rep_canonical = _canonicalize_title(representative.title)
         verified = [representative]
@@ -557,7 +583,7 @@ def cluster_articles_semantic_faiss(
                 and rep_canonical == _canonicalize_title(article.title)
                 and len(rep_canonical.replace(" ", "")) >= 6
             )
-            if cos_to_rep < threshold and not same_canonical:
+            if not skip_verification and cos_to_rep < threshold and not same_canonical:
                 expelled.append(article.id)
                 continue
             # relation_score 用 composite 写入，仅供排序/诊断

@@ -158,12 +158,21 @@ def _load_gold_clusters(path: Optional[Path]) -> Dict[int, str]:
     if path is None:
         return {}
 
+    # 字段兼容: 模板导出的文件用 gold_cluster_id (见 _export_gold_template),
+    # 文档和早期示例用 cluster_id; 两者都认, gold_cluster_id 优先.
+    def _pick(row) -> str:
+        for key in ("gold_cluster_id", "cluster_id"):
+            value = str(row.get(key, "") or "").strip()
+            if value:
+                return value
+        return ""
+
     labels: Dict[int, str] = {}
     if path.suffix.lower() == ".csv":
         with path.open("r", encoding="utf-8-sig", newline="") as handle:
             rows = csv.DictReader(handle)
             for row in rows:
-                cluster_id = str(row.get("cluster_id", "")).strip()
+                cluster_id = _pick(row)
                 if not cluster_id:
                     continue
                 labels[int(row["article_id"])] = cluster_id
@@ -174,7 +183,7 @@ def _load_gold_clusters(path: Optional[Path]) -> Dict[int, str]:
                 if not raw:
                     continue
                 row = json.loads(raw)
-                cluster_id = str(row.get("cluster_id", "")).strip()
+                cluster_id = _pick(row)
                 if not cluster_id:
                     continue
                 labels[int(row["article_id"])] = cluster_id
@@ -237,6 +246,10 @@ def _mapping_from_semantic(
     lookback_hours: int,
     existing_embeddings_only: bool = False,
     article_ids: Optional[set[int]] = None,
+    *,
+    fixed_threshold: Optional[float] = None,
+    skip_verification: bool = False,
+    disable_canonical_merge: bool = False,
 ) -> Dict[int, int]:
     from app.database import ArticleEmbedding
     from app.services.semantic_index import cluster_articles_semantic_faiss
@@ -251,8 +264,24 @@ def _mapping_from_semantic(
         )
         embedded_ids = {int(article_id) for (article_id,) in rows}
         articles = [article for article in articles if article.id in embedded_ids]
-    clusters, _ = cluster_articles_semantic_faiss(db, articles)
+    clusters, _ = cluster_articles_semantic_faiss(
+        db,
+        articles,
+        fixed_threshold=fixed_threshold,
+        skip_verification=skip_verification,
+        disable_canonical_merge=disable_canonical_merge,
+    )
     return _mapping_from_clusters(clusters)
+
+
+# 消融实验预设。每个预设对应 semantic 主路径的一个开关组合，
+# 便于一次 --ablation all 跑完全部四组并与 baseline 对齐比较。
+_ABLATION_CONFIGS = {
+    "baseline":            {"fixed_threshold": None, "skip_verification": False, "disable_canonical_merge": False},
+    "fixed_0.62":          {"fixed_threshold": 0.62, "skip_verification": False, "disable_canonical_merge": False},
+    "no_verification":     {"fixed_threshold": None, "skip_verification": True,  "disable_canonical_merge": False},
+    "no_canonical_merge":  {"fixed_threshold": None, "skip_verification": False, "disable_canonical_merge": True},
+}
 
 
 def _evaluate_pairs(pairs: List[Tuple[int, int, int]], mapping: Dict[int, int]) -> Dict[str, float]:
@@ -490,6 +519,70 @@ def _run_pair_evaluation(
     print("[note] 当前 semantic_index 主聚类按 cosine pair graph 合并；SEMANTIC_W_TIME / SEMANTIC_W_PLATFORM 目前不直接影响 Union-Find 合并结果。")
 
 
+def _run_ablation_evaluation(
+    pairs_path: Path,
+    lookback_hours: int,
+    gold_clusters_path: Optional[Path],
+    ablations: List[str],
+    semantic_existing_embeddings_only: bool,
+    restrict_to_pair_articles: bool,
+) -> None:
+    """对 semantic 主路径跑多组消融配置并打印指标，方便与 baseline 直接对比。"""
+    from app.database import SessionLocal
+
+    pairs, meta = _load_pairs(pairs_path)
+    gold_clusters = _load_gold_clusters(gold_clusters_path)
+    pair_article_ids = {article_id for left, right, _ in pairs for article_id in (left, right)}
+    selected_article_ids = pair_article_ids if restrict_to_pair_articles else None
+    if not pairs:
+        print("没有可用的 0/1 pair 标注")
+        return
+
+    print(f"pairs={pairs_path}")
+    print(
+        f"usable={meta['usable']} positive={meta['positive']} negative={meta['negative']} skipped={meta['skipped']}"
+    )
+    if gold_clusters_path is not None:
+        print(f"gold_clusters={gold_clusters_path} labeled_articles={len(gold_clusters)}")
+    print(f"ablations={','.join(ablations)}")
+    if semantic_existing_embeddings_only:
+        print("semantic_existing_embeddings_only=true")
+    if restrict_to_pair_articles:
+        print(f"restrict_to_pair_articles=true labeled_articles={len(pair_article_ids)}")
+    print()
+
+    db = SessionLocal()
+    try:
+        for name in ablations:
+            if name not in _ABLATION_CONFIGS:
+                print(f"[skip] 未知消融预设: {name}")
+                continue
+            config = _ABLATION_CONFIGS[name]
+            label = f"Semantic · ablation={name}"
+            t0 = time.perf_counter()
+            try:
+                mapping = _mapping_from_semantic(
+                    db,
+                    lookback_hours,
+                    existing_embeddings_only=semantic_existing_embeddings_only,
+                    article_ids=selected_article_ids,
+                    **config,
+                )
+            except Exception as exc:
+                elapsed = time.perf_counter() - t0
+                print(f"--- {label} ---")
+                print(f"  耗时：{elapsed:.2f}s")
+                print(f"  评测失败：{exc}")
+                print()
+                continue
+            elapsed = time.perf_counter() - t0
+            pair_stats = _evaluate_pairs(pairs, mapping)
+            cluster_metrics = _evaluate_cluster_metrics(mapping, gold_clusters)
+            _print_pair_eval(label, elapsed, pair_stats, cluster_metrics)
+    finally:
+        db.close()
+
+
 def main():
     parser = argparse.ArgumentParser(description="聚类评测（W3 版）")
     parser.add_argument("--smoke", action="store_true", help="最小烟雾测试，不需要标注集")
@@ -499,6 +592,16 @@ def main():
     parser.add_argument("--systems", nargs="+", choices=["persisted", "jaccard", "semantic"], default=["persisted", "jaccard", "semantic"], help="选择要评测的系统")
     parser.add_argument("--semantic-existing-embeddings-only", action="store_true", help="语义评测时只使用已存在 embedding 的文章，避免现场回填模型")
     parser.add_argument("--restrict-to-pair-articles", action="store_true", help="仅在标注对涉及的文章子集上评测；适合作为快速 proxy 对照，不等价于全量窗口实验")
+    parser.add_argument(
+        "--ablation",
+        nargs="+",
+        default=None,
+        help=(
+            "对 semantic 主路径跑消融实验。可选值："
+            f"{', '.join(_ABLATION_CONFIGS.keys())}, all。"
+            "设置该参数时 --systems 会被忽略，转而按预设跑 semantic 的不同开关组合。"
+        ),
+    )
     parser.add_argument("--limit", type=int, default=200)
     parser.add_argument("--lookback", type=int, default=72, dest="lookback_hours")
     args = parser.parse_args()
@@ -513,6 +616,22 @@ def main():
             lookback_hours=args.lookback_hours,
             output_path=Path(args.export_gold_template),
             semantic_existing_embeddings_only=args.semantic_existing_embeddings_only,
+        )
+        return
+
+    if args.ablation:
+        raw = args.ablation
+        if len(raw) == 1 and raw[0] == "all":
+            ablations = list(_ABLATION_CONFIGS.keys())
+        else:
+            ablations = raw
+        _run_ablation_evaluation(
+            pairs_path=Path(args.pairs),
+            lookback_hours=args.lookback_hours,
+            gold_clusters_path=Path(args.gold_clusters) if args.gold_clusters else None,
+            ablations=ablations,
+            semantic_existing_embeddings_only=args.semantic_existing_embeddings_only,
+            restrict_to_pair_articles=args.restrict_to_pair_articles,
         )
         return
 
