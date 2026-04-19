@@ -1,0 +1,120 @@
+# ======================================================================
+# 舆镜 Tool-Calling Agent · 评测 Query 集
+# ======================================================================
+# 20 条 · 5 类 · 每类 4 条。
+#
+# 设计原则：
+#   1. 贴合项目真实数据（伊朗、美伊、霍尔木兹、微博头条知乎等出现过的实体）
+#   2. 每类 query 倾向触发不同 tool 组合，检验 Agent 的"工具选择能力"
+#   3. 难度梯度：单事件（易）→ 多事件对比（中）→ 情绪趋势（中）→
+#      跨平台（中）→ 早报聚合（易，但最容易被 LLM 忽略调用 get_morning_brief）
+#
+# expected_tools 字段：评测脚本用来算 tool_call_precision/recall 的 gold 集。
+#   - "必须调" 的放前面；允许 Agent 追加其他辅助工具，不扣分
+#   - 评测采用"集合包含"判断：调用集 ⊇ expected_tools 记为 recall=1
+
+queries:
+  # ---------------------------------------------------------------
+  # 类别 1 · 单事件查询 (single_event)
+  # 触发链路期望：search_events → get_event_detail → final
+  # ---------------------------------------------------------------
+  - id: S1
+    category: single_event
+    query: "伊朗关闭霍尔木兹海峡这个事件的后续进展如何？"
+    expected_tools: [search_events, get_event_detail]
+  - id: S2
+    category: single_event
+    query: "最近关于以色列的舆情有哪些重要事件？挑一个最热的详细讲讲"
+    expected_tools: [search_events, get_event_detail]
+  - id: S3
+    category: single_event
+    query: "美伊谈判的最新动态是什么？"
+    expected_tools: [search_events, get_event_detail]
+  - id: S4
+    category: single_event
+    query: "中国经济领域最近有哪些受关注的热点事件？"
+    expected_tools: [search_events, get_event_detail]
+
+  # ---------------------------------------------------------------
+  # 类别 2 · 多事件对比 (multi_event_compare)
+  # 触发链路期望：search_events → compare_events → final
+  # ---------------------------------------------------------------
+  - id: C1
+    category: multi_event_compare
+    query: "对比伊朗霍尔木兹海峡事件和美伊谈判事件的舆情差异"
+    expected_tools: [search_events, compare_events]
+  - id: C2
+    category: multi_event_compare
+    query: "俄乌冲突和中东局势，哪个事件的网民关注度更高？"
+    expected_tools: [search_events, compare_events]
+  - id: C3
+    category: multi_event_compare
+    query: "比较一下最近两周伊朗相关的前两个热点事件"
+    expected_tools: [search_events, compare_events]
+  - id: C4
+    category: multi_event_compare
+    query: "最近三周内，哪两个事件的报道量差异最大？"
+    expected_tools: [search_events, compare_events]
+
+  # ---------------------------------------------------------------
+  # 类别 3 · 情绪趋势分析 (sentiment_trend)
+  # 触发链路期望：search_events → analyze_event_sentiment → final
+  # ---------------------------------------------------------------
+  - id: T1
+    category: sentiment_trend
+    query: "伊朗关闭霍尔木兹海峡事件的整体情绪倾向是什么？"
+    expected_tools: [search_events, analyze_event_sentiment]
+  - id: T2
+    category: sentiment_trend
+    query: "美国加征关税这件事，网民的情绪是负面多还是中性多？"
+    expected_tools: [search_events, analyze_event_sentiment]
+  - id: T3
+    category: sentiment_trend
+    query: "最近关于伊朗的热点事件中，情绪分布有什么特点？"
+    expected_tools: [search_events, analyze_event_sentiment]
+  - id: T4
+    category: sentiment_trend
+    query: "近两周情绪最负面的热点事件是哪个？为什么？"
+    expected_tools: [search_events, analyze_event_sentiment]
+
+  # ---------------------------------------------------------------
+  # 类别 4 · 跨平台差异 (cross_platform)
+  # 触发链路期望：list_hot_platforms → final
+  # ---------------------------------------------------------------
+  - id: P1
+    category: cross_platform
+    query: "微博、头条、知乎今天最热的话题分别是什么？讨论量差别大吗？"
+    expected_tools: [list_hot_platforms]
+  - id: P2
+    category: cross_platform
+    query: "百度和微博热搜上哪些话题是共同的？"
+    expected_tools: [list_hot_platforms]
+  - id: P3
+    category: cross_platform
+    query: "财联社和华尔街见闻两个财经平台最近在关注什么热点？"
+    expected_tools: [list_hot_platforms]
+  - id: P4
+    category: cross_platform
+    query: "哔哩哔哩和澎湃新闻的热榜差别大吗？"
+    expected_tools: [list_hot_platforms]
+
+  # ---------------------------------------------------------------
+  # 类别 5 · 早报 / 聚合概览 (digest_overview)
+  # 触发链路期望：get_morning_brief → final
+  # ---------------------------------------------------------------
+  - id: D1
+    category: digest_overview
+    query: "今天的舆情早报讲了什么？"
+    expected_tools: [get_morning_brief]
+  - id: D2
+    category: digest_overview
+    query: "今日值得关注的三大新闻是什么？"
+    expected_tools: [get_morning_brief]
+  - id: D3
+    category: digest_overview
+    query: "帮我总结一下今日热点新闻"
+    expected_tools: [get_morning_brief]
+  - id: D4
+    category: digest_overview
+    query: "今天舆情总体态势如何？"
+    expected_tools: [get_morning_brief]

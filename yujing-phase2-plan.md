@@ -92,15 +92,19 @@
 
 ### 4.4 里程碑拆分（5-7 天）
 
-| M | 天数 | 产出 | 验收 |
-|:---:|:---:|:---|:---|
-| M1 | 1-2 | `app/services/agent/` 骨架：`registry.py` / `loop.py` / `schemas.py` | 单测 3 个工具串联调用成功 |
-| M2 | 2 | 8 个工具 wrapper 全实现 + 单测 | `pytest -k agent_tools` 全绿 |
-| M3 | 1 | `POST /api/agent/chat` 流式 API | curl 一个复杂 query 返回完整 trajectory |
-| M4 | 1-2 | `AgentTrace.vue` + 前端集成 | 3 个预设 query 在浏览器 demo 跑通 |
-| M5 | 1 | 20 query 评测 + 答辩脚本 | `runtime/eval/agent_eval.md` |
+| M | 天数 | 产出 | 验收 | 状态 |
+|:---:|:---:|:---|:---|:---:|
+| M1 | 1-2 | `app/services/agent/` 骨架：`registry.py` / `loop.py` / `schemas.py` | 单测 3 个工具串联调用成功 | ✅ |
+| M2 | 2 | 8 个工具 wrapper 全实现 + 单测 | `pytest -k agent_tools` 全绿 | ✅ |
+| M3 | 1 | `POST /api/agent/chat` 流式 API | curl 一个复杂 query 返回完整 trajectory | ✅ |
+| M4 | 1-2 | `AgentTrace.vue` + 前端集成 | 3 个预设 query 在浏览器 demo 跑通 | ✅ |
+| M5 | 1 | 20 query 评测 + 答辩脚本 | `runtime/eval/agent_eval.md` | ✅ |
+
+**M5 最终指标（20 query · 真 DeepSeek 调用）**：完成率 95% / 工具召回 95% / 平均步数 4.9 / 平均延迟 37 s。详见 `runtime/eval/agent_eval.md`。
 
 ### 4.5 答辩脚本预想
+
+> **M5 完成后更新**：实际评测下来的最优 demo 场景是 T1（情绪分析）与 C1（双事件对比），完整答辩话术（含评委可能提问 & 兜底方案）已落在 `runtime/eval/agent_eval.md § 5`。以下保留早期规划版本作参考。
 
 ```
 评委：请任意问一个问题。
@@ -138,8 +142,8 @@
 
 | 风险 | 概率 | 对策 |
 |:---|:---:|:---|
-| LLM 输出非法 JSON 循环 | 中 | 严格 schema 校验 + step 上限 6 + 非法工具名时强制终止 |
-| 调用链过长影响 demo 流畅 | 中 | 前 3 步必调工具后 step=5 内必须 final |
+| LLM 输出非法 JSON 循环 | 中 | 严格 schema 校验 + step 上限 8 + 非法工具名时强制终止（实测 11 单测覆盖） |
+| 调用链过长影响 demo 流畅 | 中 | system prompt 加聚焦策略；实测 20 query 平均 4.9 步，P95=8（仅 T4 触顶） |
 | DeepSeek 偶发限流 | 低 | 2 次超时重试 + 降级为纯文本 chat |
 | 引用 article 对应不上 | 中 | 强制每个 tool result 带 `_id`，final 引用必须包含 id |
 
