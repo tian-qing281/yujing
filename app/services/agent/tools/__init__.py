@@ -12,3 +12,7 @@ from . import tool_search_events  # noqa: F401
 from . import tool_get_event_detail  # noqa: F401
 from . import tool_get_morning_brief  # noqa: F401
 from . import tool_list_hot_platforms  # noqa: F401
+from . import tool_search_articles  # noqa: F401
+from . import tool_semantic_search_articles  # noqa: F401
+from . import tool_analyze_event_sentiment  # noqa: F401
+from . import tool_compare_events  # noqa: F401

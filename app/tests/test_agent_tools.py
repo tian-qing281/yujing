@@ -16,10 +16,14 @@ from types import SimpleNamespace
 from unittest import mock
 
 from app.services.agent.tools import (
+    tool_analyze_event_sentiment,
+    tool_compare_events,
     tool_get_event_detail,
     tool_get_morning_brief,
     tool_list_hot_platforms,
+    tool_search_articles,
     tool_search_events,
+    tool_semantic_search_articles,
 )
 
 
@@ -337,6 +341,295 @@ class ListHotPlatformsToolTestCase(unittest.TestCase):
                 top_events_per_platform=99,
             )
         self.assertLessEqual(out["time_range_hours"], 720)
+
+
+# =============================================================================
+# search_articles
+# =============================================================================
+class SearchArticlesToolTestCase(unittest.TestCase):
+    def test_spec_registered(self):
+        self.assertEqual(tool_search_articles.SPEC.name, "search_articles")
+        self.assertIn("q", tool_search_articles.SPEC.input_schema["required"])
+
+    def test_empty_query_returns_hint(self):
+        out = tool_search_articles._handler(q="")
+        self.assertEqual(out["total"], 0)
+        self.assertIn("hint", out)
+
+    def test_meili_hit_path(self):
+        fake_articles = [
+            _fake_article(id=100, title="伊朗外长声明"),
+            _fake_article(id=101, title="伊朗总统讲话", source_id="zhihu_hot"),
+        ]
+        fake_db = mock.MagicMock()
+        fake_db.query.return_value.filter.return_value.all.return_value = fake_articles
+        fake_meili = mock.MagicMock()
+        fake_meili.enabled = True
+        fake_meili.search_articles.return_value = [100, 101]
+
+        with mock.patch(
+            "app.database.SessionLocal",
+            return_value=fake_db,
+        ), mock.patch(
+            "app.services.search_engine.meili",
+            fake_meili,
+        ):
+            out = tool_search_articles._handler(q="伊朗", limit=5)
+
+        self.assertTrue(out["meili_used"])
+        self.assertEqual(out["total"], 2)
+        self.assertEqual(out["articles"][0]["_id"], 100)
+        fake_meili.search_articles.assert_called_once()
+
+    def test_fallback_to_db_like_when_meili_empty(self):
+        fake_articles = [_fake_article(id=200, title="fallback 命中")]
+        fake_db = mock.MagicMock()
+        # 两种分支都要 mock：Meili path 的 filter(in_) 和 fallback 的 filter(like)
+        fake_db.query.return_value.filter.return_value.order_by.return_value.limit.return_value.all.return_value = fake_articles
+        fake_meili = mock.MagicMock()
+        fake_meili.enabled = True
+        fake_meili.search_articles.return_value = []
+
+        with mock.patch(
+            "app.database.SessionLocal",
+            return_value=fake_db,
+        ), mock.patch(
+            "app.services.search_engine.meili",
+            fake_meili,
+        ):
+            out = tool_search_articles._handler(q="fallback")
+
+        self.assertFalse(out["meili_used"])
+        self.assertEqual(out["articles"][0]["_id"], 200)
+
+
+# =============================================================================
+# semantic_search_articles
+# =============================================================================
+class SemanticSearchArticlesToolTestCase(unittest.TestCase):
+    def test_spec_registered(self):
+        self.assertEqual(
+            tool_semantic_search_articles.SPEC.name, "semantic_search_articles"
+        )
+
+    def test_index_not_ready_returns_hint(self):
+        with mock.patch(
+            "app.services.semantic_index.get_semantic_index_status",
+            return_value={"ready": False},
+        ):
+            out = tool_semantic_search_articles._handler(q="伊朗")
+        self.assertFalse(out["semantic_index_ready"])
+        self.assertIn("search_articles", out["hint"])
+
+    def test_no_seed_article_returns_hint(self):
+        fake_db = mock.MagicMock()
+        fake_db.query.return_value.filter.return_value.order_by.return_value.first.return_value = None
+        fake_meili = mock.MagicMock()
+        fake_meili.enabled = True
+        fake_meili.search_articles.return_value = []
+
+        with mock.patch(
+            "app.services.semantic_index.get_semantic_index_status",
+            return_value={"ready": True},
+        ), mock.patch(
+            "app.database.SessionLocal",
+            return_value=fake_db,
+        ), mock.patch(
+            "app.services.search_engine.meili",
+            fake_meili,
+        ):
+            out = tool_semantic_search_articles._handler(q="不存在的词")
+        self.assertEqual(out["neighbors"], [])
+        self.assertIn("hint", out)
+
+    def test_returns_neighbors_when_seed_found(self):
+        fake_neighbors_payload = {
+            "source": {
+                "article_id": 100,
+                "title": "伊朗外长声明",
+                "source_id": "weibo_hot",
+                "pub_date": "2026-04-19T10:00:00+00:00",
+            },
+            "threshold": 0.62,
+            "neighbors": [
+                {
+                    "article_id": 101,
+                    "title": "伊朗总统讲话",
+                    "source_id": "zhihu_hot",
+                    "pub_date": "2026-04-19T11:00:00+00:00",
+                    "cosine": 0.88,
+                    "composite": 0.75,
+                    "above_threshold": True,
+                },
+                {
+                    "article_id": 102,
+                    "title": "中东局势",
+                    "source_id": "toutiao_hot",
+                    "pub_date": "2026-04-19T09:00:00+00:00",
+                    "cosine": 0.71,
+                    "composite": 0.60,
+                    "above_threshold": False,
+                },
+            ],
+        }
+        fake_meili = mock.MagicMock()
+        fake_meili.enabled = True
+        fake_meili.search_articles.return_value = [100]
+
+        with mock.patch(
+            "app.services.semantic_index.get_semantic_index_status",
+            return_value={"ready": True},
+        ), mock.patch(
+            "app.services.semantic_index.get_semantic_neighbors",
+            return_value=fake_neighbors_payload,
+        ), mock.patch(
+            "app.database.SessionLocal",
+            return_value=mock.MagicMock(),
+        ), mock.patch(
+            "app.services.search_engine.meili",
+            fake_meili,
+        ):
+            out = tool_semantic_search_articles._handler(q="伊朗", limit=5)
+
+        self.assertTrue(out["semantic_index_ready"])
+        self.assertEqual(out["seed"]["_id"], 100)
+        self.assertEqual(out["total"], 2)
+        self.assertEqual(out["neighbors"][0]["_id"], 101)
+        self.assertTrue(out["neighbors"][0]["above_threshold"])
+
+
+# =============================================================================
+# analyze_event_sentiment
+# =============================================================================
+class AnalyzeEventSentimentToolTestCase(unittest.TestCase):
+    def test_spec_registered(self):
+        self.assertEqual(
+            tool_analyze_event_sentiment.SPEC.name, "analyze_event_sentiment"
+        )
+
+    def test_handler_raises_on_invalid_event_id(self):
+        with self.assertRaises(ValueError):
+            tool_analyze_event_sentiment._handler(event_id=0)
+
+    def test_event_not_found(self):
+        fake_db = mock.MagicMock()
+        fake_db.query.return_value.filter.return_value.first.return_value = None
+        with mock.patch("app.database.SessionLocal", return_value=fake_db):
+            out = tool_analyze_event_sentiment._handler(event_id=999)
+        self.assertFalse(out["found"])
+
+    def test_computes_distribution_and_timeline(self):
+        fake_event = _fake_event(id=170, title="伊朗事件", article_count=4)
+        t0 = datetime(2026, 4, 19, 0, 0, tzinfo=timezone.utc)
+        # 4 篇文章分布在 bucket 0, 0, 1, 2（bucket_hours=12）
+        fake_articles = [
+            SimpleNamespace(
+                id=1, title="A", source_id="w", url="", ai_sentiment="negative",
+                ai_summary="", pub_date=t0, fetch_time=t0,
+            ),
+            SimpleNamespace(
+                id=2, title="B", source_id="w", url="", ai_sentiment="negative",
+                ai_summary="", pub_date=datetime(2026, 4, 19, 6, 0, tzinfo=timezone.utc),
+                fetch_time=t0,
+            ),
+            SimpleNamespace(
+                id=3, title="C", source_id="w", url="", ai_sentiment="positive",
+                ai_summary="", pub_date=datetime(2026, 4, 19, 18, 0, tzinfo=timezone.utc),
+                fetch_time=t0,
+            ),
+            SimpleNamespace(
+                id=4, title="D", source_id="w", url="", ai_sentiment="neutral",
+                ai_summary="", pub_date=datetime(2026, 4, 20, 6, 0, tzinfo=timezone.utc),
+                fetch_time=t0,
+            ),
+        ]
+        link_rows = [SimpleNamespace(article_id=a.id) for a in fake_articles]
+
+        fake_db = mock.MagicMock()
+        q_event = mock.MagicMock()
+        q_event.filter.return_value.first.return_value = fake_event
+        q_ea = mock.MagicMock()
+        q_ea.filter.return_value.all.return_value = link_rows
+        q_art = mock.MagicMock()
+        q_art.filter.return_value.all.return_value = fake_articles
+
+        def _query_side(model):
+            from app.database import Article, Event, EventArticle
+            return {Event: q_event, EventArticle: q_ea, Article: q_art}[model]
+
+        fake_db.query.side_effect = _query_side
+
+        with mock.patch("app.database.SessionLocal", return_value=fake_db):
+            out = tool_analyze_event_sentiment._handler(
+                event_id=170, bucket_hours=12
+            )
+
+        self.assertTrue(out["found"])
+        self.assertEqual(out["article_count"], 4)
+        self.assertEqual(out["labelled_count"], 4)
+        self.assertEqual(out["overall_distribution"]["negative"], 2)
+        self.assertEqual(out["overall_distribution"]["positive"], 1)
+        self.assertEqual(out["overall_distribution"]["neutral"], 1)
+        # bucket 0 应有 2 条 negative
+        self.assertEqual(out["timeline"][0]["distribution"]["negative"], 2)
+        self.assertEqual(out["timeline"][1]["distribution"]["positive"], 1)
+
+    def test_bucket_hours_clamped_to_allowed(self):
+        """非法 bucket_hours 回退到默认"""
+        fake_db = mock.MagicMock()
+        fake_db.query.return_value.filter.return_value.first.return_value = None
+        with mock.patch("app.database.SessionLocal", return_value=fake_db):
+            out = tool_analyze_event_sentiment._handler(event_id=1, bucket_hours=99)
+        # 只要不抛异常 + 返回 found=False 就 OK（默认 bucket 被应用到不存在的事件不会产生 timeline）
+        self.assertFalse(out["found"])
+
+
+# =============================================================================
+# compare_events
+# =============================================================================
+class CompareEventsToolTestCase(unittest.TestCase):
+    def test_spec_registered(self):
+        self.assertEqual(tool_compare_events.SPEC.name, "compare_events")
+
+    def test_requires_at_least_two(self):
+        with self.assertRaises(ValueError):
+            tool_compare_events._handler(event_ids=[10])
+
+    def test_parses_json_string_input(self):
+        fake_events = [
+            _fake_event(id=1, title="A", article_count=10, heat_score=50.0, keywords='["x","y"]'),
+            _fake_event(id=2, title="B", article_count=30, heat_score=90.0, keywords='["y","z"]'),
+        ]
+        fake_db = mock.MagicMock()
+        fake_db.query.return_value.filter.return_value.all.return_value = fake_events
+
+        with mock.patch("app.database.SessionLocal", return_value=fake_db):
+            out = tool_compare_events._handler(event_ids="[1, 2]")
+
+        self.assertEqual(len(out["events"]), 2)
+        self.assertEqual(out["requested_ids"], [1, 2])
+        self.assertEqual(
+            out["comparison_summary"]["max_article_count"]["_id"], 2
+        )
+        self.assertEqual(
+            out["comparison_summary"]["keyword_intersection"], ["y"]
+        )
+
+    def test_truncates_to_max_events(self):
+        fake_events = [_fake_event(id=i, title=f"E{i}") for i in range(1, 5)]
+        fake_db = mock.MagicMock()
+        fake_db.query.return_value.filter.return_value.all.return_value = fake_events
+        with mock.patch("app.database.SessionLocal", return_value=fake_db):
+            out = tool_compare_events._handler(event_ids=[1, 2, 3, 4, 5, 6])
+        self.assertLessEqual(len(out["requested_ids"]), tool_compare_events.MAX_EVENTS)
+
+    def test_reports_missing_events(self):
+        fake_events = [_fake_event(id=1, title="A")]  # 只找到 1，没找到 2
+        fake_db = mock.MagicMock()
+        fake_db.query.return_value.filter.return_value.all.return_value = fake_events
+        with mock.patch("app.database.SessionLocal", return_value=fake_db):
+            out = tool_compare_events._handler(event_ids=[1, 2])
+        self.assertEqual(out["missing_ids"], [2])
 
 
 if __name__ == "__main__":
