@@ -604,23 +604,105 @@ def cluster_articles_semantic_faiss(
             }
         )
 
-    # 被踢出的文章各自成为独立单篇事件
-    for article_id in expelled:
-        article = articles_by_id.get(article_id)
-        if not article:
-            continue
-        clusters.append(
-            {
-                "articles": [article],
-                "tokens": _extract_tokens(article),
-                "title_norm": _normalize_title(article.title),
-                "representative": article,
-                "relation_scores": {article.id: 1.0},
-                "importance_scores": {article.id: round(0.4 * _score_article(article) / max_hot, 4)},
-            }
-        )
+    # 被踢出的文章按 canonical title 精确合并：
+    # 主 Union-Find 会因链式传染把大量不同子话题的文章合到同一大 cluster（>400 篇），
+    # 簇内复核按 cos(representative, member) 踢掉 canonical 不同的成员，但
+    # 这会误伤"完全同标题且多平台转载"的文章（典型 bug：三条 "伊朗总统感谢中国"
+    # 被拆成 3 个独立 event）。此处只对 canonical 完全一致的 expelled 做合并，
+    # 不重跑任何图聚类，避免二次链式传染反噬复核。
+    rescued_groups = 0
+    rescued_members = 0
     if expelled:
-        logger.info("[semantic_cluster] 簇内复核踢出 %d 篇离群文章", len(expelled))
+        canon_buckets: Dict[str, List[int]] = {}
+        singletons: List[int] = []
+        for article_id in expelled:
+            article = articles_by_id.get(article_id)
+            if not article:
+                continue
+            canonical = _canonicalize_title(article.title)
+            if canonical and len(canonical.replace(" ", "")) >= 6:
+                canon_buckets.setdefault(canonical, []).append(article_id)
+            else:
+                singletons.append(article_id)
+
+        for canonical, aids in canon_buckets.items():
+            sub_articles = [articles_by_id[aid] for aid in aids if aid in articles_by_id]
+            if not sub_articles:
+                continue
+            if len(sub_articles) == 1:
+                singletons.append(sub_articles[0].id)
+                continue
+            # 多成员：沿用主路径"中心性 0.6 + 热度 0.4"重选代表
+            sub_vecs = {a.id: vectors.get(a.id) for a in sub_articles}
+            sub_importance: Dict[int, float] = {}
+            sub_rep = sub_articles[0]
+            sub_best = -1.0
+            for a in sub_articles:
+                va = sub_vecs.get(a.id)
+                if va is None:
+                    continue
+                cos_sum = 0.0
+                cnt = 0
+                for b in sub_articles:
+                    if b.id == a.id:
+                        continue
+                    vb = sub_vecs.get(b.id)
+                    if vb is not None:
+                        cos_sum += float(np.dot(va, vb))
+                        cnt += 1
+                centrality = cos_sum / cnt if cnt > 0 else 0.0
+                hot_norm = _score_article(a) / max_hot
+                combined = 0.6 * centrality + 0.4 * hot_norm
+                sub_importance[a.id] = round(combined, 4)
+                if combined > sub_best:
+                    sub_best = combined
+                    sub_rep = a
+            sub_rep_vec = sub_vecs.get(sub_rep.id)
+            sub_rel: Dict[int, float] = {sub_rep.id: 1.0}
+            for a in sub_articles:
+                if a.id == sub_rep.id:
+                    continue
+                va = sub_vecs.get(a.id)
+                if sub_rep_vec is not None and va is not None:
+                    cos_to_rep = float(np.dot(sub_rep_vec, va))
+                else:
+                    cos_to_rep = 0.0
+                composite = _composite_similarity(sub_rep, a, cos_to_rep)
+                sub_rel[a.id] = round(float(composite), 4)
+            clusters.append(
+                {
+                    "articles": sub_articles,
+                    "tokens": _extract_tokens(sub_rep),
+                    "title_norm": _normalize_title(sub_rep.title),
+                    "representative": sub_rep,
+                    "relation_scores": sub_rel,
+                    "importance_scores": sub_importance,
+                }
+            )
+            rescued_groups += 1
+            rescued_members += len(sub_articles)
+
+        # 剩下的 expelled 保持单篇事件
+        for article_id in singletons:
+            article = articles_by_id.get(article_id)
+            if not article:
+                continue
+            clusters.append(
+                {
+                    "articles": [article],
+                    "tokens": _extract_tokens(article),
+                    "title_norm": _normalize_title(article.title),
+                    "representative": article,
+                    "relation_scores": {article.id: 1.0},
+                    "importance_scores": {article.id: round(0.4 * _score_article(article) / max_hot, 4)},
+                }
+            )
+
+    if expelled:
+        logger.info(
+            "[semantic_cluster] 簇内复核踢出 %d 篇；canonical 救回 %d 组 / %d 篇",
+            len(expelled), rescued_groups, rescued_members,
+        )
 
     meta = {
         "count": len(materials["article_ids"]),
