@@ -1,0 +1,32 @@
+{
+  "$schema_version": 1,
+  "notes": [
+    "基于任务.md 第 36-41 行已书面确认的对齐原则，对 pair/gold 标注间的 11 条冲突做声明式裁决。",
+    "本文件是论文的'标注仲裁'附录的权威来源，可被 apply 脚本幂等执行，也可人工回滚。",
+    "merge_gold_clusters 的语义：把所有 gold_cluster_id == from 的行，整簇合并为 into。",
+    "flip_pair_labels 的语义：把 (article_a, article_b) 对的 label 从 from 改为 to。",
+    "去重后共 8 条簇合并 + 2 条 pair 翻转，对应 10 条 pair=1 拆开中有 2 条是 c2↔c1 同向（合并为 1 条 merge），1 条需要翻 pair；以及 1 条 pair=0 合并需要翻 pair。"
+  ],
+  "merge_gold_clusters": [
+    {"from": "2",  "into": "1",  "witness_articles": [11738, 7417], "reason": "伊朗谈判/表态同大簇（覆盖冲突 #1 和冲突 #8，任务.md:41）"},
+    {"from": "25", "into": "22", "witness_articles": [11202],       "reason": "阚清子孙怡：传闻 + 本人回应"},
+    {"from": "60", "into": "9",  "witness_articles": [10907],       "reason": "微博文化之夜同活动"},
+    {"from": "24", "into": "23", "witness_articles": [11042],       "reason": "7家电商平台同一监管行动"},
+    {"from": "39", "into": "38", "witness_articles": [7731],        "reason": "莫氏鸡煲爆红同事件两侧面"},
+    {"from": "21", "into": "20", "witness_articles": [10565],       "reason": "杭州诊所针头同一事件"},
+    {"from": "81", "into": "82", "witness_articles": [8815],        "reason": "男子献血免诊查同事件 + 回应"},
+    {"from": "84", "into": "83", "witness_articles": [8372],        "reason": "苏超宿迁场同一赛事"}
+  ],
+  "flip_pair_labels": [
+    {
+      "article_a": 9123, "article_b": 9477,
+      "from": "1", "to": "0",
+      "reason": "外交部回应韩国标注'中国台湾' vs 中方回应丹麦把台湾人'国籍'改中国 属不同事件（任务.md:39）"
+    },
+    {
+      "article_a": 7562, "article_b": 7771,
+      "from": "0", "to": "1",
+      "reason": "何超蕸去世 vs 何超蕸终身未婚 属同一事件（任务.md:40）"
+    }
+  ]
+}
