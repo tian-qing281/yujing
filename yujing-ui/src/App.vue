@@ -2000,6 +2000,33 @@ body { font-family: "Fira Sans", "PingFang SC", "Microsoft YaHei", sans-serif; b
   justify-content: flex-end;
 }
 
+.eh-sort-toggle {
+  display: inline-flex;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid oklch(var(--bc) / 0.15);
+}
+.eh-sort-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px 10px;
+  font-size: 0.78rem;
+  background: transparent;
+  color: oklch(var(--bc) / 0.5);
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.eh-sort-btn:hover {
+  background: oklch(var(--bc) / 0.06);
+}
+.eh-sort-btn.active {
+  background: oklch(var(--p) / 0.12);
+  color: oklch(var(--p));
+  font-weight: 600;
+}
+
 .pager-inline {
   display: inline-flex;
   align-items: center;

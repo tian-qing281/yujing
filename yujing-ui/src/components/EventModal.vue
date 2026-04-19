@@ -78,16 +78,21 @@
           <section class="full-width-panel card bg-base-100">
             <div class="panel-head">
               <span>事件脉络</span>
-              <span>
-                {{ timelineArticles.length }} 条 · 按时间演化
-                <span v-if="timelineArticles.length > 0" class="timeline-window-hint">
-                  （仅显示采集窗口内 · 早期数据已按保留策略清理）
+              <span class="panel-head-right">
+                <span class="timeline-count">{{ displayedArticles.length }} 条</span>
+                <span class="eh-sort-toggle">
+                  <button class="eh-sort-btn" :class="{ active: timelineMode === 'time' }" @click="timelineMode = 'time'">
+                    <iconify-icon icon="mdi:clock-outline" />时间演化
+                  </button>
+                  <button class="eh-sort-btn" :class="{ active: timelineMode === 'heat' }" @click="timelineMode = 'heat'">
+                    <iconify-icon icon="mdi:chart-bar" />相关性
+                  </button>
                 </span>
               </span>
             </div>
             <div class="timeline-list timeline-list--rail">
               <article
-                v-for="(article, idx) in timelineArticles"
+                v-for="(article, idx) in displayedArticles"
                 :key="article.id"
                 class="timeline-row"
                 @click="$emit('open-article', article)"
@@ -99,11 +104,11 @@
                 ></div>
                 <div class="timeline-copy">
                   <div
-                    v-if="idx > 0 && formatTimeGap(timelineTimeOf(timelineArticles[0]), timelineTimeOf(article))"
+                    v-if="timelineMode === 'time' && idx > 0 && formatTimeGap(timelineTimeOf(displayedArticles[0]), timelineTimeOf(article))"
                     class="timeline-gap"
                   >
                     <iconify-icon icon="mdi:clock-outline" />
-                    <span>起点 {{ formatTimeGap(timelineTimeOf(timelineArticles[0]), timelineTimeOf(article)) }}</span>
+                    <span>起点 {{ formatTimeGap(timelineTimeOf(displayedArticles[0]), timelineTimeOf(article)) }}</span>
                   </div>
                   <div class="timeline-meta">
                     <span class="timeline-platform">
@@ -147,6 +152,7 @@ const keywordBarRef = ref(null);
 const sentimentRingRef = ref(null);
 const aiSummaryLoading = ref(false);
 const aiSummaryText = ref("");
+const timelineMode = ref("time"); // 'time' | 'heat'
 let aiSummaryAbort = null;
 
 let timeTrendChart = null;
@@ -370,6 +376,15 @@ const timelineArticles = computed(() => {
     return (a.id || 0) - (b.id || 0);  // 稳定排序：时间相同按 id
   });
 });
+
+const heatArticles = computed(() => {
+  const arr = [...(props.item?.related_articles || [])];
+  return arr.sort((a, b) => (b.importance_score || 0) - (a.importance_score || 0));
+});
+
+const displayedArticles = computed(() =>
+  timelineMode.value === "heat" ? heatArticles.value : timelineArticles.value
+);
 
 // 显示用：pub_date > fetch_time 的优先级保持和排序 key 一致，避免时间与顺序脱节
 const timelineTimeOf = (article) => article?.pub_date || article?.fetch_time || "";
@@ -781,6 +796,7 @@ watch(
     abortAiSummary();
     if (!newId) return;
     aiSummaryText.value = "";
+    timelineMode.value = "time";
     await nextTick();
     setTimeout(renderCharts, 80);
     fetchAiSummary();
@@ -953,6 +969,44 @@ onUnmounted(() => {
   color: #64748b;
   font-size: 12px;
   font-weight: 800;
+}
+
+.panel-head-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.timeline-count {
+  white-space: nowrap;
+}
+
+.eh-sort-toggle {
+  display: inline-flex;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid rgba(100, 116, 139, 0.15);
+}
+.eh-sort-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px 10px;
+  font-size: 0.78rem;
+  font-weight: 500;
+  background: transparent;
+  color: rgba(100, 116, 139, 0.5);
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.eh-sort-btn:hover {
+  background: rgba(100, 116, 139, 0.06);
+}
+.eh-sort-btn.active {
+  background: rgba(59, 130, 246, 0.12);
+  color: #3b82f6;
+  font-weight: 600;
 }
 
 .timeline-window-hint {
