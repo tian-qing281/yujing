@@ -5,6 +5,12 @@
         <span class="live-dot"></span>
         <span>AI 助手</span>
       </div>
+      <label class="agent-mode-toggle" :class="{ active: agentMode }">
+        <iconify-icon :icon="agentMode ? 'ri:brain-fill' : 'ri:brain-line'"></iconify-icon>
+        <span>智能体模式</span>
+        <input type="checkbox" v-model="agentMode" :disabled="isActivePending" />
+        <span class="toggle-track"><span class="toggle-knob"></span></span>
+      </label>
       <div class="workspace-meta badge badge-ghost">
         <span>{{ sessions.length }} 个会话</span>
         <span v-if="activeSession">{{ formatSessionMeta(activeSession) }}</span>
@@ -49,7 +55,7 @@
       </aside>
 
       <div ref="chatScroll" class="workspace-body">
-        <div class="quick-actions">
+        <div v-if="!agentMode" class="quick-actions">
           <button class="quick-action-btn" type="button" @click="runPreset('生成今日日报')" :disabled="isActivePending">
             <iconify-icon icon="ri:file-text-line"></iconify-icon>
             今日日报
@@ -66,6 +72,29 @@
             <iconify-icon icon="ri:bar-chart-2-line"></iconify-icon>
             统计报告
           </button>
+        </div>
+
+        <div v-else class="agent-preset-strip">
+          <div class="agent-preset-head">
+            <iconify-icon icon="ri:sparkling-2-fill"></iconify-icon>
+            <span><strong>Tool-Calling Agent</strong> 已启用 · 自主规划 2-4 步工具调用，给出带引用的结构化结论</span>
+          </div>
+          <div class="agent-preset-grid">
+            <button
+              v-for="(p, idx) in AGENT_PRESETS"
+              :key="idx"
+              class="agent-preset-card"
+              type="button"
+              :disabled="isActivePending"
+              @click="runPreset(p.query)"
+            >
+              <div class="agent-preset-icon"><iconify-icon :icon="p.icon"></iconify-icon></div>
+              <div class="agent-preset-body">
+                <strong>{{ p.title }}</strong>
+                <span>{{ p.hint }}</span>
+              </div>
+            </button>
+          </div>
         </div>
 
         <div
@@ -146,7 +175,12 @@
           :data-msg-index="index"
         >
           <article class="message-block card" :class="msg.role === 'assistant' ? 'bg-base-100' : 'bg-primary text-primary-content'">
-            <div class="message-meta badge badge-ghost" v-if="msg.role === 'assistant'">AI 回复</div>
+            <div class="message-meta badge badge-ghost" v-if="msg.role === 'assistant' && !msg.agent_events">AI 回复</div>
+            <div class="message-meta agent-meta-chip" v-else-if="msg.role === 'assistant' && msg.agent_events">
+              <iconify-icon icon="ri:sparkling-2-fill"></iconify-icon>
+              <span>LLM 智能体</span>
+              <span v-if="msg.agent_running" class="agent-meta-elapsed">进行中…</span>
+            </div>
 
             <!-- 对比仪表盘：当消息携带 compare_metrics 时，在正文之上渲染双列对比卡 -->
             <CompareDashboard
@@ -155,7 +189,23 @@
               @open-article="$emit('open-item', $event)"
             />
 
-            <div class="msg-text" v-html="formatMessage(msg.content)"></div>
+            <!-- 智能体模式：展示调用链 + final answer（带 event#N/article#N 引用高亮） -->
+            <template v-if="msg.role === 'assistant' && msg.agent_events">
+              <AgentTrace :events="msg.agent_events" :isRunning="!!msg.agent_running" />
+              <div v-if="msg.agent_final" class="agent-final-card">
+                <div class="agent-final-head">
+                  <iconify-icon icon="ri:sparkling-2-fill"></iconify-icon>
+                  <strong>最终研判</strong>
+                </div>
+                <div class="agent-final-body" v-html="formatAgentFinal(msg.agent_final)"></div>
+              </div>
+              <div v-if="msg.agent_error" class="agent-final-abort">
+                <iconify-icon icon="ri:alert-line"></iconify-icon>
+                <span>{{ msg.agent_error }}</span>
+              </div>
+            </template>
+
+            <div v-else class="msg-text" v-html="formatMessage(msg.content)"></div>
 
             <div v-if="msg.role === 'assistant' && msg.content && !isActivePending" class="msg-actions">
               <button class="msg-action-btn" type="button" @click="exportMessagePdf(msg, index)" title="导出PDF">
@@ -225,7 +275,7 @@
               class="mcp-input-area"
               v-model="inputQuery"
               :disabled="isActivePending"
-              placeholder="例如：我要微博的数据；最近争议最大的是哪个；继续分析刚才那条"
+              :placeholder="agentMode ? '智能体将自主规划工具调用。例：最近两周伊朗相关的舆情消息中，哪些事件最热？情绪是什么倾向？' : '例如：我要微博的数据；最近争议最大的是哪个；继续分析刚才那条'"
               @keydown.enter.exact.prevent="sendMessage()"
             ></textarea>
 
@@ -247,6 +297,7 @@
 <script setup>
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import html2canvas from "html2canvas";
+import AgentTrace from "./AgentTrace.vue";
 import CompareDashboard from "./CompareDashboard.vue";
 
 // 迁移说明：老 key 为 hongsou_mcp_sessions_v1。这里改为 yujing_ 前缀后首次加载
@@ -254,14 +305,39 @@ import CompareDashboard from "./CompareDashboard.vue";
 // 改名。考虑到这是本地开发痕迹，不做运行时迁移以降低代码复杂度。
 const STORAGE_KEY = "yujing_mcp_sessions_v1";
 const API_URL = "http://localhost:8000/api/mcp/ask";
+const AGENT_API_URL = "http://localhost:8000/api/agent/chat";
 
 const props = defineProps({
   sourceRegistry: { type: Array, default: () => [] },
 });
 
-defineEmits(["open-item"]);
+const emit = defineEmits(["open-item", "open-event"]);
 
 const presets = ["生成今日日报", "最近争议最大的是哪个", "微博热搜概况", "统计分析各平台热度"];
+
+// 智能体模式开关。开启后 sendMessage 走 /api/agent/chat（Tool-Calling Agent），
+// 关闭则保持现有 /api/mcp/ask 流程。两条链路互不干扰。
+const agentMode = ref(false);
+const AGENT_PRESETS = [
+  {
+    title: "伊朗局势舆情",
+    hint: "四步调用链：检索 → 详情 → 情绪 × 2",
+    query: "最近两周伊朗相关的舆情消息中，哪些事件最热？情绪是什么倾向？",
+    icon: "ri:global-line",
+  },
+  {
+    title: "平台热度对比",
+    hint: "list_hot_platforms + 跨平台比较",
+    query: "微博、头条、知乎三个平台今天最热的事件分别是什么？讨论量有什么差异？",
+    icon: "ri:bar-chart-2-line",
+  },
+  {
+    title: "今日舆情早报",
+    hint: "get_morning_brief 一步取今日要闻",
+    query: "今天的舆情早报讲了什么？哪些事件值得关注？",
+    icon: "ri:sun-line",
+  },
+];
 
 const sessions = ref([]);
 const activeSessionId = ref("");
@@ -710,11 +786,158 @@ const syncItemState = (payload) => {
 
 defineExpose({ syncItemState });
 
+// --- 智能体模式 · /api/agent/chat SSE 客户端 ---
+// 独立于原 sendMessage 流程；把 SSE 事件累积到 assistant 消息的 agent_events，
+// final 事件的 text 放到 agent_final（不污染 msg.content，保留 Markdown 渲染）。
+const escapeHtmlForAgent = (raw) =>
+  String(raw).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+const formatAgentFinal = (text) => {
+  if (!text) return "";
+  const escaped = escapeHtmlForAgent(text);
+  // 引用识别：中英文双支持
+  //   英文：event#123 / article#456 （LLM system prompt 约定）
+  //   中文：事件#123 / 文章#456 / 事件 # 123 / 事件＃123（DeepSeek 中文回答常见写法）
+  // 归一化成 data-kind=event|article，让 click delegate 统一 emit。
+  const withRefs = escaped.replace(
+    /(event|article|事件|文章)\s*[#＃]\s*(\d+)/gi,
+    (_m, kind, id) => {
+      const lower = kind.toLowerCase();
+      const dataKind = (lower === "event" || kind === "事件") ? "event" : "article";
+      return `<a href="#" class="agent-ref" data-kind="${dataKind}" data-id="${id}">${kind}#${id}</a>`;
+    },
+  );
+  const lines = withRefs.split("\n");
+  const parts = [];
+  let inList = false;
+  for (const raw of lines) {
+    const line = raw.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+    if (/^\s*####?\s+/.test(line)) {
+      if (inList) { parts.push("</ul>"); inList = false; }
+      parts.push(`<h4>${line.replace(/^\s*####?\s+/, "")}</h4>`);
+    } else if (/^\s*###?\s+/.test(line)) {
+      if (inList) { parts.push("</ul>"); inList = false; }
+      parts.push(`<h3>${line.replace(/^\s*###?\s+/, "")}</h3>`);
+    } else if (/^\s*[-•]\s+/.test(line)) {
+      if (!inList) { parts.push("<ul>"); inList = true; }
+      parts.push(`<li>${line.replace(/^\s*[-•]\s+/, "")}</li>`);
+    } else if (!line.trim()) {
+      if (inList) { parts.push("</ul>"); inList = false; }
+      parts.push("");
+    } else {
+      if (inList) { parts.push("</ul>"); inList = false; }
+      parts.push(`<p>${line}</p>`);
+    }
+  }
+  if (inList) parts.push("</ul>");
+  return parts.join("\n");
+};
+
+const sendAgentMessage = async (sessionId, outgoing) => {
+  pushMessage(sessionId, { role: "user", content: outgoing });
+  inputQuery.value = "";
+  setSessionDraft(sessionId, "");
+  pendingSessionIds.value = [...pendingSessionIds.value, sessionId];
+  await scrollToBottom();
+
+  const assistantIndex = pushMessage(sessionId, {
+    role: "assistant",
+    content: "",
+    agent_events: [],
+    agent_running: true,
+    agent_final: "",
+    agent_error: "",
+  });
+
+  try {
+    const res = await fetch(AGENT_API_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "text/event-stream",
+      },
+      body: JSON.stringify({ message: outgoing, stream: true }),
+    });
+    if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    const accumulated = [];
+    // final_delta 累积缓冲：后端把最终答案分片推送，前端边收边追加渲染（打字机效果）。
+    let finalBuffer = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const chunks = buffer.split("\n\n");
+      buffer = chunks.pop() || "";
+      for (const chunk of chunks) {
+        const line = chunk.split("\n").find((l) => l.startsWith("data: "));
+        if (!line) continue;
+        try {
+          const ev = JSON.parse(line.slice(6));
+          accumulated.push(ev);
+          const patch = { agent_events: [...accumulated] };
+          if (ev.type === "final_delta") {
+            finalBuffer += ev.text || "";
+            patch.agent_final = finalBuffer;
+          }
+          if (ev.type === "final") {
+            // final 事件兜底：把 finalBuffer 校准为完整文本（防 delta 丢包）
+            finalBuffer = ev.text || finalBuffer;
+            patch.agent_final = finalBuffer;
+          }
+          if (ev.type === "error") {
+            // loop 内部终止信号（max_steps / too_many_errors）已由 AgentTrace 的
+            // trace-terminated 卡片显示，气泡级 agent_error 只保留"硬错误"（LLM 调用失败等无 terminated_reason）。
+            if (!ev.terminated_reason) {
+              patch.agent_error = ev.message || "智能体出错";
+            }
+          }
+          if (ev.type === "done") patch.agent_running = false;
+          patchMessage(sessionId, assistantIndex, patch);
+        } catch (err) {
+          console.error("[agent] SSE parse error", err, chunk);
+        }
+      }
+      await scrollToBottom(false);
+    }
+  } catch (error) {
+    patchMessage(sessionId, assistantIndex, {
+      agent_running: false,
+      agent_error: `请求失败：${error.message || error}`,
+    });
+  } finally {
+    patchMessage(sessionId, assistantIndex, { agent_running: false });
+    pendingSessionIds.value = pendingSessionIds.value.filter((id) => id !== sessionId);
+    await scrollToBottom();
+  }
+};
+
+// 委托点击事件：捕获 v-html 内部 `.agent-ref` 链接，emit 给父组件打开对应 modal
+const handleAgentRefClick = (evt) => {
+  const el = evt.target;
+  if (!el || el.tagName !== "A" || !el.classList.contains("agent-ref")) return;
+  evt.preventDefault();
+  const kind = el.dataset.kind;
+  const id = parseInt(el.dataset.id || "0", 10);
+  if (!id) return;
+  if (kind === "event") emit("open-event", { id });
+  else if (kind === "article") emit("open-item", { id });
+};
+
 const sendMessage = async (presetText = null) => {
   ensureSession();
   const sessionId = activeSessionId.value;
   const outgoing = (presetText ?? inputQuery.value).trim();
   if (!outgoing || pendingSessionIds.value.includes(sessionId)) return;
+
+  // 分支：智能体模式走独立链路
+  if (agentMode.value) {
+    return sendAgentMessage(sessionId, outgoing);
+  }
 
   const session = getSessionById(sessionId);
   const contextHistory = (session?.messages || []).map((msg) => ({
@@ -877,11 +1100,13 @@ onMounted(async () => {
   // 这正是用户"显示在上面但不自动发送"的要求。
   startBriefPolling();
   startAlertPolling();
+  document.addEventListener("click", handleAgentRefClick);
 });
 
 onUnmounted(() => {
   if (briefPollTimer) { clearInterval(briefPollTimer); briefPollTimer = null; }
   if (alertPollTimer) { clearInterval(alertPollTimer); alertPollTimer = null; }
+  document.removeEventListener("click", handleAgentRefClick);
 });
 </script>
 
@@ -1188,4 +1413,191 @@ onUnmounted(() => {
 .alert-dismiss:hover { color: #ef4444; }
 
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* =========================================================================
+ * 智能体模式 · 顶部 toggle + 预设条 + 消息气泡中的 AgentTrace/final-card
+ * ========================================================================= */
+.agent-mode-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.3rem 0.75rem 0.3rem 0.6rem;
+  border-radius: 999px;
+  background: rgba(99, 102, 241, 0.08);
+  border: 1px solid rgba(99, 102, 241, 0.25);
+  color: #4338ca;
+  font-size: 0.82rem;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.15s, border-color 0.15s;
+  margin-left: auto;
+  margin-right: 0.75rem;
+}
+.agent-mode-toggle:hover { background: rgba(99, 102, 241, 0.14); }
+.agent-mode-toggle.active {
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.18), rgba(168, 85, 247, 0.14));
+  border-color: rgba(99, 102, 241, 0.55);
+  color: #4c1d95;
+}
+.agent-mode-toggle input[type="checkbox"] { display: none; }
+.agent-mode-toggle .toggle-track {
+  position: relative;
+  width: 30px;
+  height: 16px;
+  background: rgba(99, 102, 241, 0.25);
+  border-radius: 999px;
+  transition: background 0.15s;
+}
+.agent-mode-toggle.active .toggle-track { background: #6366f1; }
+.agent-mode-toggle .toggle-knob {
+  position: absolute;
+  left: 2px;
+  top: 2px;
+  width: 12px;
+  height: 12px;
+  background: #fff;
+  border-radius: 50%;
+  transition: transform 0.2s;
+}
+.agent-mode-toggle.active .toggle-knob { transform: translateX(14px); }
+
+.agent-preset-strip {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  padding: 0.85rem 1rem;
+  background: linear-gradient(135deg, #ede9fe, #e0e7ff);
+  border: 1px solid rgba(99, 102, 241, 0.28);
+  border-radius: 12px;
+  margin-bottom: 0.5rem;
+  /* sticky 顶部：滚动聊天历史时，智能体预设条始终可见。
+     用完全不透明背景，避免滚动时与下方 brief-banner 透叠产生视觉"遮挡"错觉。 */
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  box-shadow: 0 4px 12px -4px rgba(99, 102, 241, 0.28), 0 1px 0 rgba(99, 102, 241, 0.12);
+}
+.agent-preset-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #4c1d95;
+  font-size: 0.85rem;
+}
+.agent-preset-head iconify-icon { color: #7c3aed; font-size: 1.05rem; }
+.agent-preset-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.65rem;
+}
+.agent-preset-card {
+  display: grid;
+  grid-template-columns: 36px 1fr;
+  gap: 0.6rem;
+  padding: 0.65rem 0.8rem;
+  background: #fff;
+  border: 1px solid rgba(99, 102, 241, 0.25);
+  border-radius: 10px;
+  color: #1e293b;
+  text-align: left;
+  cursor: pointer;
+  transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+.agent-preset-card:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: #6366f1;
+  box-shadow: 0 4px 14px -6px rgba(99, 102, 241, 0.4);
+}
+.agent-preset-card:disabled { opacity: 0.55; cursor: not-allowed; }
+.agent-preset-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  background: rgba(99, 102, 241, 0.1);
+  color: #6366f1;
+  border-radius: 8px;
+  font-size: 1.15rem;
+}
+.agent-preset-body { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; }
+.agent-preset-body strong { font-size: 0.9rem; color: #1e293b; }
+.agent-preset-body span { font-size: 0.72rem; color: #64748b; }
+
+.agent-meta-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.12rem 0.6rem;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.14), rgba(168, 85, 247, 0.1));
+  border: 1px solid rgba(99, 102, 241, 0.3);
+  border-radius: 999px;
+  color: #4c1d95;
+  font-size: 0.72rem;
+  align-self: flex-start;
+}
+.agent-meta-elapsed {
+  color: #6366f1;
+  font-size: 0.7rem;
+  padding-left: 0.3rem;
+  border-left: 1px solid rgba(99, 102, 241, 0.3);
+  margin-left: 0.2rem;
+}
+
+.agent-final-card {
+  margin-top: 0.65rem;
+  padding: 0.85rem 1rem;
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.06), rgba(59, 130, 246, 0.05));
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+.agent-final-head {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: #15803d;
+  font-size: 0.82rem;
+}
+.agent-final-body {
+  color: #1e293b;
+  font-size: 0.92rem;
+  line-height: 1.65;
+}
+.agent-final-body :deep(h3) { margin: 0.55rem 0 0.25rem; font-size: 1.02rem; }
+.agent-final-body :deep(h4) { margin: 0.45rem 0 0.2rem; font-size: 0.94rem; }
+.agent-final-body :deep(p)  { margin: 0.2rem 0; }
+.agent-final-body :deep(ul) { margin: 0.3rem 0 0.3rem 1.2rem; padding: 0; }
+.agent-final-body :deep(li) { list-style: disc; margin: 0.12rem 0; }
+.agent-final-body :deep(strong) { color: #111827; }
+.agent-final-body :deep(.agent-ref) {
+  color: #2563eb;
+  text-decoration: none;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 0.86em;
+  padding: 0.05rem 0.35rem;
+  background: rgba(37, 99, 235, 0.1);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.agent-final-body :deep(.agent-ref:hover) {
+  background: rgba(37, 99, 235, 0.22);
+  text-decoration: underline;
+}
+
+.agent-final-abort {
+  margin-top: 0.6rem;
+  padding: 0.55rem 0.8rem;
+  background: rgba(220, 38, 38, 0.08);
+  border: 1px solid rgba(220, 38, 38, 0.3);
+  border-radius: 8px;
+  color: #b91c1c;
+  font-size: 0.85rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
 </style>

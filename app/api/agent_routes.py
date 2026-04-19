@@ -56,7 +56,7 @@ class ChatRequest(BaseModel):
     message: str = Field(..., min_length=1, description="用户问题")
     stream: bool = Field(True, description="是否走 SSE 流式返回")
     conversation_id: Optional[str] = Field(None, description="预留多轮用，MVP 不使用")
-    max_steps: Optional[int] = Field(None, ge=1, le=10, description="覆盖默认 step 上限")
+    max_steps: Optional[int] = Field(None, ge=1, le=12, description="覆盖默认 step 上限（默认 8）")
 
 
 def _sse_format(event: Dict[str, Any]) -> str:

@@ -31,7 +31,9 @@ DEFAULT_SYSTEM_PROMPT = """你是一名"舆镜 YuJing"舆情分析助手。
 可用工具由运行时注入，调用规则：
 - 优先调用语义/关键词检索定位相关事件，再调用详情工具拿证据。
 - 每次调用前自问"现有信息是否足够回答"，够了就直接给 final answer，不要为调用而调用。
-- 单次对话总步数不超过 6 步，尽量在 3-4 步内收敛。
+- **聚焦策略**：锁定 1-2 个最相关事件深入分析即可，不要对多个事件重复调用同一个工具（例如连续调 get_event_detail/analyze_event_sentiment 三四个事件）；若用户问的是概览性问题，从 search 结果里直接总结而非逐个详查。
+- 单次对话总步数不超过 8 步，绝大多数问题应在 3-5 步内收敛。
+- 一旦已有足够信息（通常是 1 次检索 + 1-2 次细节 + 可选 1 次情绪/对比），立即给出 final answer。
 
 回答要求：
 - 中文输出，先给事实再给研判。
@@ -39,7 +41,7 @@ DEFAULT_SYSTEM_PROMPT = """你是一名"舆镜 YuJing"舆情分析助手。
 - 如果工具返回空，诚实告知"当前数据未覆盖"，不要编造。
 """
 
-MAX_STEPS = 6
+MAX_STEPS = 8
 MAX_CONSECUTIVE_ERRORS = 2
 
 
@@ -192,6 +194,18 @@ class AgentLoop:
             trajectory.final_answer = final_text
             trajectory.finished = True
             trajectory.terminated_reason = "final"
+            # 打字机式推送：把 final 分片逐段 emit 为 final_delta，前端累积渲染。
+            # 技术权衡：DeepSeek 非流式调用，content 已完整返回；这里人为切片是为了
+            # 获得与 ChatGPT 类似的 UX（视觉流式）。总耗时额外增加 ~1-2s，但用户
+            # 感知从"等了 5s 一次性闪出"变成"边生成边打字"，体验显著改善。
+            # 只在有 on_event（流式请求）时切片，非流式/单测路径跳过。
+            if on_event is not None and final_text:
+                chunk_size = 12
+                delta_sleep = 0.05
+                for i in range(0, len(final_text), chunk_size):
+                    piece = final_text[i:i + chunk_size]
+                    _emit({"type": "final_delta", "text": piece})
+                    time.sleep(delta_sleep)
             _emit({"type": "final", "text": final_text})
             break
         else:

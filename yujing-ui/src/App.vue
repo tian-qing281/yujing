@@ -1302,6 +1302,7 @@ onMounted(() => {
           ref="aiConsultantRef"
           :sourceRegistry="sourceRegistry"
           @open-item="openDetail"
+          @open-event="(p) => openEventDetail(p)"
         />
         <div v-else-if="activePlatform === 'event_hub'" key="event_workspace" class="article-workspace">
           <AppHeader
