@@ -196,13 +196,26 @@ const steps = computed(() => {
   }));
 });
 
+// final step 的 step index（如果存在）。该 step 的 thinking 不显示在思路里，
+// 因为它的内容就是"最终研判"，已在 agent_final 区域渲染。
+const finalStepIndex = computed(() => {
+  for (const ev of props.events) {
+    if (ev.type === "final" && ev.step != null) return ev.step;
+  }
+  return -1;
+});
+
 const thinkingActive = computed(() => {
   if (!props.isRunning) return false;
   const last = props.events[props.events.length - 1];
-  return last && (last.type === "llm_thinking" || last.type === "llm_thinking_delta");
+  if (!last || (last.type !== "llm_thinking" && last.type !== "llm_thinking_delta")) return false;
+  // 如果当前 thinking 的 step 就是 final step，不显示 spinner
+  const step = last.step;
+  if (step != null && step === finalStepIndex.value) return false;
+  return true;
 });
 
-// 流式 LLM 思考文字
+// 流式 LLM 思考文字（排除 final step）
 const thinkingText = computed(() => {
   let thinkingStep = -1;
   for (let i = props.events.length - 1; i >= 0; i--) {
@@ -212,6 +225,8 @@ const thinkingText = computed(() => {
     if (t !== "llm_thinking_delta") break;
   }
   if (thinkingStep < 0) return "";
+  // final step 的 thinking 不在这里显示
+  if (thinkingStep === finalStepIndex.value) return "";
   let text = "";
   for (const ev of props.events) {
     if (ev.type === "llm_thinking_delta" && ev.step === thinkingStep) {

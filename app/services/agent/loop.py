@@ -85,6 +85,7 @@ class AgentLoop:
         self,
         query: str,
         on_event: Optional[Callable[[Dict[str, Any]], None]] = None,
+        history: Optional[List[Dict[str, Any]]] = None,
     ) -> AgentTrajectory:
         """跑一个 query 到结束，返回完整 trajectory。
 
@@ -112,8 +113,12 @@ class AgentLoop:
         t0 = time.time()
         messages: List[Dict[str, Any]] = [
             {"role": "system", "content": self.system_prompt},
-            {"role": "user", "content": query},
         ]
+        # 插入多轮历史（仅 user/assistant，不含工具调用细节）
+        for h in (history or []):
+            if h.get("role") in ("user", "assistant"):
+                messages.append({"role": h["role"], "content": h.get("content", "")})
+        messages.append({"role": "user", "content": query})
         consecutive_errors = 0
 
         for step_idx in range(self.max_steps):
@@ -233,19 +238,9 @@ class AgentLoop:
             trajectory.final_answer = final_text
             trajectory.finished = True
             trajectory.terminated_reason = "final"
-            # 打字机式推送：把 final 分片逐段 emit 为 final_delta，前端累积渲染。
-            # 技术权衡：DeepSeek 非流式调用，content 已完整返回；这里人为切片是为了
-            # 获得与 ChatGPT 类似的 UX（视觉流式）。总耗时额外增加 ~1-2s，但用户
-            # 感知从"等了 5s 一次性闪出"变成"边生成边打字"，体验显著改善。
-            # 只在有 on_event（流式请求）时切片，非流式/单测路径跳过。
-            if on_event is not None and final_text:
-                chunk_size = 12
-                delta_sleep = 0.05
-                for i in range(0, len(final_text), chunk_size):
-                    piece = final_text[i:i + chunk_size]
-                    _emit({"type": "final_delta", "text": piece})
-                    time.sleep(delta_sleep)
-            _emit({"type": "final", "text": final_text})
+            # streaming 时 delta 走了 llm_thinking_delta（因为 streaming 期间无法区分 final/tool）。
+            # 现在确认是 final，发出标识让前端知道该 step 的 thinking 就是最终研判。
+            _emit({"type": "final", "text": final_text, "step": step_idx})
             break
         else:
             trajectory.terminated_reason = "max_steps"

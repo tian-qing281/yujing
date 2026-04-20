@@ -55,6 +55,7 @@ def _ensure_tools_registered() -> None:
 class ChatRequest(BaseModel):
     message: str = Field(..., min_length=1, description="用户问题")
     stream: bool = Field(True, description="是否走 SSE 流式返回")
+    history: Optional[list] = Field(None, description="多轮历史 [{role,content}, ...]，只传 user/assistant")
     conversation_id: Optional[str] = Field(None, description="预留多轮用，MVP 不使用")
     max_steps: Optional[int] = Field(None, ge=1, le=12, description="覆盖默认 step 上限（默认 8）")
 
@@ -108,7 +109,7 @@ async def _stream_chat(req: ChatRequest) -> StreamingResponse:
         agent_loop = _build_loop(max_steps=req.max_steps)
         try:
             await asyncio.wait_for(
-                asyncio.to_thread(agent_loop.run, req.message, _on_event),
+                asyncio.to_thread(agent_loop.run, req.message, _on_event, req.history),
                 timeout=90,
             )
         except asyncio.TimeoutError:
@@ -166,7 +167,7 @@ async def _blocking_chat(req: ChatRequest) -> JSONResponse:
     agent_loop = _build_loop(max_steps=req.max_steps)
 
     try:
-        trajectory = await asyncio.to_thread(agent_loop.run, req.message)
+        trajectory = await asyncio.to_thread(agent_loop.run, req.message, None, req.history)
     except Exception as exc:  # noqa: BLE001
         logger.exception("[agent.api] blocking run 失败")
         raise HTTPException(status_code=500, detail=f"agent 内部错误: {exc}")

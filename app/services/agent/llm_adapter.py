@@ -120,7 +120,9 @@ def call_llm(
     lc_messages = _messages_to_langchain(messages)
 
     if on_delta is not None:
-        # 流式模式：逐 chunk 推送文字给调用方
+        # 流式模式：逐 chunk 推送文字。
+        # 不在 streaming 期间区分 final/tool——DeepSeek 常在 tool_call 前先输出
+        # 大段 content，无法可靠判断。模式区分交给 loop.py 在完整响应后处理。
         full_msg = None
         for chunk in bound.stream(lc_messages):
             if full_msg is None:
@@ -136,6 +138,7 @@ def call_llm(
         ai_msg = full_msg
     else:
         ai_msg = bound.invoke(lc_messages)
+
 
     if ai_msg is None:
         return LLMResponse(content="", tool_calls=[], raw=None)

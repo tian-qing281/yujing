@@ -1,16 +1,19 @@
 <template>
   <section class="ai-shell">
     <header class="workspace-header">
-      <div class="workspace-kicker badge badge-primary badge-outline">
-        <span class="live-dot"></span>
-        <span>AI 助手</span>
+      <div class="header-left">
+        <div class="workspace-kicker badge badge-primary badge-outline">
+          <span class="live-dot"></span>
+          <span>AI 助手</span>
+        </div>
+        <div class="agent-badge">
+          <iconify-icon icon="ri:brain-fill"></iconify-icon>
+          <span>Tool-Calling Agent</span>
+        </div>
       </div>
-      <div class="agent-badge">
-        <iconify-icon icon="ri:brain-fill"></iconify-icon>
-        <span>Tool-Calling Agent</span>
-      </div>
-      <div class="workspace-meta badge badge-ghost">
-        <span>{{ sessions.length }} 个会话</span>
+      <div class="workspace-meta">
+        <span>{{ sessions.length }}个会话</span>
+        <span v-if="activeSession" class="meta-sep">·</span>
         <span v-if="activeSession">{{ formatSessionMeta(activeSession) }}</span>
       </div>
     </header>
@@ -822,6 +825,24 @@ const sendAgentMessage = async (sessionId, outgoing) => {
   pendingSessionIds.value = [...pendingSessionIds.value, sessionId];
   await scrollToBottom();
 
+  // 构建多轮历史（只传 user/assistant 的文字，不传 tool 调用细节）
+  const session = getSessionById(sessionId);
+  const chatHistory = [];
+  if (session) {
+    // 排除刚 push 的 user 消息和即将 push 的 assistant 占位
+    for (const m of session.messages) {
+      if (m.role === "user" && m.content) {
+        chatHistory.push({ role: "user", content: m.content });
+      } else if (m.role === "assistant" && (m.agent_final || m.content)) {
+        chatHistory.push({ role: "assistant", content: m.agent_final || m.content });
+      }
+    }
+    // 去掉最后一条（就是本次 outgoing，已在 message 字段发送）
+    if (chatHistory.length && chatHistory[chatHistory.length - 1].role === "user") {
+      chatHistory.pop();
+    }
+  }
+
   const assistantIndex = pushMessage(sessionId, {
     role: "assistant",
     content: "",
@@ -830,18 +851,24 @@ const sendAgentMessage = async (sessionId, outgoing) => {
     agent_final: "",
     agent_error: "",
   });
+  await scrollToBottom();
 
   const accumulated = [];
   let finalBuffer = "";
 
   try {
+    const reqBody = { message: outgoing, stream: true };
+    if (chatHistory.length > 0) {
+      // 限制历史长度，避免上下文过大（保留最近 6 轮 = 12 条）
+      reqBody.history = chatHistory.slice(-12);
+    }
     const res = await fetch(AGENT_API_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Accept: "text/event-stream",
       },
-      body: JSON.stringify({ message: outgoing, stream: true }),
+      body: JSON.stringify(reqBody),
     });
     if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
 
@@ -1027,12 +1054,15 @@ onUnmounted(() => {
   font-family: 'Inter', system-ui, sans-serif;
 }
 .workspace-header {
-  padding: 14px 40px; background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(20px);
+  padding: 10px 28px; background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(20px);
   border-bottom: 1px solid rgba(0, 0, 0, 0.05);
   display: flex; justify-content: space-between; align-items: center;
   z-index: 10;
 }
-.workspace-kicker { font-weight: 800; letter-spacing: 0.5px; border-radius: 6px; }
+.header-left { display: flex; align-items: center; gap: 0.6rem; }
+.workspace-kicker { font-weight: 700; letter-spacing: 0.3px; border-radius: 6px; font-size: 0.82rem; }
+.workspace-meta { display: flex; align-items: center; gap: 0.25rem; font-size: 0.78rem; color: #64748b; }
+.meta-sep { color: #94a3b8; }
 .workspace-layout { min-height: 0; display: grid; grid-template-columns: 280px 1fr; gap: 0; }
 
 .session-rail {
@@ -1342,16 +1372,14 @@ onUnmounted(() => {
 .agent-badge {
   display: inline-flex;
   align-items: center;
-  gap: 0.4rem;
-  padding: 0.3rem 0.75rem 0.3rem 0.6rem;
+  gap: 0.3rem;
+  padding: 0.2rem 0.6rem 0.2rem 0.5rem;
   border-radius: 999px;
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.18), rgba(168, 85, 247, 0.14));
-  border: 1px solid rgba(99, 102, 241, 0.55);
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.12), rgba(168, 85, 247, 0.08));
+  border: 1px solid rgba(99, 102, 241, 0.4);
   color: #4c1d95;
-  font-size: 0.82rem;
+  font-size: 0.72rem;
   font-weight: 600;
-  margin-left: auto;
-  margin-right: 0.75rem;
 }
 
 .agent-preset-strip {

@@ -1007,7 +1007,7 @@ def _refresh_events_cache():
             if _shutting_down.is_set():
                 return
             rebuild_topics(db)
-            events = db.query(Event).order_by(Event.latest_article_time.desc(), Event.article_count.desc()).all()
+            events = db.query(Event).order_by(Event.article_count.desc(), Event.latest_article_time.desc()).all()
             topics = db.query(Topic).order_by(Topic.latest_event_time.desc(), Topic.event_count.desc()).all()
             batch_sids = batch_collect_event_source_ids(db, [e.id for e in events])
             events_payload = [marshal_event(e, db=db, _source_ids_override=batch_sids.get(e.id, [])) for e in events]
@@ -1257,7 +1257,7 @@ def _ensure_event_hub_data(force_refresh: bool = False, refresh_topics: bool = F
                 if refresh_topics and db.query(Topic).count() == 0:
                     ensure_topics(db)
 
-            events = db.query(Event).order_by(Event.latest_article_time.desc(), Event.article_count.desc()).all()
+            events = db.query(Event).order_by(Event.article_count.desc(), Event.latest_article_time.desc()).all()
             topics = db.query(Topic).order_by(Topic.latest_event_time.desc(), Topic.event_count.desc()).all()
             batch_sids = batch_collect_event_source_ids(db, [e.id for e in events])
             events_payload = [marshal_event(e, db=db, _source_ids_override=batch_sids.get(e.id, [])) for e in events]
