@@ -901,16 +901,29 @@ async def run_startup_refresh():
         async with swr_state_lock:
             swr_cache["fetching"] = False
             swr_cache["last_fetch"] = time.time()
-        return False
+    else:
+        async with swr_state_lock:
+            if swr_cache["fetching"]:
+                return False
+            swr_cache["fetching"] = True
+            swr_cache["last_fetch"] = time.time()
 
-    async with swr_state_lock:
-        if swr_cache["fetching"]:
-            return False
-        swr_cache["fetching"] = True
-        swr_cache["last_fetch"] = time.time()
+        await _run_refresh_job()
 
+    # 启动后自动构建语义索引（Agent tool_semantic_search_articles 依赖此状态）
+    try:
+        def _build():
+            db = SessionLocal()
+            try:
+                return build_semantic_index(db)
+            finally:
+                db.close()
+        result = await asyncio.to_thread(_build)
+        count = result.get("count", 0)
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] [启动] 语义索引已构建 · {count} 篇文章")
+    except Exception as exc:
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] [启动] 语义索引构建跳过: {exc}")
 
-    await _run_refresh_job()
     return True
 
 
@@ -1892,23 +1905,31 @@ _EMOTION_LABEL_MAP = {
 
 
 def _run_emotion_backfill(event_id: int, article_ids: list[int]):
-    """在专属单线程 executor 中运行；独立 Session，写完即 commit。"""
+    """在专属单线程 executor 中运行；独立 Session，写完即 commit。
+    使用 analyze_batch 批量推理，减少 BERT forward pass 次数。"""
     session = SessionLocal()
     try:
         articles = session.query(Article).filter(Article.id.in_(article_ids)).all()
+        # 过滤出需要补全的文章
+        pending = [(art, art.title) for art in articles if not art.ai_sentiment and art.title]
+        if not pending:
+            return
+
+        texts = [title for _, title in pending]
+        try:
+            batch_results = emotion_engine.analyze_batch(texts, batch_size=8)
+        except Exception as exc:
+            print(f"[emotion-backfill] batch 推理失败: {exc}")
+            return
+
         dirty = False
-        for art in articles:
-            if art.ai_sentiment or not art.title:
-                continue
-            try:
-                results = emotion_engine.analyze(art.title)
-                if results:
-                    art.ai_sentiment = _EMOTION_LABEL_MAP.get(
-                        results[0]["label"], results[0]["label"]
-                    )
-                    dirty = True
-            except Exception as exc:
-                print(f"[emotion-backfill] article={art.id} 失败: {exc}")
+        for (art, _), result in zip(pending, batch_results):
+            if result:
+                art.ai_sentiment = _EMOTION_LABEL_MAP.get(
+                    result[0]["label"], result[0]["label"]
+                )
+                dirty = True
+
         if dirty:
             try:
                 session.commit()

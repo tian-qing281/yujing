@@ -107,7 +107,20 @@ async def _stream_chat(req: ChatRequest) -> StreamingResponse:
         """在 thread 里跑 AgentLoop.run()，完成后塞一个 sentinel。"""
         agent_loop = _build_loop(max_steps=req.max_steps)
         try:
-            await asyncio.to_thread(agent_loop.run, req.message, _on_event)
+            await asyncio.wait_for(
+                asyncio.to_thread(agent_loop.run, req.message, _on_event),
+                timeout=90,
+            )
+        except asyncio.TimeoutError:
+            logger.warning("[agent.api] Agent 总超时 90s，强制结束")
+            loop_asyncio.call_soon_threadsafe(
+                queue.put_nowait,
+                {"type": "error", "message": "分析超时，请缩小问题范围后重试", "terminated_reason": "timeout"},
+            )
+            loop_asyncio.call_soon_threadsafe(
+                queue.put_nowait,
+                {"type": "done", "terminated_reason": "timeout", "total_latency_ms": 90000},
+            )
         except Exception as exc:  # noqa: BLE001
             logger.exception("[agent.api] run 抛出未捕获异常")
             loop_asyncio.call_soon_threadsafe(
@@ -121,7 +134,11 @@ async def _stream_chat(req: ChatRequest) -> StreamingResponse:
         task = asyncio.create_task(_runner())
         try:
             while True:
-                event = await queue.get()
+                try:
+                    event = await asyncio.wait_for(queue.get(), timeout=15)
+                except asyncio.TimeoutError:
+                    yield ": keepalive\n\n"
+                    continue
                 if event is None:  # sentinel
                     break
                 yield _sse_format(event)

@@ -30,7 +30,13 @@
 
               <div class="core-summary-card">
                 <div class="core-summary-kicker">AI 总结</div>
-                <div class="core-summary-body">{{ coreEventSummary }}</div>
+                <div class="core-summary-body">
+                  <span v-if="aiSummaryLoading" class="core-summary-loading">
+                    <span class="loading loading-spinner loading-xs"></span>
+                    AI 正在分析中…
+                  </span>
+                  <template v-else>{{ coreEventSummary }}</template>
+                </div>
               </div>
             </div>
           </section>
@@ -230,7 +236,7 @@ const coreEventSummary = computed(() => {
     const sentences2 = cleaned.split(/(?<=[。！？])/).filter(Boolean);
     return sentences2.slice(0, 2).join("").trim() || cleaned;
   }
-  if (aiSummaryLoading.value) return "AI 正在分析中…";
+  if (aiSummaryLoading.value) return "";
   const preview = representativeArticlePreview.value;
   if (preview) return preview;
   return "暂无AI总结";
@@ -1084,6 +1090,13 @@ onUnmounted(() => {
   font-size: 15px;
   line-height: 1.85;
   white-space: pre-wrap;
+}
+.core-summary-loading {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: #3b82f6;
+  font-style: italic;
 }
 
 .timeline-list {

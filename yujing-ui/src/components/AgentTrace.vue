@@ -11,7 +11,7 @@
         :key="`${step.stepIndex}-${step.toolName}-${idx}`"
         :class="['trace-step', `trace-step--${step.status}`]"
       >
-        <div class="step-marker">
+        <div :class="['step-marker', { 'step-marker--spinning': step.status === 'running' }]">
           <iconify-icon :icon="stepIcon(step)" />
         </div>
         <div class="step-body">
@@ -22,11 +22,24 @@
               <span class="status-dot"></span>执行中…
             </span>
             <span v-else-if="step.status === 'done'" class="step-status step-status--done">
-              <iconify-icon icon="ri:check-line" /> 完成 · {{ step.latencyMs }}ms
+              <iconify-icon icon="ri:check-line" />
+              <template v-if="step.llmLatencyMs">思考 {{ formatLatency(step.llmLatencyMs) }} · </template>
+              执行 {{ step.latencyMs }}ms
             </span>
             <span v-else-if="step.status === 'error'" class="step-status step-status--error">
-              <iconify-icon icon="ri:error-warning-line" /> 失败 · {{ step.latencyMs }}ms
+              <iconify-icon icon="ri:error-warning-line" />
+              <template v-if="step.llmLatencyMs">思考 {{ formatLatency(step.llmLatencyMs) }} · </template>
+              失败 · {{ step.latencyMs }}ms
             </span>
+          </div>
+
+          <!-- LLM 推理内容 -->
+          <div v-if="step.llmContent" class="step-llm-reasoning">
+            <button class="output-toggle" type="button" @click="toggleLlm(idx)">
+              <iconify-icon :icon="llmExpandedMap.get(idx) ? 'ri:arrow-down-s-line' : 'ri:arrow-right-s-line'" />
+              <span>{{ llmExpandedMap.get(idx) ? '收起' : '展开' }} LLM 推理</span>
+            </button>
+            <div v-if="llmExpandedMap.get(idx)" class="llm-content">{{ step.llmContent }}</div>
           </div>
 
           <div class="step-args" v-if="step.args && Object.keys(step.args).length">
@@ -55,14 +68,18 @@
       </li>
 
       <li v-if="thinkingActive" class="trace-step trace-step--thinking">
-        <div class="step-marker">
-          <iconify-icon icon="ri:loader-4-line" class="spin" />
+        <div class="step-marker step-marker--spinning">
+          <iconify-icon icon="ri:loader-4-line" />
         </div>
         <div class="step-body">
           <div class="step-head">
-            <span class="step-label">思考中</span>
-            <span class="step-status">LLM 正在分析下一步操作…</span>
+            <span class="step-label">第 {{ steps.length + 1 }} 轮决策</span>
+            <span class="step-status step-status--thinking">
+              LLM 正在分析下一步操作…
+              <span class="thinking-elapsed">已等待 {{ thinkingElapsed }}s</span>
+            </span>
           </div>
+          <div v-if="thinkingText" class="thinking-stream">{{ thinkingText }}</div>
         </div>
       </li>
     </ol>
@@ -90,7 +107,7 @@
  *   其它事件类型（llm_thinking/final/error/done）用于控制整体状态显示。
  */
 
-import { computed, ref, watch } from "vue";
+import { computed, ref, watch, onBeforeUnmount } from "vue";
 
 const props = defineProps({
   events: {
@@ -106,16 +123,54 @@ const props = defineProps({
 // 维护每个 step 的 expanded 状态（索引级别），避免 computed 重建丢失
 const expandedMap = ref(new Map());
 
+// 思考计时器
+const thinkingElapsed = ref(0);
+let _thinkingTimer = null;
+let _thinkingStart = 0;
+
+function startThinkingTimer() {
+  if (_thinkingTimer) return;
+  _thinkingStart = Date.now();
+  thinkingElapsed.value = 0;
+  _thinkingTimer = setInterval(() => {
+    thinkingElapsed.value = Math.round((Date.now() - _thinkingStart) / 1000);
+  }, 1000);
+}
+
+function stopThinkingTimer() {
+  if (_thinkingTimer) {
+    clearInterval(_thinkingTimer);
+    _thinkingTimer = null;
+  }
+  thinkingElapsed.value = 0;
+}
+
+onBeforeUnmount(() => stopThinkingTimer());
+
 const steps = computed(() => {
+  // 先收集每个 step 的 LLM 耗时和推理内容
+  const llmInfoMap = new Map();
+  for (const ev of props.events) {
+    if (ev.type === "llm_done") {
+      llmInfoMap.set(ev.step, {
+        llmLatencyMs: ev.llm_latency_ms || 0,
+        llmContent: ev.content || "",
+      });
+    }
+  }
+
   const list = [];
   for (const ev of props.events) {
     if (ev.type === "tool_call") {
+      const llmInfo = llmInfoMap.get(ev.step);
       list.push({
         stepIndex: ev.step,
         toolName: ev.name,
         args: ev.args || {},
         status: "running",
         latencyMs: 0,
+        llmLatencyMs: llmInfo ? llmInfo.llmLatencyMs : 0,
+        llmContent: llmInfo ? llmInfo.llmContent : "",
         output: null,
         error: null,
         expanded: false,
@@ -143,9 +198,33 @@ const steps = computed(() => {
 
 const thinkingActive = computed(() => {
   if (!props.isRunning) return false;
-  // 找最后一个 event：如果是 llm_thinking 则显示思考中
   const last = props.events[props.events.length - 1];
-  return last && last.type === "llm_thinking";
+  return last && (last.type === "llm_thinking" || last.type === "llm_thinking_delta");
+});
+
+// 流式 LLM 思考文字
+const thinkingText = computed(() => {
+  let thinkingStep = -1;
+  for (let i = props.events.length - 1; i >= 0; i--) {
+    const t = props.events[i].type;
+    if (t === "llm_thinking") { thinkingStep = props.events[i].step; break; }
+    if (t === "llm_thinking_delta") { thinkingStep = props.events[i].step; break; }
+    if (t !== "llm_thinking_delta") break;
+  }
+  if (thinkingStep < 0) return "";
+  let text = "";
+  for (const ev of props.events) {
+    if (ev.type === "llm_thinking_delta" && ev.step === thinkingStep) {
+      text += ev.text || "";
+    }
+  }
+  return text;
+});
+
+// 监听思考状态，启停计时器
+watch(thinkingActive, (active) => {
+  if (active) startThinkingTimer();
+  else stopThinkingTimer();
 });
 
 const terminated = computed(() => {
@@ -171,6 +250,17 @@ function toggleStep(idx) {
   const next = new Map(expandedMap.value);
   next.set(idx, !(next.get(idx) || false));
   expandedMap.value = next;
+}
+
+const llmExpandedMap = ref(new Map());
+function toggleLlm(idx) {
+  const next = new Map(llmExpandedMap.value);
+  next.set(idx, !(next.get(idx) || false));
+  llmExpandedMap.value = next;
+}
+
+function formatLatency(ms) {
+  return ms >= 1000 ? (ms / 1000).toFixed(1) + "s" : ms + "ms";
 }
 
 function stepIcon(step) {
@@ -311,7 +401,8 @@ watch(
   display: grid;
   grid-template-columns: 36px 1fr;
   gap: 0.75rem;
-  padding: 0.75rem 0.9rem 0.75rem 0;
+  padding: 0.75rem 0.9rem 0.75rem 0.5rem;
+  align-items: start;
   background: rgba(0, 0, 0, 0.025);
   border: 1px solid rgba(0, 0, 0, 0.08);
   border-radius: 12px;
@@ -346,9 +437,18 @@ watch(
   color: #2563eb;
   font-size: 1.1rem;
   flex-shrink: 0;
-  margin-left: -1px;
   z-index: 1;
   box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.02);
+}
+.step-marker iconify-icon {
+  display: block;
+  width: 1em;
+  height: 1em;
+  line-height: 1;
+}
+/* 执行中/思考中：整个圆圈旋转（keyframes 定义在非 scoped 块中避免哈希不匹配） */
+.step-marker--spinning {
+  animation: marker-rotate 1.2s linear infinite !important;
 }
 .trace-step--running .step-marker {
   border-color: #2563eb;
@@ -431,6 +531,22 @@ watch(
   font-size: 0.82rem;
   color: inherit;
   opacity: 0.85;
+}
+
+.step-llm-reasoning {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.llm-content {
+  font-size: 0.82rem;
+  color: #6366f1;
+  background: rgba(99, 102, 241, 0.06);
+  border-radius: 0.4rem;
+  padding: 0.5rem 0.65rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 .args-label {
   opacity: 0.65;
@@ -518,16 +634,37 @@ watch(
 }
 
 .spin {
-  animation: spin 1s linear infinite;
+  animation: marker-rotate 1s linear infinite;
   display: inline-block;
 }
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
+
 @keyframes pulse {
   0%, 100% { opacity: 0.4; transform: scale(0.9); }
   50% { opacity: 1; transform: scale(1.2); }
+}
+
+/* 思考中状态样式 */
+.step-status--thinking {
+  color: #9333ea;
+  background: rgba(147, 51, 234, 0.12);
+}
+.thinking-elapsed {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.7;
+  margin-left: 0.3rem;
+}
+
+.thinking-stream {
+  font-size: 0.85rem;
+  color: #7c3aed;
+  background: rgba(147, 51, 234, 0.06);
+  border-radius: 0.4rem;
+  padding: 0.5rem 0.65rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 200px;
+  overflow-y: auto;
 }
 
 /* 深色主题自适应：如果外层 daisyUI data-theme=dark，用浅色覆盖 */
@@ -548,5 +685,13 @@ watch(
 :global([data-theme="dark"]) .output-json {
   background: rgba(0, 0, 0, 0.3);
   border-color: rgba(255, 255, 255, 0.1);
+}
+</style>
+
+<!-- 非 scoped 块：确保 @keyframes 不被哈希混淆 -->
+<style>
+@keyframes marker-rotate {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 </style>

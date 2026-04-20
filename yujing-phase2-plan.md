@@ -10,15 +10,15 @@
 - **答辩线**：2-3 个能在 5 分钟内讲清楚的差异化亮点，live demo 稳定不翻车
 - **论文线**：至少 1 套完整 baseline vs upgraded 对照实验 + 可量化指标表
 
-## 二、6 周里程碑（当前在 W4）
+## 二、6 周里程碑（当前在 W5 → W6）
 
 | 周次 | 主题 | 状态 | 关键产出 |
 |:---:|:---|:---:|:---|
 | W1 | 语义向量化基础设施 | ✅ 完成 | BGE-small-zh 接入、`ArticleEmbedding` 表、批量物化 |
 | W2 | FAISS 聚类 + 事件落库 | ✅ 完成 | `cluster_articles_semantic_faiss`、双层 Otsu、canonical 硬边 |
 | W3 | 论文评测 + 消融 + bug 修 | ✅ **冻结** | main eval 表 + ablation 表 + 标注仲裁闭环 + canonical rescue 修复 |
-| **W4** | **LLM Tool-Calling Agent（答辩爆点）** | 🟡 **进行中** | Agent 引擎 + 8 个工具 + 可视化面板 + 20 query 评测 |
-| W5 | UI / 性能 P0 | ⏳ 待启 | 暗色主题、EventModal 重做、chunk 拆分、早报/告警持久化 |
+| W4 | LLM Tool-Calling Agent（答辩爆点） | ✅ 冻结 | Agent 引擎 + 9 个工具 + 可视化面板 + 20 query 评测（完成率 95%） |
+| **W5** | **UI / 性能 P0 + Bug 修复** | ✅ 完成 | Agent 并发+流式（延迟 37s→26s）· 首屏拆分 · BERT batch · 5轮前端bug修复 · 文档更新 |
 | W6 | Demo 视频 + slide + 论文初稿 | ⏳ 待启 | 3 分钟 demo 视频、答辩 10 页、论文 8 页 |
 
 **弹性裁剪规则**：
@@ -77,7 +77,7 @@
 | 状态存储 | 进程内 + 可选 SQLite trajectory 表 | MVP 先内存，评测阶段落库便于复盘 |
 | 前端 | 扩展 `AIConsultant.vue` + 新增 `AgentTrace.vue` | 沿用现有 chat UI + 独立调用链组件 |
 
-### 4.3 工具集（MVP 8 个）
+### 4.3 工具集（9 个）
 
 | 工具 | 作用 | 后端 | 复杂度 |
 |:---|:---|:---|:---:|
@@ -89,6 +89,7 @@
 | `compare_events` | 2-4 事件对比（情绪 / 热度 / 平台） | 可复用 `CompareDashboard` 后端 | 中 |
 | `get_morning_brief` | 早报内容 | 现有 `/api/ai/morning_brief/content` | 低 |
 | `list_hot_platforms` | 各平台热榜快照 | 现有 `/api/topics` | 低 |
+| `rank_events_by_sentiment` | 按情绪强度排事件 | 组合 events + emotion | 中 |
 
 ### 4.4 里程碑拆分（5-7 天）
 
@@ -149,18 +150,39 @@
 
 ---
 
-## 五、W5 · UI 三件套 + 性能 P0
+## 五、W5 · UI / 性能 P0 + Bug 修复（✅ 完成 · 2026-04-21）
 
-### UI
-- 暗色主题 + 主题切换按钮（DaisyUI `yujing-dark`）
-- `EventModal.vue` 三栏重做：左情绪雷达 / 中时间线 / 右关键词云
-- 顶部统一通知中心（替代零散 banner）
+### 优先级排序（按 ROI）
 
-### 性能
-- 首屏 chunk 拆分（charts-vendor 1.1MB → <400KB）
-- 早报 / 告警 / BERT 队列持久化到 SQLite
-- 同步 DB 查询异步化 `to_thread`
-- BERT 批推理 batch=8
+| Tier | 编号 | 任务 | 目标 | 状态 |
+|:---:|:---:|:---|:---|:---:|
+| **1** | B | Agent 并发化（prompt 鼓励 + asyncio.gather） | 37s → ~15s | ✅ 初版完成 |
+| **1** | A | charts-vendor 首屏拆分 | 1093KB → 543KB (−50%) | ✅ |
+| **2** | C | BERT batch=8 情绪补全提速 | 3-5× | ✅ |
+| **2** | D | ~~全局暗色主题 toggle~~ | 作品加分 | ❌ 回退 |
+| **2** | 9 | 聚合工具 rank_events_by_sentiment | 完成率 95→100% | ✅ 已加入 |
+
+### W5 Agent 并发优化 · 评测结果（2026-04-20 · 40 query = 20 × 2 runs）
+
+| 指标 | W4 基线 | W5 实测 | 变化 |
+|:---|:---:|:---:|:---:|
+| 完成率 | 95% | **100%** | +5pp ✅ |
+| 平均延迟 | 37s | **26s** | **−30%** ✅ |
+| 平均步数 | 4.9 | **3.5** | **−29%** ✅ |
+| P95 延迟 | 55s | **34s** | −38% ✅ |
+| 工具召回 | 95% | **80%** | −15pp ⚠️ |
+
+**工具召回下降分析**：Agent 更高效地完成任务但跳过了部分 expected 工具——C2 未调 `compare_events`、P3 未调 `list_hot_platforms`、D2 未调 `get_morning_brief`、T4 未调 `search_events`。这是"用更少步数完成任务"的 tradeoff，任务本身全部成功完成。
+
+### 待做
+- [x] [A] charts-vendor 首屏拆分（1093KB → 543KB · −50%）
+- [x] [C] BERT batch=8（emotion_engine.analyze_batch + _run_emotion_backfill 批量化）
+- ~~[D] 全局暗色主题 toggle~~ — 已尝试后回退（全局适配效果差、维护成本高）
+- [x] MeiliSearch `typoTolerance` 版本兼容修复
+- [x] 语义索引启动自动 build
+- [x] 前端 bug 5轮修复（用户消息不显示、LLM流式输出、圆圈旋转/居中、热榜空白、统一Agent模式等）
+- [x] LLM 流式推理（后端 stream + 前端实时展示）
+- [x] 全面文档更新（项目文档/部署文档/核心原理文档/phase2计划）
 
 ## 六、W6 · 收官
 

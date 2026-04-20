@@ -21,6 +21,7 @@ from app.services.agent.tools import (
     tool_get_event_detail,
     tool_get_morning_brief,
     tool_list_hot_platforms,
+    tool_rank_events_by_sentiment,
     tool_search_articles,
     tool_search_events,
     tool_semantic_search_articles,
@@ -630,6 +631,95 @@ class CompareEventsToolTestCase(unittest.TestCase):
         with mock.patch("app.database.SessionLocal", return_value=fake_db):
             out = tool_compare_events._handler(event_ids=[1, 2])
         self.assertEqual(out["missing_ids"], [2])
+
+
+# =============================================================================
+# rank_events_by_sentiment  (W5 新增 · 解 T4 类 O(N) 多跳聚合)
+# =============================================================================
+class RankEventsBySentimentToolTestCase(unittest.TestCase):
+    def test_spec_registered(self):
+        self.assertEqual(
+            tool_rank_events_by_sentiment.SPEC.name, "rank_events_by_sentiment"
+        )
+        props = tool_rank_events_by_sentiment.SPEC.input_schema["properties"]
+        self.assertIn("negative", props["sentiment"]["enum"])
+        self.assertIn("anger", props["sentiment"]["enum"])
+
+    def test_negative_aggregates_to_label_family(self):
+        """sentiment='negative' 应展开为 anger+sadness+disgust+doubt+concern 5 个底层标签"""
+        labels = tool_rank_events_by_sentiment._resolve_labels("negative")
+        self.assertIn("anger", labels)
+        self.assertIn("sadness", labels)
+        self.assertIn("disgust", labels)
+        self.assertNotIn("joy", labels)
+        self.assertNotIn("neutral", labels)
+
+    def test_specific_label_passes_through(self):
+        self.assertEqual(
+            tool_rank_events_by_sentiment._resolve_labels("anger"), ["anger"]
+        )
+
+    def test_unknown_sentiment_falls_back_to_negative(self):
+        """LLM 拼错或给中文标签时兜底 negative，不浪费一步让 LLM 自修复"""
+        labels = tool_rank_events_by_sentiment._resolve_labels("超生气")
+        self.assertIn("anger", labels)
+
+    def test_handler_ranks_by_sentiment_share_desc(self):
+        """核心路径：按目标情绪占比排序，占比高的在前；热度做断舍。"""
+        e1 = _fake_event(id=11, title="愤怒事件", article_count=30, heat_score=50.0)
+        e2 = _fake_event(id=22, title="温和事件", article_count=30, heat_score=90.0)
+        e3 = _fake_event(id=33, title="无标签事件", article_count=30, heat_score=10.0)
+
+        # 聚合 rows: (event_id, ai_sentiment, count)
+        # e11: anger=8, neutral=2  → negative=8, labelled=10, share=0.80
+        # e22: anger=2, neutral=8  → negative=2, labelled=10, share=0.20
+        # e33: labelled=0（无 rows），min_labelled 过滤掉
+        agg_rows = [
+            (11, "anger", 8),
+            (11, "neutral", 2),
+            (22, "anger", 2),
+            (22, "neutral", 8),
+        ]
+
+        fake_db = mock.MagicMock()
+        q1 = mock.MagicMock()
+        q1.filter.return_value.order_by.return_value.limit.return_value.all.return_value = [e1, e2, e3]
+        q2 = mock.MagicMock()
+        q2.join.return_value.filter.return_value.filter.return_value.filter.return_value.group_by.return_value.all.return_value = agg_rows
+        fake_db.query.side_effect = [q1, q2]
+
+        with mock.patch("app.database.SessionLocal", return_value=fake_db):
+            out = tool_rank_events_by_sentiment._handler(
+                window_hours=336, sentiment="negative", limit=5, min_labelled=3
+            )
+
+        self.assertEqual(out["sentiment"], "negative")
+        self.assertEqual(out["total_events_in_window"], 3)
+        self.assertEqual(out["ranked_count"], 2)   # e33 被 min_labelled 过滤
+        self.assertEqual(out["events"][0]["_id"], 11)  # 高占比在前
+        self.assertAlmostEqual(out["events"][0]["sentiment_share"], 0.80, places=2)
+        self.assertEqual(out["events"][1]["_id"], 22)
+        self.assertAlmostEqual(out["events"][1]["sentiment_share"], 0.20, places=2)
+
+    def test_handler_empty_window_returns_hint(self):
+        fake_db = mock.MagicMock()
+        fake_db.query.return_value.filter.return_value.order_by.return_value.limit.return_value.all.return_value = []
+        with mock.patch("app.database.SessionLocal", return_value=fake_db):
+            out = tool_rank_events_by_sentiment._handler(window_hours=24)
+        self.assertEqual(out["total_events_in_window"], 0)
+        self.assertEqual(out["ranked_count"], 0)
+        self.assertIn("hint", out)
+
+    def test_handler_clamps_window_and_limit(self):
+        fake_db = mock.MagicMock()
+        fake_db.query.return_value.filter.return_value.order_by.return_value.limit.return_value.all.return_value = []
+        with mock.patch("app.database.SessionLocal", return_value=fake_db):
+            out = tool_rank_events_by_sentiment._handler(
+                window_hours=99999,    # 应 clamp 到 720
+                limit=99,              # 应 clamp 到 20
+                min_labelled=-5,       # 非法 → 至少 1
+            )
+        self.assertEqual(out["window_hours"], 720)
 
 
 if __name__ == "__main__":

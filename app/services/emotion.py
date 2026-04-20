@@ -2,6 +2,9 @@ import os
 import re
 import threading
 
+import torch
+from transformers import AutoModelForSequenceClassification, AutoTokenizer
+
 
 # 只保留"静默噪声"相关的开关；不再把整个进程钉成离线模式。
 # 原先的 TRANSFORMERS_OFFLINE=1 / HF_DATASETS_OFFLINE=1 会污染其他模块（如 embedding.py 的 bge 下载），
@@ -46,9 +49,6 @@ class EmotionEngine:
         def _do_load():
             model_name = "Johnson8187/Chinese-Emotion"
             try:
-                import torch
-                from transformers import AutoModelForSequenceClassification, AutoTokenizer
-
                 self._torch = torch
                 device = "cuda" if torch.cuda.is_available() else "cpu"
                 print(f"[情绪引擎] 后台加载离线 BERT 模型，设备: {device}")
@@ -147,6 +147,67 @@ class EmotionEngine:
                 pass
 
         return self._fallback_analyze(text)
+
+    def analyze_batch(self, texts: list[str], batch_size: int = 8) -> list[list[dict]]:
+        """批量推理：将 texts 分批送入 BERT，减少 forward pass 次数。
+
+        返回与 texts 等长的列表，每个元素格式同 analyze() 的返回值。
+        空文本位置返回 []。
+        """
+        if not texts:
+            return []
+
+        self._start_background_load()
+        use_model = self._ready and self._model
+
+        results: list[list[dict]] = [None] * len(texts)
+
+        # 收集非空文本及其原始索引
+        valid_indices = []
+        valid_texts = []
+        for i, t in enumerate(texts):
+            if t:
+                valid_indices.append(i)
+                valid_texts.append(t[:512])
+            else:
+                results[i] = []
+
+        if not valid_texts:
+            return results
+
+        if use_model:
+            torch = self._torch
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+
+            for start in range(0, len(valid_texts), batch_size):
+                chunk = valid_texts[start : start + batch_size]
+                chunk_indices = valid_indices[start : start + batch_size]
+                try:
+                    inputs = self._tokenizer(
+                        chunk,
+                        return_tensors="pt",
+                        truncation=True,
+                        padding=True,
+                        max_length=512,
+                    ).to(device)
+                    with torch.no_grad():
+                        outputs = self._model(**inputs)
+                        all_scores = torch.nn.functional.softmax(outputs.logits, dim=1)
+
+                    for j, idx in enumerate(chunk_indices):
+                        row = []
+                        for k, label in enumerate(self.labels):
+                            row.append({"label": label, "value": float(all_scores[j][k])})
+                        results[idx] = sorted(row, key=lambda item: item["value"], reverse=True)
+                except Exception:
+                    # 这一批失败，逐条降级到规则
+                    for idx, txt in zip(chunk_indices, chunk):
+                        results[idx] = self._fallback_analyze(txt)
+        else:
+            for idx, txt in zip(valid_indices, valid_texts):
+                results[idx] = self._fallback_analyze(txt)
+
+        return results
 
 
 emotion_engine = EmotionEngine()

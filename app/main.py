@@ -4,6 +4,9 @@ import logging
 import os
 import sys
 
+# faiss + numpy 在 Windows 上可能加载重复的 OpenMP 运行时，导致崩溃
+os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
+
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware

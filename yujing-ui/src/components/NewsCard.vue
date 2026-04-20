@@ -6,7 +6,7 @@
           {{ (index + 1).toString().padStart(2, "0") }}
         </div>
         <div class="card-badges">
-          <span v-if="sourceLabel" class="badge badge-outline source">{{ sourceLabel }}</span>
+          <span v-if="sourceLabel && !hideSource" class="badge badge-outline source">{{ sourceLabel }}</span>
           <span v-if="heatLabel" class="badge badge-outline heat" :style="heatStyle">
             <iconify-icon icon="mdi:fire"></iconify-icon>
             {{ heatLabel }}
@@ -43,6 +43,7 @@ const SOURCE_LABEL_MAP = {
 const props = defineProps({
   item: Object,
   index: Number,
+  hideSource: { type: Boolean, default: false },
 });
 
 defineEmits(["click"]);

@@ -5,12 +5,10 @@
         <span class="live-dot"></span>
         <span>AI 助手</span>
       </div>
-      <label class="agent-mode-toggle" :class="{ active: agentMode }">
-        <iconify-icon :icon="agentMode ? 'ri:brain-fill' : 'ri:brain-line'"></iconify-icon>
-        <span>智能体模式</span>
-        <input type="checkbox" v-model="agentMode" :disabled="isActivePending" />
-        <span class="toggle-track"><span class="toggle-knob"></span></span>
-      </label>
+      <div class="agent-badge">
+        <iconify-icon icon="ri:brain-fill"></iconify-icon>
+        <span>Tool-Calling Agent</span>
+      </div>
       <div class="workspace-meta badge badge-ghost">
         <span>{{ sessions.length }} 个会话</span>
         <span v-if="activeSession">{{ formatSessionMeta(activeSession) }}</span>
@@ -55,31 +53,13 @@
       </aside>
 
       <div ref="chatScroll" class="workspace-body">
-        <div v-if="!agentMode" class="quick-actions">
-          <button class="quick-action-btn" type="button" @click="runPreset('生成今日日报')" :disabled="isActivePending">
-            <iconify-icon icon="ri:file-text-line"></iconify-icon>
-            今日日报
-          </button>
-          <button class="quick-action-btn" type="button" @click="runPreset('生成本周周报')" :disabled="isActivePending">
-            <iconify-icon icon="ri:calendar-line"></iconify-icon>
-            本周周报
-          </button>
-          <button class="quick-action-btn" type="button" @click="runPreset('当前有什么值得关注的热点')" :disabled="isActivePending">
-            <iconify-icon icon="ri:fire-line"></iconify-icon>
-            热点速览
-          </button>
-          <button class="quick-action-btn" type="button" @click="runPreset('统计分析：各平台热搜数量对比、今日最热事件TOP5、舆情情绪分布')" :disabled="isActivePending">
-            <iconify-icon icon="ri:bar-chart-2-line"></iconify-icon>
-            统计报告
-          </button>
-        </div>
-
-        <div v-else class="agent-preset-strip">
+        <!-- 预设卡片：新对话时显示，有历史时折叠为紧凑条 -->
+        <div class="agent-preset-strip" :class="{ 'agent-preset-compact': history.length > 0 }">
           <div class="agent-preset-head">
             <iconify-icon icon="ri:sparkling-2-fill"></iconify-icon>
-            <span><strong>Tool-Calling Agent</strong> 已启用 · 自主规划 2-4 步工具调用，给出带引用的结构化结论</span>
+            <span><strong>Tool-Calling Agent</strong> 自主规划工具调用，给出带引用的结构化结论</span>
           </div>
-          <div class="agent-preset-grid">
+          <div v-if="!history.length" class="agent-preset-grid">
             <button
               v-for="(p, idx) in AGENT_PRESETS"
               :key="idx"
@@ -97,6 +77,7 @@
           </div>
         </div>
 
+        <!-- 早报横幅：两种模式都显示 -->
         <div
           v-if="briefStatus !== 'loading'"
           class="brief-banner"
@@ -175,10 +156,11 @@
           :data-msg-index="index"
         >
           <article class="message-block card" :class="msg.role === 'assistant' ? 'bg-base-100' : 'bg-primary text-primary-content'">
-            <div class="message-meta badge badge-ghost" v-if="msg.role === 'assistant' && !msg.agent_events">AI 回复</div>
-            <div class="message-meta agent-meta-chip" v-else-if="msg.role === 'assistant' && msg.agent_events">
+            <!-- 用户消息 -->
+            <div v-if="msg.role === 'user'" class="msg-user-text">{{ msg.content }}</div>
+            <div class="message-meta agent-meta-chip" v-if="msg.role === 'assistant'">
               <iconify-icon icon="ri:sparkling-2-fill"></iconify-icon>
-              <span>LLM 智能体</span>
+              <span>Agent 研判</span>
               <span v-if="msg.agent_running" class="agent-meta-elapsed">进行中…</span>
             </div>
 
@@ -189,7 +171,7 @@
               @open-article="$emit('open-item', $event)"
             />
 
-            <!-- 智能体模式：展示调用链 + final answer（带 event#N/article#N 引用高亮） -->
+            <!-- 智能体调用链 + final answer -->
             <template v-if="msg.role === 'assistant' && msg.agent_events">
               <AgentTrace :events="msg.agent_events" :isRunning="!!msg.agent_running" />
               <div v-if="msg.agent_final" class="agent-final-card">
@@ -205,9 +187,11 @@
               </div>
             </template>
 
-            <div v-else class="msg-text" v-html="formatMessage(msg.content)"></div>
+            <!-- 兜底：旧消息可能无 agent_events -->
+            <div v-else-if="msg.role === 'assistant' && msg.content" class="msg-text" v-html="formatMessage(msg.content)"></div>
 
-            <div v-if="msg.role === 'assistant' && msg.content && !isActivePending" class="msg-actions">
+            <!-- 导出 PDF：agent_final 或 content 非空均可导出 -->
+            <div v-if="msg.role === 'assistant' && (msg.agent_final || msg.content) && !msg.agent_running && !isActivePending" class="msg-actions">
               <button class="msg-action-btn" type="button" @click="exportMessagePdf(msg, index)" title="导出PDF">
                 <iconify-icon icon="ri:file-pdf-2-line" />
                 <span>导出PDF</span>
@@ -257,10 +241,7 @@
           </article>
         </div>
 
-        <div v-if="showLoadingIndicator" class="loading-row">
-          <div class="loading-spinner loading loading-spinner loading-sm"></div>
-          <div class="loading-copy">正在整理本地检索结果...</div>
-        </div>
+
       </div>
     </div>
 
@@ -275,7 +256,7 @@
               class="mcp-input-area"
               v-model="inputQuery"
               :disabled="isActivePending"
-              :placeholder="agentMode ? '智能体将自主规划工具调用。例：最近两周伊朗相关的舆情消息中，哪些事件最热？情绪是什么倾向？' : '例如：我要微博的数据；最近争议最大的是哪个；继续分析刚才那条'"
+              :placeholder="'智能体将自主规划工具调用。例：最近两周伊朗相关的舆情消息中，哪些事件最热？情绪是什么倾向？'"
               @keydown.enter.exact.prevent="sendMessage()"
             ></textarea>
 
@@ -317,7 +298,7 @@ const presets = ["生成今日日报", "最近争议最大的是哪个", "微博
 
 // 智能体模式开关。开启后 sendMessage 走 /api/agent/chat（Tool-Calling Agent），
 // 关闭则保持现有 /api/mcp/ask 流程。两条链路互不干扰。
-const agentMode = ref(false);
+const agentMode = ref(true);  // 始终启用智能体模式
 const AGENT_PRESETS = [
   {
     title: "伊朗局势舆情",
@@ -559,7 +540,8 @@ const captureDashboardImage = async (msgIndex) => {
 };
 
 const exportMessagePdf = async (msg, msgIndex) => {
-  if (!msg.content && !msg.compare_metrics) return;
+  const textContent = msg.agent_final || msg.content;
+  if (!textContent && !msg.compare_metrics) return;
   try {
     const images = [];
     if (msg.compare_metrics) {
@@ -571,7 +553,7 @@ const exportMessagePdf = async (msg, msgIndex) => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         title: activeSession.value?.title || "AI 对话报告",
-        content: msg.content || "",
+        content: textContent || "",
         images: images.length ? images : undefined,
       }),
     });
@@ -849,6 +831,9 @@ const sendAgentMessage = async (sessionId, outgoing) => {
     agent_error: "",
   });
 
+  const accumulated = [];
+  let finalBuffer = "";
+
   try {
     const res = await fetch(AGENT_API_URL, {
       method: "POST",
@@ -863,9 +848,6 @@ const sendAgentMessage = async (sessionId, outgoing) => {
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
-    const accumulated = [];
-    // final_delta 累积缓冲：后端把最终答案分片推送，前端边收边追加渲染（打字机效果）。
-    let finalBuffer = "";
 
     while (true) {
       const { done, value } = await reader.read();
@@ -896,7 +878,13 @@ const sendAgentMessage = async (sessionId, outgoing) => {
               patch.agent_error = ev.message || "智能体出错";
             }
           }
-          if (ev.type === "done") patch.agent_running = false;
+          if (ev.type === "done") {
+            patch.agent_running = false;
+            // 如果结束时仍无最终结论，给用户一个友好提示
+            if (!finalBuffer && ev.terminated_reason && ev.terminated_reason !== "final") {
+              patch.agent_error = "智能体未能给出结论，请尝试换个问法。";
+            }
+          }
           patchMessage(sessionId, assistantIndex, patch);
         } catch (err) {
           console.error("[agent] SSE parse error", err, chunk);
@@ -911,10 +899,43 @@ const sendAgentMessage = async (sessionId, outgoing) => {
     });
   } finally {
     patchMessage(sessionId, assistantIndex, { agent_running: false });
+    // 生成追问建议：基于工具调用情况
+    if (finalBuffer) {
+      const suggestions = generateFollowUpSuggestions(accumulated);
+      if (suggestions.length) {
+        patchMessage(sessionId, assistantIndex, { suggestions });
+      }
+    }
     pendingSessionIds.value = pendingSessionIds.value.filter((id) => id !== sessionId);
     await scrollToBottom();
   }
 };
+
+// 根据 Agent 调用的工具生成追问建议
+const TOOL_FOLLOW_UPS = {
+  search_events: ["这些事件中哪个传播最广？", "对比这几个事件的情绪倾向"],
+  get_event_detail: ["分析该事件的情绪走势", "该事件是否有后续发展？"],
+  analyze_event_sentiment: ["哪些平台的负面情绪最多？", "和上周相比情绪有变化吗？"],
+  compare_events: ["这些事件有什么共性？", "哪个事件后续影响更大？"],
+  search_articles: ["帮我总结这些文章的核心观点", "有哪些不同的立场？"],
+  semantic_search_articles: ["有没有相关但被忽略的冷门事件？", "这些内容的主要分歧在哪？"],
+  list_hot_platforms: ["各平台热点有什么差异？", "哪些热点只在单一平台出现？"],
+  get_morning_brief: ["今天有什么值得深入分析的事件？", "帮我对比昨天和今天的热点变化"],
+};
+
+function generateFollowUpSuggestions(events) {
+  const toolNames = new Set();
+  for (const ev of events) {
+    if (ev.type === "tool_call" && ev.name) toolNames.add(ev.name);
+  }
+  const pool = [];
+  for (const name of toolNames) {
+    const candidates = TOOL_FOLLOW_UPS[name];
+    if (candidates) pool.push(...candidates);
+  }
+  // 去重后取前 3 个
+  return [...new Set(pool)].slice(0, 3);
+}
 
 // 委托点击事件：捕获 v-html 内部 `.agent-ref` 链接，emit 给父组件打开对应 modal
 const handleAgentRefClick = (evt) => {
@@ -934,119 +955,8 @@ const sendMessage = async (presetText = null) => {
   const outgoing = (presetText ?? inputQuery.value).trim();
   if (!outgoing || pendingSessionIds.value.includes(sessionId)) return;
 
-  // 分支：智能体模式走独立链路
-  if (agentMode.value) {
-    return sendAgentMessage(sessionId, outgoing);
-  }
-
-  const session = getSessionById(sessionId);
-  const contextHistory = (session?.messages || []).map((msg) => ({
-    role: msg.role,
-    content: msg.content,
-  }));
-
-  pushMessage(sessionId, { role: "user", content: outgoing });
-  inputQuery.value = "";
-  setSessionDraft(sessionId, "");
-  pendingSessionIds.value = [...pendingSessionIds.value, sessionId];
-  await scrollToBottom();
-
-  let assistantIndex = -1;
-  let contentBuffer = "";
-  let itemsBuffer = [];
-
-  const ensureAssistantMessage = () => {
-    if (assistantIndex >= 0) return assistantIndex;
-    assistantIndex = pushMessage(sessionId, {
-      role: "assistant",
-      content: contentBuffer,
-      summoned_items: itemsBuffer,
-    });
-    return assistantIndex;
-  };
-
-  try {
-    const res = await fetch(API_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "text/event-stream",
-      },
-      body: JSON.stringify({ query: outgoing, history: contextHistory }),
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-    const reader = res.body?.getReader();
-    if (!reader) throw new Error("stream unavailable");
-
-    const decoder = new TextDecoder();
-    let streamBuffer = "";
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      streamBuffer += decoder.decode(value, { stream: true });
-      const chunks = streamBuffer.split("\n\n");
-      streamBuffer = chunks.pop() || "";
-
-      for (const chunk of chunks) {
-        const line = chunk
-          .split("\n")
-          .find((entry) => entry.startsWith("data: "));
-        if (!line) continue;
-
-        const payload = JSON.parse(line.slice(6));
-        if (payload.type === "content_start") {
-          contentBuffer = "";
-          itemsBuffer = [];
-          continue;
-        }
-
-        if (payload.type === "content") {
-          contentBuffer += payload.text || "";
-          const index = ensureAssistantMessage();
-          patchMessage(sessionId, index, { content: contentBuffer, summoned_items: itemsBuffer });
-        }
-
-        if (payload.type === "summoned_items") {
-          itemsBuffer = payload.items || [];
-          const index = ensureAssistantMessage();
-          patchMessage(sessionId, index, { content: contentBuffer, summoned_items: itemsBuffer });
-        }
-
-        if (payload.type === "compare_metrics") {
-          // 挂载对比仪表盘数据到当前消息，前端用 CompareDashboard 渲染
-          const index = ensureAssistantMessage();
-          patchMessage(sessionId, index, { compare_metrics: { a: payload.a, b: payload.b } });
-        }
-
-        if (payload.type === "suggestions") {
-          const index = ensureAssistantMessage();
-          patchMessage(sessionId, index, { suggestions: payload.items || [] });
-        }
-      }
-
-      await scrollToBottom(false); // 流式期间柔性滚动
-    }
-
-    if (assistantIndex < 0) {
-      pushMessage(sessionId, {
-        role: "assistant",
-        content: "没有检索到可展示的结果。",
-        summoned_items: [],
-      });
-    }
-  } catch (error) {
-    pushMessage(sessionId, {
-      role: "assistant",
-      content: "指挥链路中断，请检查后端运行状态后再试。",
-      summoned_items: [],
-    });
-  } finally {
-    pendingSessionIds.value = pendingSessionIds.value.filter((id) => id !== sessionId);
-    await scrollToBottom();
-  }
+  // 统一走智能体链路
+  return sendAgentMessage(sessionId, outgoing);
 };
 
 const runPreset = async (text) => {
@@ -1414,52 +1324,35 @@ onUnmounted(() => {
 
 @keyframes spin { to { transform: rotate(360deg); } }
 
+.loading-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 1rem 0;
+}
+.loading-copy {
+  font-size: 0.85rem;
+  color: #64748b;
+}
+
 /* =========================================================================
- * 智能体模式 · 顶部 toggle + 预设条 + 消息气泡中的 AgentTrace/final-card
+ * 智能体模式 · 顶部标记 + 预设条 + 消息气泡中的 AgentTrace/final-card
  * ========================================================================= */
-.agent-mode-toggle {
+.agent-badge {
   display: inline-flex;
   align-items: center;
-  gap: 0.45rem;
+  gap: 0.4rem;
   padding: 0.3rem 0.75rem 0.3rem 0.6rem;
   border-radius: 999px;
-  background: rgba(99, 102, 241, 0.08);
-  border: 1px solid rgba(99, 102, 241, 0.25);
-  color: #4338ca;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.18), rgba(168, 85, 247, 0.14));
+  border: 1px solid rgba(99, 102, 241, 0.55);
+  color: #4c1d95;
   font-size: 0.82rem;
-  cursor: pointer;
-  user-select: none;
-  transition: background 0.15s, border-color 0.15s;
+  font-weight: 600;
   margin-left: auto;
   margin-right: 0.75rem;
 }
-.agent-mode-toggle:hover { background: rgba(99, 102, 241, 0.14); }
-.agent-mode-toggle.active {
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.18), rgba(168, 85, 247, 0.14));
-  border-color: rgba(99, 102, 241, 0.55);
-  color: #4c1d95;
-}
-.agent-mode-toggle input[type="checkbox"] { display: none; }
-.agent-mode-toggle .toggle-track {
-  position: relative;
-  width: 30px;
-  height: 16px;
-  background: rgba(99, 102, 241, 0.25);
-  border-radius: 999px;
-  transition: background 0.15s;
-}
-.agent-mode-toggle.active .toggle-track { background: #6366f1; }
-.agent-mode-toggle .toggle-knob {
-  position: absolute;
-  left: 2px;
-  top: 2px;
-  width: 12px;
-  height: 12px;
-  background: #fff;
-  border-radius: 50%;
-  transition: transform 0.2s;
-}
-.agent-mode-toggle.active .toggle-knob { transform: translateX(14px); }
 
 .agent-preset-strip {
   display: flex;
@@ -1470,12 +1363,15 @@ onUnmounted(() => {
   border: 1px solid rgba(99, 102, 241, 0.28);
   border-radius: 12px;
   margin-bottom: 0.5rem;
-  /* sticky 顶部：滚动聊天历史时，智能体预设条始终可见。
-     用完全不透明背景，避免滚动时与下方 brief-banner 透叠产生视觉"遮挡"错觉。 */
-  position: sticky;
-  top: 0;
-  z-index: 5;
   box-shadow: 0 4px 12px -4px rgba(99, 102, 241, 0.28), 0 1px 0 rgba(99, 102, 241, 0.12);
+}
+/* 有对话历史时：折叠为紧凑状态条 */
+.agent-preset-strip.agent-preset-compact {
+  padding: 0.5rem 0.85rem;
+  gap: 0;
+}
+.agent-preset-strip.agent-preset-compact .agent-preset-head {
+  font-size: 0.78rem;
 }
 .agent-preset-head {
   display: flex;
@@ -1519,6 +1415,7 @@ onUnmounted(() => {
   color: #6366f1;
   border-radius: 8px;
   font-size: 1.15rem;
+  line-height: 1;
 }
 .agent-preset-body { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; }
 .agent-preset-body strong { font-size: 0.9rem; color: #1e293b; }

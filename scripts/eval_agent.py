@@ -344,14 +344,15 @@ def main() -> int:
         result = run_one(args.api, spec["query"], args.timeout)
         summary = summarize_one(spec, result)
         if summary.get("ok"):
+            # 纯 ASCII console 输出，兼容 Windows GBK 终端
             print(
-                f"    ✅ finished={summary['finished']} "
+                f"    [OK] finished={summary['finished']} "
                 f"steps={summary['step_count']} "
                 f"latency={summary['total_latency_ms']}ms "
                 f"tools={summary['tools_called_unique']}"
             )
         else:
-            print(f"    ❌ error: {summary.get('error', '?')}")
+            print(f"    [FAIL] error: {summary.get('error', '?')}")
 
         if not args.no_write:
             append_jsonl(RAW_JSONL, summary)

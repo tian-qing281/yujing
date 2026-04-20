@@ -175,6 +175,62 @@ class AgentLoopTestCase(unittest.TestCase):
         self.assertEqual(traj.steps[0].kind, "error")
         self.assertIn("deepseek down", traj.steps[0].assistant_content)
 
+    def test_parallel_tool_calls_preserve_order_and_run_concurrently(self):
+        """同一轮 LLM 返回 >1 tool_calls → 并发执行 + 结果按原顺序回注 messages。
+
+        手段：两个 handler 各 sleep 0.2s，串行应 > 0.4s，并发应 < 0.35s。
+        """
+        import time
+
+        self.registry = ToolRegistry()
+
+        def _slow_a(**kwargs):
+            time.sleep(0.2)
+            return {"who": "A", "arg": kwargs.get("x")}
+
+        def _slow_b(**kwargs):
+            time.sleep(0.2)
+            return {"who": "B", "arg": kwargs.get("x")}
+
+        self.registry.register(ToolSpec(
+            name="slow_a", description="slow tool A",
+            input_schema={"type": "object", "properties": {"x": {"type": "integer"}}},
+            handler=_slow_a,
+        ))
+        self.registry.register(ToolSpec(
+            name="slow_b", description="slow tool B",
+            input_schema={"type": "object", "properties": {"x": {"type": "integer"}}},
+            handler=_slow_b,
+        ))
+
+        fake = FakeLLM([
+            LLMResponse(content="", tool_calls=[
+                _tool_call("slow_a", {"x": 1}, "call_1"),
+                _tool_call("slow_b", {"x": 2}, "call_2"),
+            ]),
+            LLMResponse(content="done", tool_calls=[]),
+        ])
+        loop = AgentLoop(registry=self.registry, llm_caller=fake)
+
+        t0 = time.time()
+        traj = loop.run("parallel query")
+        elapsed = time.time() - t0
+
+        self.assertTrue(traj.finished)
+        self.assertLess(elapsed, 0.35, f"并发未生效，elapsed={elapsed:.3f}s（串行下限 0.4s）")
+        # 结果顺序必须等于 tool_calls 下达顺序（call_1 → call_2）
+        results = traj.steps[0].tool_results
+        self.assertEqual(len(results), 2)
+        self.assertEqual(results[0].call_id, "call_1")
+        self.assertEqual(results[0].output["who"], "A")
+        self.assertEqual(results[1].call_id, "call_2")
+        self.assertEqual(results[1].output["who"], "B")
+        # 第二轮 LLM 收到的 messages 里，tool observation 顺序应为 A、B
+        tool_msgs = [m for m in fake.received_messages[1] if m["role"] == "tool"]
+        self.assertEqual(len(tool_msgs), 2)
+        self.assertIn('"A"', tool_msgs[0]["content"])
+        self.assertIn('"B"', tool_msgs[1]["content"])
+
     def test_trajectory_to_dict_is_json_serializable(self):
         """to_dict() 结果必须能 json.dumps，M3 的 SSE 流需要"""
         import json as _json

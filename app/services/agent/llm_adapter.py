@@ -95,11 +95,13 @@ def call_llm(
     tools_openai_format: List[Dict[str, Any]],
     temperature: float = 0.2,
     max_tokens: int = 1200,
+    on_delta: Optional[Any] = None,
 ) -> LLMResponse:
     """调 LLM 一次，返回 tool_calls 或 final content。
 
     - 首次调用时会懒加载 ChatOpenAI + 复用 `app.llm._get_llm_settings()`
     - `tools_openai_format` 空列表时自动走纯 chat 模式
+    - `on_delta` 不为 None 时走流式模式，每产出一段文字回调 on_delta(text)
     """
     from langchain_openai import ChatOpenAI
     from app.llm import _get_llm_settings
@@ -116,7 +118,27 @@ def call_llm(
     bound = llm.bind_tools(tools_openai_format) if tools_openai_format else llm
 
     lc_messages = _messages_to_langchain(messages)
-    ai_msg = bound.invoke(lc_messages)
+
+    if on_delta is not None:
+        # 流式模式：逐 chunk 推送文字给调用方
+        full_msg = None
+        for chunk in bound.stream(lc_messages):
+            if full_msg is None:
+                full_msg = chunk
+            else:
+                full_msg = full_msg + chunk
+            delta_text = chunk.content if isinstance(chunk.content, str) else ""
+            if delta_text:
+                try:
+                    on_delta(delta_text)
+                except Exception:  # noqa: BLE001
+                    pass
+        ai_msg = full_msg
+    else:
+        ai_msg = bound.invoke(lc_messages)
+
+    if ai_msg is None:
+        return LLMResponse(content="", tool_calls=[], raw=None)
 
     tool_calls: List[ToolCall] = []
     for tc in (getattr(ai_msg, "tool_calls", None) or []):

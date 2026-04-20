@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 import logging
 import time
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable, Dict, List, Optional
 
 from .registry import ToolRegistry
@@ -28,10 +29,20 @@ logger = logging.getLogger(__name__)
 DEFAULT_SYSTEM_PROMPT = """你是一名"舆镜 YuJing"舆情分析助手。
 你的任务是根据用户的问题，**自主决定**调用哪些工具来收集证据，再给出简洁、带引用的回答。
 
+**范围判断（最先执行）**：
+- 你只处理与新闻、舆情、热搜、事件、社会热点相关的问题。
+- 如果用户的问题明显与舆情/新闻无关（如数学题、编程题、闲聊等），**不要调用任何工具**，直接回复："我是舆情分析助手，只能回答与新闻热点、舆论动态相关的问题。请换一个舆情相关的问题，例如'今天有什么热搜'或'最近有什么值得关注的事件'。"
+- 如果用户的问题过于模糊（如只说一个词），礼貌地要求用户说得更具体一些。
+
 可用工具由运行时注入，调用规则：
 - 优先调用语义/关键词检索定位相关事件，再调用详情工具拿证据。
 - 每次调用前自问"现有信息是否足够回答"，够了就直接给 final answer，不要为调用而调用。
-- **聚焦策略**：锁定 1-2 个最相关事件深入分析即可，不要对多个事件重复调用同一个工具（例如连续调 get_event_detail/analyze_event_sentiment 三四个事件）；若用户问的是概览性问题，从 search 结果里直接总结而非逐个详查。
+- **并发调用优化**（重要）：当一个问题涉及多个独立对象时，**请在同一轮里返回多个 tool_calls** 让后端并行执行，而不是一次一个串行等结果。典型场景：
+  · 对比两三个事件 → 同一轮发起 `get_event_detail(A)` + `get_event_detail(B)` + `get_event_detail(C)`
+  · 分析多个事件情绪 → 同一轮发起多次 `analyze_event_sentiment`
+  · 一次检索得到候选后，如需同时看详情与情绪 → 并发发起
+- **聚合优先**：遇到"情绪最负面/最热门/排名 TopN"类问题，**优先调用 `rank_events_by_*` 聚合工具一步拿结果**，不要用"逐事件详查再人工比较"的 O(N) 做法。
+- **聚焦策略**：锁定 1-2 个最相关事件深入分析即可，不要对多个事件重复调用同一个工具；若用户问的是概览性问题，从 search 结果里直接总结而非逐个详查。
 - 单次对话总步数不超过 8 步，绝大多数问题应在 3-5 步内收敛。
 - 一旦已有足够信息（通常是 1 次检索 + 1-2 次细节 + 可选 1 次情绪/对比），立即给出 final answer。
 
@@ -107,11 +118,17 @@ class AgentLoop:
 
         for step_idx in range(self.max_steps):
             _emit({"type": "llm_thinking", "step": step_idx})
+            t_llm = time.time()
+            llm_kwargs: Dict[str, Any] = {
+                "messages": messages,
+                "tools_openai_format": self.registry.to_openai_functions(),
+            }
+            if on_event is not None:
+                llm_kwargs["on_delta"] = lambda text: _emit({
+                    "type": "llm_thinking_delta", "step": step_idx, "text": text,
+                })
             try:
-                resp = self._llm_caller(
-                    messages=messages,
-                    tools_openai_format=self.registry.to_openai_functions(),
-                )
+                resp = self._llm_caller(**llm_kwargs)
             except Exception as exc:  # noqa: BLE001
                 logger.exception("[agent.loop] LLM 调用失败 @ step %d", step_idx)
                 trajectory.steps.append(AgentStep(
@@ -122,6 +139,13 @@ class AgentLoop:
                 trajectory.terminated_reason = "error"
                 _emit({"type": "error", "message": f"LLM 调用失败: {exc}", "terminated_reason": "error"})
                 break
+            llm_latency_ms = int((time.time() - t_llm) * 1000)
+            _emit({
+                "type": "llm_done",
+                "step": step_idx,
+                "llm_latency_ms": llm_latency_ms,
+                "content": resp.content or "",
+            })
 
             if resp.tool_calls:
                 step = AgentStep(
@@ -144,16 +168,31 @@ class AgentLoop:
                     ],
                 })
 
-                # 执行每个 tool_call，把 observation append 到 messages
-                had_error = False
-                for tc in resp.tool_calls:
+                # 执行每个 tool_call。并发策略：
+                # 1. 先顺序 emit 全部 `tool_call` 事件（前端 timeline 一次性呈现"多线出发"）
+                # 2. n>1 时用 ThreadPoolExecutor 并行执行 handler（各 tool 内部是同步 DB / HTTP 调用）
+                # 3. 按原始 call 顺序 emit `tool_result`，保证 LLM / 前端观测稳定
+                # n==1 时不起 executor（避免 ~1ms 线程切换开销 + 保持单测 happy path 行为不变）
+                tool_calls = list(resp.tool_calls)
+                for tc in tool_calls:
                     _emit({
                         "type": "tool_call",
                         "step": step_idx,
                         "name": tc.name,
                         "args": tc.arguments or {},
                     })
-                    result = self._dispatch_tool(tc)
+
+                if len(tool_calls) > 1:
+                    with ThreadPoolExecutor(
+                        max_workers=min(len(tool_calls), 4),
+                        thread_name_prefix="agent-tool",
+                    ) as pool:
+                        results = list(pool.map(self._dispatch_tool, tool_calls))
+                else:
+                    results = [self._dispatch_tool(tool_calls[0])]
+
+                had_error = False
+                for tc, result in zip(tool_calls, results):
                     step.tool_results.append(result)
                     if result.error:
                         had_error = True
@@ -210,6 +249,9 @@ class AgentLoop:
             break
         else:
             trajectory.terminated_reason = "max_steps"
+            fallback = "已达最大分析步数上限，未能收敛出结论。请尝试更具体的问题。"
+            trajectory.final_answer = fallback
+            _emit({"type": "final", "text": fallback})
             _emit({
                 "type": "error",
                 "message": "已达最大步数上限，未收敛",

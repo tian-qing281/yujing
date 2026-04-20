@@ -9,7 +9,7 @@ langchain
 langchain-community
 langchain-openai
 langchain-core
-chromadb
+faiss-cpu
 pydantic
 python-dotenv
 torch

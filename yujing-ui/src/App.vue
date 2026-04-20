@@ -81,7 +81,7 @@ const setTimeRange = (range) => {
   unifiedDataCache.clear();
   fetchUnifiedSearch(eventQuery.value, range);
 };
-const activePlatform = ref("weibo_hot_search");
+const activePlatform = ref(sessionStorage.getItem("yj-platform") || "weibo_hot_search");
 const isLoadingArticles = ref(false);
 const isLoadingEvents = ref(false);
 const isLoadingTopics = ref(false);
@@ -456,10 +456,13 @@ const fetchUnifiedSearch = async (query = eventQuery.value, timeOverride = undef
         ...freshSummary,
         events: Number(actualEventTotal || 0),
       };
+    } else {
+      // 空查询初始加载：直接使用后端返回的事件列表
+      events.value = freshEvents;
     }
 
     unifiedDataCache.set(cacheKey, {
-      events: events.value,
+      events: freshEvents,
       topics: freshTopics,
       articles: freshArticles,
       summary: unifiedSummary.value,
@@ -583,11 +586,17 @@ onMounted(() => {
 });
 
 watch(activePlatform, (value) => {
+  sessionStorage.setItem("yj-platform", value);
   if (value === "event_hub") {
     scheduleSearchInsightPreload();
     scheduleEventHubHydration(false);
+  } else if (value !== "ai_consultant") {
+    // 切换到热榜平台时，若 articles 为空则补载
+    if (!articles.value.length) {
+      fetchArticles();
+    }
   }
-});
+}, { immediate: true });
 
 watch(eventQuery, (value) => {
   if (activePlatform.value !== "event_hub") return;
@@ -1463,6 +1472,7 @@ onMounted(() => {
               :key="item.id"
               :item="item"
               :index="idx"
+              :hideSource="true"
               @click="openDetail(item)"
             />
           </TransitionGroup>
@@ -2412,6 +2422,8 @@ body { font-family: "Fira Sans", "PingFang SC", "Microsoft YaHei", sans-serif; b
 }
 
 .eh-page-loading {
+  display: inline-flex;
+  align-items: center;
   margin-left: 8px;
   color: #3b82f6;
 }

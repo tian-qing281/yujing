@@ -1,8 +1,14 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
+import path from 'path'
 
 // https://vite.dev/config/
 export default defineConfig({
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, './src')
+    }
+  },
   plugins: [
     vue({
       template: {
@@ -31,7 +37,7 @@ export default defineConfig({
             return 'charts-vendor'
           }
 
-          if (id.includes('element-plus') || id.includes('@element-plus')) {
+          if (id.includes('element-plus') || id.includes('@element-plus')) {    
             return 'element-vendor'
           }
 

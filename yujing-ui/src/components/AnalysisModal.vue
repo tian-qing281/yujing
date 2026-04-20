@@ -596,7 +596,7 @@ watch(() => props.activeTab, (newTab) => {
 }
 .report-body { font-size: 16px; line-height: 1.9; color: #1e293b; white-space: pre-wrap; font-weight: 500; text-align: left; }
 
-.analysis-spinner { text-align: center; padding: 100px 0; background: radial-gradient(circle at center, rgba(37, 99, 235, 0.05) 0%, transparent 70%); border-radius: 30px; }
+.analysis-spinner { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 100px 0; background: radial-gradient(circle at center, rgba(37, 99, 235, 0.05) 0%, transparent 70%); border-radius: 30px; }
 .aura-spin { 
   width: 52px; height: 52px; 
   border: 3px solid rgba(59, 130, 246, 0.08); 

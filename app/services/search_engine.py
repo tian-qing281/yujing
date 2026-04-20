@@ -184,6 +184,10 @@ class MeiliSearchClient:
                         "filterableAttributes": settings["filterableAttributes"],
                         "sortableAttributes": settings["sortableAttributes"],
                         "rankingRules": ["words", "typo", "proximity", "attribute", "sort", "exactness"],
+                        "typoTolerance": {
+                            "enabled": True,
+                            "minWordSizeForTypos": {"oneTypo": 4, "twoTypos": 8},
+                        },
                         "synonyms": MEILI_SYNONYMS,
                         "stopWords": MEILI_STOPWORDS,
                         "distinctAttribute": settings.get("distinctAttribute"),
@@ -361,10 +365,9 @@ class MeiliSearchClient:
                 "offset": max(0, offset),
                 "attributesToHighlight": ["title", "summary", "keywords", "related_titles"],
             }
-            # 短查询(<=3字符)：禁用typo容错，严格匹配所有词
+            # 短查询(<=3字符)：严格匹配所有词（typoTolerance 为 settings 级别，不可搜索时传入）
             stripped_query = query.strip()
             if len(stripped_query) <= 3:
-                options["typoTolerance"] = {"enabled": False}
                 options["matchingStrategy"] = "all"
             if filter_expr:
                 options["filter"] = filter_expr

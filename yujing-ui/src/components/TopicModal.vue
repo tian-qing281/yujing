@@ -373,7 +373,7 @@ watch(
                   <div v-if="expandedEventId === event.id" class="expand-detail">
                     <div v-if="isFetchingSub === event.id" class="sub-loader">
                       <div class="loading-spin"></div>
-                      <span>情报流水对齐中...</span>
+                      <span>情报流水对齐中…</span>
                     </div>
                     <div v-else class="sub-article-grid">
                       <div
@@ -758,7 +758,12 @@ watch(
   gap: 8px;
 }
 .loading-spin {
-  color: #3b82f6;
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(59, 130, 246, 0.15);
+  border-top-color: #3b82f6;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
