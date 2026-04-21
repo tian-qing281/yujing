@@ -556,7 +556,7 @@ const exportMessagePdf = async (msg, msgIndex) => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        title: activeSession.value?.title || "AI 对话报告",
+        title: "AI 舆情分析报告",
         content: textContent || "",
         images: images.length ? images : undefined,
       }),
@@ -790,7 +790,8 @@ const formatAgentFinal = (text) => {
     (_m, kind, id) => {
       const lower = kind.toLowerCase();
       const dataKind = (lower === "event" || kind === "事件") ? "event" : "article";
-      return `<a href="#" class="agent-ref" data-kind="${dataKind}" data-id="${id}">${kind}#${id}</a>`;
+      const icon = dataKind === "event" ? "🔗" : "📰";
+      return `<a href="#" class="agent-ref agent-ref--${dataKind}" data-kind="${dataKind}" data-id="${id}">${icon}</a>`;
     },
   );
   const lines = withRefs.split("\n");
@@ -1499,19 +1500,19 @@ onUnmounted(() => {
 .agent-final-body :deep(li) { list-style: disc; margin: 0.12rem 0; }
 .agent-final-body :deep(strong) { color: #111827; }
 .agent-final-body :deep(.agent-ref) {
-  color: #2563eb;
+  display: inline-flex; align-items: center;
   text-decoration: none;
-  font-family: "JetBrains Mono", ui-monospace, monospace;
-  font-size: 0.86em;
-  padding: 0.05rem 0.35rem;
-  background: rgba(37, 99, 235, 0.1);
-  border-radius: 4px;
-  cursor: pointer;
-  transition: background 0.15s;
+  font-size: 12px; font-weight: 600;
+  padding: 2px 9px; border-radius: 999px;
+  vertical-align: middle; white-space: nowrap;
+  cursor: pointer; transition: opacity 0.15s;
 }
-.agent-final-body :deep(.agent-ref:hover) {
-  background: rgba(37, 99, 235, 0.22);
-  text-decoration: underline;
+.agent-final-body :deep(.agent-ref:hover) { opacity: 0.72; text-decoration: none; }
+.agent-final-body :deep(.agent-ref--event) {
+  background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0;
+}
+.agent-final-body :deep(.agent-ref--article) {
+  background: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe;
 }
 
 .agent-final-abort {
