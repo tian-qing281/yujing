@@ -12,7 +12,7 @@
 
 | 维度 | 传统 RAG | 本系统 Tool-Calling Agent |
 |:---|:---|:---|
-| 能力边界 | 固定：retrieve → stuff → generate | 开放：8 个原子工具任意组合 |
+| 能力边界 | 固定：retrieve → stuff → generate | 开放：9 个原子工具任意组合 |
 | 调用轮数 | 1 轮 LLM | 2-8 轮（自主决定） |
 | 可解释性 | 黑盒拼接 | 每步 JSON 可审计（`llm_thinking / tool_call / tool_result`） |
 | 防幻觉 | 仅提示 "based on context" | Tool 结果附 `_id` / `_type`，final 必须 `event#N` 绑定 |
@@ -47,7 +47,7 @@ class ToolSpec:
 
 `ToolRegistry.register(spec)` 幂等注册；`to_openai_functions()` 自动把 `ToolSpec` 列表编译为 OpenAI `tools=[...]` 数组格式交给 DeepSeek。
 
-### 2.2 当前 8 个原子工具
+### 2.2 当前 9 个原子工具
 
 | 工具名 | 语义能力 | 关键参数 | 底层实现 |
 |:---|:---|:---|:---|
@@ -59,6 +59,7 @@ class ToolSpec:
 | `semantic_search_articles` | 向量语义搜索 | `q / limit / source_id` | 双阶段 Meili seed → BGE kNN |
 | `list_hot_platforms` | 多平台热榜快照 | `time_range_hours / top_events_per_platform` | `source_id` group by + per-platform top |
 | `get_morning_brief` | 当日早报内容直取 | 无 | 只读缓存，cache miss 返回 hint |
+| `rank_events_by_sentiment` | 按情绪占比排序 Top-K 事件 | `event_ids / top_k / sentiment_type` | Counter 聚合 + 多事件情绪比较排序 |
 
 ### 2.3 工具设计约束（所有工具必守）
 
