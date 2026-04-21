@@ -144,6 +144,7 @@
 
 <script setup>
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
+import { buildApiUrl } from "../config/api";
 
 const props = defineProps({
   item: { type: Object, default: null },
@@ -268,7 +269,7 @@ const fetchAiSummary = async () => {
   const controller = new AbortController();
   aiSummaryAbort = controller;
   try {
-    const res = await fetch(`http://localhost:8000/api/articles/${article.id}/analyze`, { signal: controller.signal });
+    const res = await fetch(buildApiUrl(`/api/articles/${article.id}/analyze`), { signal: controller.signal });
     if (!res.ok || !res.body) return;
     const reader = res.body.getReader();
     const decoder = new TextDecoder();

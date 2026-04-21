@@ -1,5 +1,6 @@
 <script setup>
 import { computed, defineAsyncComponent, nextTick, onMounted, ref, watch } from "vue";
+import { buildApiUrl } from "./config/api";
 import { transformToHDS } from "./utils/dataAdapter";
 import AIConsultant from "./components/AIConsultant.vue";
 import AnalysisModal from "./components/AnalysisModal.vue";
@@ -174,7 +175,7 @@ const fetchArticles = async (force = false) => {
   }
 
   try {
-    const url = `http://localhost:8000/api/articles${force ? "?force_refresh=true" : ""}`;
+    const url = buildApiUrl(`/api/articles${force ? "?force_refresh=true" : ""}`);
     const res = await fetch(url);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     if (fetchId !== currentFetchId) return;
@@ -237,7 +238,7 @@ const fetchEvents = async (force = false, query = eventQuery.value) => {
     if (activeTimeRange.value) params.set("time_range", activeTimeRange.value);
     if (activeSourceFilter.value) params.set("source_id", activeSourceFilter.value);
     const suffix = params.toString() ? `?${params.toString()}` : "";
-    const url = `http://localhost:8000/api/events${suffix}`;
+    const url = buildApiUrl(`/api/events${suffix}`);
     const res = await fetch(url);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const totalCount = parseInt(res.headers.get("X-Total-Count") || "0", 10);
@@ -270,7 +271,7 @@ const fetchTopics = async (force = false, query = topicQuery.value) => {
     if (activeTimeRange.value) params.set("time_range", activeTimeRange.value);
     if (activeSourceFilter.value) params.set("source_id", activeSourceFilter.value);
     const suffix = params.toString() ? `?${params.toString()}` : "";
-    const url = `http://localhost:8000/api/topics${suffix}`;
+    const url = buildApiUrl(`/api/topics${suffix}`);
     const res = await fetch(url);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
@@ -314,7 +315,7 @@ const fetchArticleSearch = async (query = eventQuery.value, page = articlePage.v
     if (activeSourceFilter.value) params.set("source_id", activeSourceFilter.value);
     params.set("limit", String(pageSize));
     params.set("offset", String((safePage - 1) * pageSize));
-    const res = await fetch(`http://localhost:8000/api/articles/search_page?${params.toString()}`);
+    const res = await fetch(buildApiUrl(`/api/articles/search_page?${params.toString()}`));
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     const rawItems = Array.isArray(data?.items) ? data.items : [];
@@ -362,7 +363,7 @@ const fetchEventSearchPage = async (query = eventQuery.value, page = aggregatedP
     if (activeSourceFilter.value) params.set("source_id", activeSourceFilter.value);
     params.set("limit", String(pageSize));
     params.set("offset", String((safePage - 1) * pageSize));
-    const res = await fetch(`http://localhost:8000/api/events/search_page?${params.toString()}`);
+    const res = await fetch(buildApiUrl(`/api/events/search_page?${params.toString()}`));
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     const nextItems = Array.isArray(data?.items) ? data.items : [];
@@ -425,7 +426,7 @@ const fetchUnifiedSearch = async (query = eventQuery.value, timeOverride = undef
     if (activeSourceFilter.value) params.set("source_id", activeSourceFilter.value);
     params.set("page", String(page));
 
-    const response = await fetch(`http://localhost:8000/api/search/unified?${params.toString()}`, {
+    const response = await fetch(buildApiUrl(`/api/search/unified?${params.toString()}`), {
       signal: unifiedSearchController.signal,
       headers: {
         "X-Requested-With": "XMLHttpRequest",
@@ -489,7 +490,7 @@ const fetchUnifiedSearch = async (query = eventQuery.value, timeOverride = undef
 
 const fetchCredentialStatus = async () => {
   try {
-    const response = await fetch("http://localhost:8000/api/credentials/status");
+    const response = await fetch(buildApiUrl("/api/credentials/status"));
     const data = await response.json();
     credentialStatus.value = data && typeof data === "object" ? data : {};
   } catch (error) {
@@ -537,7 +538,7 @@ const handleCredentialSubmit = async (payload) => {
   credentialFeedback.value = { type: "", text: "" };
 
   try {
-    const response = await fetch(`http://localhost:8000/api/credentials/${sourceId}`, {
+    const response = await fetch(buildApiUrl(`/api/credentials/${sourceId}`), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -671,7 +672,7 @@ const pollSyncStatus = async () => {
     return;
   }
   try {
-    const res = await fetch("http://localhost:8000/api/sync/status");
+    const res = await fetch(buildApiUrl("/api/sync/status"));
     if (!res.ok) throw new Error("Status API failure");
     const data = await res.json();
     
@@ -1094,7 +1095,7 @@ const openEventDetail = async (item, options = {}) => {
   }
 
   try {
-    const response = await fetch(`http://localhost:8000/api/events/${item.id}`);
+    const response = await fetch(buildApiUrl(`/api/events/${item.id}`));
     const data = await response.json();
     
     eventDetail.value = data?.id ? data : null;
@@ -1109,7 +1110,7 @@ const openTopicDetail = async (item, options = {}) => {
   }
 
   try {
-    const response = await fetch(`http://localhost:8000/api/topics/${item.id}`);
+    const response = await fetch(buildApiUrl(`/api/topics/${item.id}`));
     const data = await response.json();
     
     // Simplification: skip TopicModal if there's only 1 target Event
@@ -1212,7 +1213,7 @@ const triggerAI = async (force = false) => {
   statusMsg.value = "正在从全站镜像同步分析数据...";
 
   try {
-    const url = `http://localhost:8000/api/articles/${articleId}/analyze${force ? "?force_refresh=true" : ""}`;
+    const url = buildApiUrl(`/api/articles/${articleId}/analyze${force ? "?force_refresh=true" : ""}`);
     const response = await fetch(url);
     const reader = response.body.getReader();
     const decoder = new TextDecoder();

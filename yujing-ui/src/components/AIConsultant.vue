@@ -280,6 +280,7 @@
 
 <script setup>
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
+import { buildApiUrl } from "../config/api";
 import html2canvas from "html2canvas";
 import AgentTrace from "./AgentTrace.vue";
 import CompareDashboard from "./CompareDashboard.vue";
@@ -288,8 +289,8 @@ import CompareDashboard from "./CompareDashboard.vue";
 // 时会出现一次"空会话"列表，属于预期；旧历史如需保留，可手动 localStorage
 // 改名。考虑到这是本地开发痕迹，不做运行时迁移以降低代码复杂度。
 const STORAGE_KEY = "yujing_mcp_sessions_v1";
-const API_URL = "http://localhost:8000/api/mcp/ask";
-const AGENT_API_URL = "http://localhost:8000/api/agent/chat";
+const API_URL = buildApiUrl("/api/mcp/ask");
+const AGENT_API_URL = buildApiUrl("/api/agent/chat");
 
 const props = defineProps({
   sourceRegistry: { type: Array, default: () => [] },
@@ -344,7 +345,7 @@ const BRIEF_POLL_INTERVAL_MS = 3000; // 工业级轮询频率
 // GET /status 轮询，直到 has_brief=true。全程不 hold 长连接，不 push 任何东西。
 const triggerMorningBrief = async () => {
   try {
-    const resp = await fetch("http://localhost:8000/api/ai/morning_brief/trigger", {
+    const resp = await fetch(buildApiUrl("/api/ai/morning_brief/trigger"), {
       method: "POST",
     });
     if (!resp.ok) return { status: "error" };
@@ -356,7 +357,7 @@ const triggerMorningBrief = async () => {
 
 const checkMorningBrief = async () => {
   try {
-    const res = await fetch("http://localhost:8000/api/ai/morning_brief/status");
+    const res = await fetch(buildApiUrl("/api/ai/morning_brief/status"));
     const data = await res.json();
     if (data.has_brief) {
       briefStatus.value = "ready";
@@ -397,7 +398,7 @@ let alertPollTimer = null;
 
 const fetchAlerts = async () => {
   try {
-    const res = await fetch("http://localhost:8000/api/ai/alerts");
+    const res = await fetch(buildApiUrl("/api/ai/alerts"));
     const data = await res.json();
     alerts.value = data.alerts || [];
   } catch {
@@ -407,12 +408,12 @@ const fetchAlerts = async () => {
 
 const dismissAlert = async (id) => {
   alerts.value = alerts.value.filter(a => a.id !== id);
-  try { await fetch(`http://localhost:8000/api/ai/alerts/dismiss?alert_id=${id}`, { method: "POST" }); } catch {}
+  try { await fetch(buildApiUrl(`/api/ai/alerts/dismiss?alert_id=${id}`), { method: "POST" }); } catch {}
 };
 
 const clearAlerts = async () => {
   alerts.value = [];
-  try { await fetch("http://localhost:8000/api/ai/alerts/clear", { method: "POST" }); } catch {}
+  try { await fetch(buildApiUrl("/api/ai/alerts/clear"), { method: "POST" }); } catch {}
 };
 
 const openAlertDetail = (alert) => {
@@ -435,7 +436,7 @@ const generateBriefViaSSE = async (session) => {
   scrollToBottom();
 
   try {
-    const resp = await fetch("http://localhost:8000/api/ai/morning_brief");
+    const resp = await fetch(buildApiUrl("/api/ai/morning_brief"));
     if (!resp.ok || !resp.body) throw new Error(`HTTP ${resp.status}`);
     const reader = resp.body.getReader();
     const decoder = new TextDecoder();
@@ -478,7 +479,7 @@ const openBrief = async () => {
 
   // 1) 先读缓存（避免重复 LLM 请求）
   try {
-    const res = await fetch("http://localhost:8000/api/ai/morning_brief/content");
+    const res = await fetch(buildApiUrl("/api/ai/morning_brief/content"));
     const data = await res.json();
     if (data.ok && data.content) {
       session.messages.push({ role: "user", content: "查看今日舆情早报" });
@@ -497,7 +498,7 @@ const openBrief = async () => {
 };
 
 const exportBriefPdf = () => {
-  window.open("http://localhost:8000/api/ai/morning_brief/pdf", "_blank");
+  window.open(buildApiUrl("/api/ai/morning_brief/pdf"), "_blank");
 };
 
 // 对含可视化（如对比仪表盘）的消息，用 html2canvas 截取 DOM 并嵌入 PDF
@@ -551,7 +552,7 @@ const exportMessagePdf = async (msg, msgIndex) => {
       const dataUrl = await captureDashboardImage(msgIndex);
       if (dataUrl) images.push(dataUrl);
     }
-    const res = await fetch("http://localhost:8000/api/ai/export_pdf", {
+    const res = await fetch(buildApiUrl("/api/ai/export_pdf"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

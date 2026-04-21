@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch } from "vue";
+import { buildApiUrl } from "../config/api";
 import { marked } from "marked";
 
 const topicAnalysisStore = new Map();
@@ -73,7 +74,7 @@ const ensureTopicAnalysis = (topicId) => {
   });
 
   closeTopicAnalysisStream(topicId);
-  const apiUrl = `http://localhost:8000/api/topics/${topicId}/analyze`;
+  const apiUrl = buildApiUrl(`/api/topics/${topicId}/analyze`);
   const eventSource = new EventSource(apiUrl);
   record.eventSource = eventSource;
 
@@ -174,7 +175,7 @@ const ensureEventArticles = async (event) => {
 
   isFetchingSub.value = event.id;
   try {
-    const res = await fetch(`http://localhost:8000/api/events/${event.id}`);
+    const res = await fetch(buildApiUrl(`/api/events/${event.id}`));
     const data = await res.json();
     eventArticlesCache.value[event.id] = data.related_articles || [];
   } catch (e) {
