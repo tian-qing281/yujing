@@ -65,6 +65,11 @@ def extract_tags(
         normalized = word.strip()
         if len(normalized) < 2 or normalized.lower() in _STOP_WORDS:
             continue
+        # 排除纯符号/标点 token（如 ## / ... 等 markdown 碎片）及纯数字
+        if not any(c.isalnum() or '\u4e00' <= c <= '\u9fff' for c in normalized):
+            continue
+        if normalized.isdigit():
+            continue
         frequencies[(normalized, flag)] = frequencies.get((normalized, flag), 0.0) + 1.0
 
     total = sum(frequencies.values()) or 1.0
@@ -94,6 +99,11 @@ def textrank(
     for word, flag in _iter_terms(text, allowPOS):
         normalized = word.strip()
         if len(normalized) < 2 or normalized.lower() in _STOP_WORDS:
+            continue
+        # 排除纯符号/标点 token（如 ## / ... 等 markdown 碎片）及纯数字
+        if not any(c.isalnum() or '\u4e00' <= c <= '\u9fff' for c in normalized):
+            continue
+        if normalized.isdigit():
             continue
         candidate_terms.append((normalized, flag))
 

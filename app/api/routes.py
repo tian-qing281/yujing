@@ -2128,7 +2128,22 @@ def get_word_frequencies(title: str, markdown_content: str) -> List[List]:
     from app.keyword_extraction import extract_tags, jieba, textrank
 
     try:
-        text_content = re.sub(r"<[^>]+>", "", f"{title} {markdown_content}")
+        # JSON_STREAM_LIST 格式（微博/知乎结构化内容）：提取所有字段的值拼成纯文本
+        # 只丢弃 JSON key 名本身（防止 author/time/html 等 key 名出现在词云）
+        raw = markdown_content or ""
+        if raw.startswith("JSON_STREAM_LIST:"):
+            try:
+                items = json.loads(raw[len("JSON_STREAM_LIST:"):])
+                text_parts = []
+                for item in items if isinstance(items, list) else []:
+                    for val in (item.values() if isinstance(item, dict) else []):
+                        if isinstance(val, str):
+                            text_parts.append(val)
+                raw = " ".join(text_parts)
+            except Exception:
+                # JSON 解析失败（如被截断）：regex 提取所有字符串值，跳过 key 名
+                raw = " ".join(re.findall(r'(?<=["\'])[^"\']{4,}(?=["\'])', raw[len("JSON_STREAM_LIST:"):][:30000]))
+        text_content = re.sub(r"<[^>]+>", "", f"{title} {raw}")
         stopwords = {
             "已经",
             "我们",
@@ -2155,6 +2170,7 @@ def get_word_frequencies(title: str, markdown_content: str) -> List[List]:
         for word, weight in tags_tfidf + tags_rank:
             if len(word) < 2 or word in stopwords:
                 continue
+            
             unique_map[word] = max(unique_map.get(word, 0), weight)
 
         if not unique_map:
@@ -2271,7 +2287,7 @@ async def analyze_article(article_id: int, force_refresh: bool = False, db: Sess
                     # 并行执行本地 NLP 特征提取（不阻塞 LLM 启动）
                     feature_started_at = time.perf_counter()
                     wordcloud, emotions = await asyncio.gather(
-                        asyncio.to_thread(get_word_frequencies, article.title, markdown_content[:6000]),
+                        asyncio.to_thread(get_word_frequencies, article.title, markdown_content),
                         asyncio.to_thread(emotion_engine.analyze, markdown_content[:4000])
                     )
                     print(f"[{datetime.now().strftime('%H:%M:%S')}] [ANALYZE] article={article_id} features_ready={time.perf_counter() - feature_started_at:.2f}s")

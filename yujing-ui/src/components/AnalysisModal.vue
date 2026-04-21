@@ -361,7 +361,9 @@ const renderCloud = (data) => {
         },
         series: [{
           type: 'radar',
+          name: '关键词频', 
           data: [{
+            name: '关键词频', 
             value: topKw.map(k => k.value),
             areaStyle: { color: 'rgba(59,130,246,0.15)' },
             lineStyle: { color: '#3b82f6', width: 2 },
