@@ -3083,10 +3083,10 @@ def _build_pdf(title: str, sections: list[dict], images: Optional[list[str]] = N
     pdf.set_auto_page_break(auto=True, margin=20)
     pdf.add_page()
 
-    # 注册中文字体（黑体 simhei）。同时注册 I/BI 变体（复用同一 TTF），
+    # 注册中文字体（微软雅黑）。同时注册 I/BI 变体（复用常规/粗体字重），
     # 否则启用 markdown=True 时 fpdf2 切换到未注册字体会抛 FPDFException。
-    font_path = "C:/Windows/Fonts/simhei.ttf"
-    bold_path = "C:/Windows/Fonts/simhei.ttf"
+    font_path = "C:/Windows/Fonts/msyh.ttc"
+    bold_path = "C:/Windows/Fonts/msyhbd.ttc"
     pdf.add_font("cjk", "", font_path)
     pdf.add_font("cjk", "B", bold_path)
     pdf.add_font("cjk", "I", font_path)
