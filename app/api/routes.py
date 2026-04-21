@@ -2997,7 +2997,7 @@ def _render_markdown_line_with_bold(pdf, line: str, base_size: int, line_h: floa
         if not seg:
             continue
         style = "B" if idx % 2 == 1 else ""
-        pdf.set_font("msyh", style, base_size)
+        pdf.set_font("cjk", style, base_size)
         # write() 自动换行、保持光标在行内；最后 ln() 结束
         pdf.write(line_h, seg)
     pdf.ln(line_h)
@@ -3046,16 +3046,16 @@ def _render_markdown_body(pdf, body: str, base_size: int = 10):
 
         # 标题：#/##/###（去掉 # 和可能残留的 *）
         if stripped.startswith("### "):
-            pdf.set_font("msyh", "B", base_size + 1)
+            pdf.set_font("cjk", "B", base_size + 1)
             pdf.multi_cell(0, 7, stripped[4:].strip(" *"))
             continue
         if stripped.startswith("## "):
-            pdf.set_font("msyh", "B", base_size + 3)
+            pdf.set_font("cjk", "B", base_size + 3)
             pdf.multi_cell(0, 9, stripped[3:].strip(" *"))
             pdf.ln(1)
             continue
         if stripped.startswith("# "):
-            pdf.set_font("msyh", "B", base_size + 5)
+            pdf.set_font("cjk", "B", base_size + 5)
             pdf.multi_cell(0, 10, stripped[2:].strip(" *"))
             pdf.ln(2)
             continue
@@ -3083,20 +3083,20 @@ def _build_pdf(title: str, sections: list[dict], images: Optional[list[str]] = N
     pdf.set_auto_page_break(auto=True, margin=20)
     pdf.add_page()
 
-    # 注册中文字体（微软雅黑）。同时注册 I/BI 变体（复用常规/粗体字重），
+    # 注册中文字体（黑体 simhei）。同时注册 I/BI 变体（复用同一 TTF），
     # 否则启用 markdown=True 时 fpdf2 切换到未注册字体会抛 FPDFException。
-    font_path = "C:/Windows/Fonts/msyh.ttc"
-    bold_path = "C:/Windows/Fonts/msyhbd.ttc"
-    pdf.add_font("msyh", "", font_path)
-    pdf.add_font("msyh", "B", bold_path)
-    pdf.add_font("msyh", "I", font_path)
-    pdf.add_font("msyh", "BI", bold_path)
-    pdf.set_font("msyh", "", 10)
+    font_path = "C:/Windows/Fonts/simhei.ttf"
+    bold_path = "C:/Windows/Fonts/simhei.ttf"
+    pdf.add_font("cjk", "", font_path)
+    pdf.add_font("cjk", "B", bold_path)
+    pdf.add_font("cjk", "I", font_path)
+    pdf.add_font("cjk", "BI", bold_path)
+    pdf.set_font("cjk", "", 10)
 
     # 标题
-    pdf.set_font("msyh", "B", 18)
+    pdf.set_font("cjk", "B", 18)
     pdf.cell(0, 14, title, new_x="LMARGIN", new_y="NEXT", align="C")
-    pdf.set_font("msyh", "", 9)
+    pdf.set_font("cjk", "", 9)
     pdf.set_text_color(130, 130, 130)
     pdf.cell(0, 8, f"舆镜 YuJing · {datetime.now().strftime('%Y-%m-%d %H:%M')}", new_x="LMARGIN", new_y="NEXT", align="C")
     pdf.set_text_color(0, 0, 0)
@@ -3120,7 +3120,7 @@ def _build_pdf(title: str, sections: list[dict], images: Optional[list[str]] = N
 
     for section in sections:
         if section.get("heading"):
-            pdf.set_font("msyh", "B", 13)
+            pdf.set_font("cjk", "B", 13)
             pdf.cell(0, 10, section["heading"], new_x="LMARGIN", new_y="NEXT")
             pdf.ln(2)
         if section.get("body"):
