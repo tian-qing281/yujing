@@ -184,6 +184,17 @@
 - [x] LLM 流式推理（后端 stream + 前端实时展示）
 - [x] 全面文档更新（项目文档/部署文档/核心原理文档/phase2计划）
 
+### W5 补丁轮（2026-04-22）· Agent 能力融合 + 稳定化
+- [x] **新增 Agent 工具 `compare_platforms`**（第 10 个）：把 `/api/ai/compare` 封装为原子能力，复用 `_build_compare_metrics` 保持口径一致；前端 SSE `tool_result` 自动喂给 `CompareDashboard`
+- [x] **前端对话统一走 Agent**：删除 `sendMessage` 对"对比 X 和 Y"的正则拦截 + 旁路 SSE，所有消息 `sendAgentMessage`
+- [x] **事件排序稳定化**：四处 ORDER BY 尾部补 `id DESC` tiebreaker；前端 `scheduleEventHubHydration` 删除 `fetchEvents` 并发 → 修复 Ctrl+F5 闪一下换顺序
+- [x] **前端 `compareEvents`** 从浮点加权公式改为分级整数比较（article_count > platform_count > id），避免 heat_score rebuild 浮点漂移
+- [x] **`CompareDashboard` 布局修复**：grid 子项 `min-width:0 + overflow:hidden`、代表情报 `.cmp-rep-title` `flex:1 + min-width:0` → 修复知乎长标题撑宽右列
+- [x] **`CompareDashboard` 模板顺序**：挪到 `AgentTrace` 之后、`agent_final` 之前 → 形成"思考 → 数据 → 结论"的阅读流
+- [x] **`GET /api/articles/{id}`** 轻量接口 + 前端 `openDetail` async fetch fallback + `AnalysisModal` 空 URL 优雅降级
+- [x] **关键词扩展**：`_extract_display_keywords` 新增 ai_summary / content[:500] 语料源，topK=8 权重=1
+- [x] **Agent 单测扩到 61 个**（+TestComparePlatforms 4 个）
+
 ## 六、W6 · 收官
 
 - Demo 视频（5 场景 · 3 分钟）

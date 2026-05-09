@@ -1,5 +1,7 @@
 from datetime import datetime
 
+import httpx
+
 from app.crawler.sources.base import BaseSource
 
 
@@ -23,7 +25,20 @@ class ZhihuHotQuestion(BaseSource):
 
         client = self.get_client(timeout=10.0, follow_redirects=True)
         response = await client.get(url, headers=headers)
-        response.raise_for_status()
+        # 友好降级：知乎 Cookie 失效 / 未登录时返回 401/403，
+        # 不再抩异常造成后端日志震荡，而是打印明确提示 + 返回空列表，
+        # 由上层 base.run_and_save 走「热榜不足」路径，不影响其他平台。
+        if response.status_code in (401, 403):
+            print(
+                f"[凭据失效] 知乎热榜返回 HTTP {response.status_code}："
+                "Cookie 已失效或未登录，请在「凭据资产配置」中更新 zhihu_hot_question 的 Cookie。"
+            )
+            return []
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            print(f"[知乎热榜] HTTP {exc.response.status_code}，跳过本轮拓取。")
+            return []
         data = response.json()
 
         result = []

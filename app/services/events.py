@@ -291,6 +291,10 @@ def _extract_tokens(article: Article) -> List[str]:
 
 def _extract_display_keywords(articles: List[Article]) -> List[str]:
     counter = Counter()
+    # 文档频次：记录每个候选词出现在多少篇 articles 中，
+    # 后续用于过滤"只来自单篇错聚文章的污染词"（如 UFO 事件混入"汉坦病毒"）。
+    doc_freq: Counter = Counter()
+    current_article_seen: set = set()
 
     def push(token: str, weight: int = 1):
         normalized = _normalize_title(token)
@@ -320,6 +324,10 @@ def _extract_display_keywords(articles: List[Article]) -> List[str]:
         if any(fragment in normalized for fragment in DISPLAY_KEYWORD_FRAGMENTS):
             return
         counter[normalized] += weight
+        # 文档频次只在每篇文章首次出现时累加 1（去重权重影响）
+        if normalized not in current_article_seen:
+            current_article_seen.add(normalized)
+            doc_freq[normalized] += 1
 
     def push_entities(text: str, weight: int = 4):
         lowered = (text or "").lower()
@@ -332,15 +340,29 @@ def _extract_display_keywords(articles: List[Article]) -> List[str]:
             push(phrase, 5)
 
     for article in articles:
+        # 重置当前文章的在档去重集，让 doc_freq 能准确反映「该词出现在多少篇文章」。
+        current_article_seen.clear()
         title = article.title or ""
         extra = _safe_json_loads(article.extra_info)
         seed = " ".join(str(extra.get(key, "")) for key in ("excerpt", "desc") if extra.get(key))
+        # 补充语料：短标题事件从 title + excerpt 提不出足够关键词，
+        # 引入 ai_summary（优先，精炼无噪）或 content 前 500 字（兜底）。
+        # 权重给 1 —— 低于 title(5)/title-seg(4)/seed(2)，确保只起"补位"作用。
+        supplement = ""
+        if getattr(article, "ai_summary", None):
+            supplement = article.ai_summary[:500]
+        elif getattr(article, "content", None):
+            supplement = article.content[:500]
+
         push_entities(title)
         push_quoted_phrases(title)
         for tag in extract_tags(title, topK=6):
             push(tag, 5)
         for tag in extract_tags(seed, topK=4):
             push(tag, 2)
+        if supplement:
+            for tag in extract_tags(supplement, topK=8):
+                push(tag, 1)
 
         for word, flag in pseg.cut(title):
             token = (word or "").strip()
@@ -361,15 +383,31 @@ def _extract_display_keywords(articles: List[Article]) -> List[str]:
 
     cleaned = []
     seen = set()
-    for token, _ in counter.most_common(16):
+    # 文档频次门槛：当事件包含 ≥4 篇文章时，要求关键词至少出现在 2 篇文章中，
+    # 用于过滤「单篇错聚文章贡献的污染词」（如 UFO 事件混入的『汉坦病毒/疫苗』）。
+    # 小事件（<4 篇）样本太少，跳过该约束以避免无词可用。
+    min_doc_freq = 2 if len(articles) >= 4 else 1
+    # 返回 Top 8 关键词：前端关键词热度图最多展示 6 个，多给一些让 LLM / 图表有备用量。
+    for token, _ in counter.most_common(40):
         if token in seen:
             continue
-        if any(token != other and token in other for other, _ in counter.most_common(12) if len(other) > len(token)):
+        if doc_freq.get(token, 0) < min_doc_freq:
+            continue
+        if any(token != other and token in other for other, _ in counter.most_common(24) if len(other) > len(token)):
             continue
         seen.add(token)
         cleaned.append(token)
-        if len(cleaned) >= 3:
+        if len(cleaned) >= 8:
             break
+    # 兜底：若过滤后不足 3 个（极端情况），放宽 doc_freq 约束补回，保证 UI 不空白。
+    if len(cleaned) < 3:
+        for token, _ in counter.most_common(40):
+            if token in seen:
+                continue
+            seen.add(token)
+            cleaned.append(token)
+            if len(cleaned) >= 8:
+                break
     return cleaned
 
 
@@ -810,9 +848,12 @@ def search_events(db: Session, query: str, limit: int = 80, time_range: int = No
         return q_obj.count()
 
     if not query:
+        # 尾部加 Event.id.desc() 作稳定 tiebreaker：
+        # latest_article_time + article_count 双字段相等的事件 SQLite 返回顺序不确定，
+        # 会导致 Ctrl+F5 后同一批事件前端接收顺序变化。
         return (
             q_obj
-            .order_by(Event.latest_article_time.desc(), Event.article_count.desc())
+            .order_by(Event.latest_article_time.desc(), Event.article_count.desc(), Event.id.desc())
             .limit(limit)
             .all()
         )
@@ -835,7 +876,7 @@ def search_events(db: Session, query: str, limit: int = 80, time_range: int = No
     if not terms and not normalized_query:
         return (
             db.query(Event)
-            .order_by(Event.latest_article_time.desc(), Event.article_count.desc())
+            .order_by(Event.latest_article_time.desc(), Event.article_count.desc(), Event.id.desc())
             .limit(limit)
             .all()
         )

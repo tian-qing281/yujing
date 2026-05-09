@@ -22,7 +22,7 @@ def _cls_signed_params(extra: dict | None = None) -> dict:
 class ClsTelegraph(BaseSource):
     source_id = "cls_telegraph"
     interval_seconds = 180
-    default_item_limit = 30
+    default_item_limit = 50
     fetch_detail_content = True
 
     async def fetch(self):

@@ -34,6 +34,15 @@ EXCLUDE_EXTS = {'.pyc', '.bak', '.log'}
 EXCLUDE_FILES = {
     'AGENTS.md', 'CLAUDE.md', 'routes.py.bak',
     'yujing.db-shm', 'yujing.db-wal',
+    # scripts/ 下的调试与一次性分析脚本（非交付物）
+    'check_full_topk_distribution.py',
+    'check_p95.py',
+    'cosine_stats.py',
+    'diagnose_event.py',
+    'full_vectorize.py',
+    'otsu_threshold.py',
+    'threshold_calibration.py',
+    'verify_annotation_consistency.py',
 }
 
 def should_exclude(rel_parts, filename):

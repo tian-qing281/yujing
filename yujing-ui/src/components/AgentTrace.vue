@@ -291,6 +291,8 @@ function stepIcon(step) {
     list_hot_platforms: "ri:bar-chart-box-line",
     analyze_event_sentiment: "ri:emotion-line",
     compare_events: "ri:scales-3-line",
+    compare_platforms: "mdi:scale-balance",
+    rank_events_by_sentiment: "ri:filter-3-line",
   };
   return iconMap[step.toolName] || "ri:tools-line";
 }

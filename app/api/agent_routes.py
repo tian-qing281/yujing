@@ -19,7 +19,7 @@ SSE 事件格式（每条 `data: <json>\n\n`）：
 2. 用 `asyncio.Queue` 做桥接：Loop 线程往 queue 塞事件，
    SSE generator 从 queue 里取并 yield
 3. 工具注册 lazy bootstrap：首次请求时 `import app.services.agent.tools`
-   触发 8 个 `register(SPEC)` 副作用（side-effect import 注册模式）
+   触发 10 个 `register(SPEC)` 副作用（side-effect import 注册模式）
 4. 输出序列化：`tool_result.output` 可能含 datetime，统一 `default=str`
 """
 

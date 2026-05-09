@@ -106,6 +106,22 @@ button:disabled {
   border: 2px solid rgba(248, 250, 252, 0.86);
 }
 
+/* 全局窄屏兜底：避免 chip / badge / 按钮在 ≤768px 触发逐字换行（伪「文字竖排」） */
+@media (max-width: 768px) {
+  .btn,
+  .badge,
+  .prompt-chip,
+  .agent-preset-card span,
+  .header-kicker,
+  .breadcrumb {
+    white-space: nowrap;
+  }
+  .btn,
+  .badge {
+    min-width: max-content;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

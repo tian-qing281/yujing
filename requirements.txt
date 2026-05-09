@@ -19,3 +19,4 @@ jieba
 setuptools<81
 scikit-learn
 fpdf2
+modelscope

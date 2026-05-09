@@ -12,7 +12,7 @@
 
 | 维度 | 传统 RAG | 本系统 Tool-Calling Agent |
 |:---|:---|:---|
-| 能力边界 | 固定：retrieve → stuff → generate | 开放：9 个原子工具任意组合 |
+| 能力边界 | 固定：retrieve → stuff → generate | 开放：10 个原子工具任意组合 |
 | 调用轮数 | 1 轮 LLM | 2-8 轮（自主决定） |
 | 可解释性 | 黑盒拼接 | 每步 JSON 可审计（`llm_thinking / tool_call / tool_result`） |
 | 防幻觉 | 仅提示 "based on context" | Tool 结果附 `_id` / `_type`，final 必须 `event#N` 绑定 |
@@ -47,13 +47,14 @@ class ToolSpec:
 
 `ToolRegistry.register(spec)` 幂等注册；`to_openai_functions()` 自动把 `ToolSpec` 列表编译为 OpenAI `tools=[...]` 数组格式交给 DeepSeek。
 
-### 2.2 当前 9 个原子工具
+### 2.2 当前 10 个原子工具
 
 | 工具名 | 语义能力 | 关键参数 | 底层实现 |
 |:---|:---|:---|:---|
 | `search_events` | 关键词 + 时间窗口检索事件 | `q / time_range_hours / source_id / limit` | `services.events.search_events` |
 | `get_event_detail` | 事件详情 + TopK 关联文章 | `event_id / top_articles` | 直读 `/api/events/{id}` 的 DB 查询，**只读不触 BERT 补全** |
 | `compare_events` | 2-4 事件并列指标对比 | `event_ids` | 关键词交并集 + max heat 摘要 |
+| `compare_platforms` | 两平台舆情概况对比（情报规模 / 情绪 / 24h 变化 / 代表情报 / 7 日曲线） | `platform_a / platform_b / topic?` | 复用 `_build_compare_metrics` + `_resolve_compare_source`；输出可直接驱动前端 `CompareDashboard` |
 | `analyze_event_sentiment` | 事件情绪时间桶序列 | `event_id / bucket_hours ∈ {6,12,24}` | Counter 聚合 + 时间桶切片 |
 | `search_articles` | 关键词文章搜索 | `q / time_range_hours / source_id / limit` | Meili 优先 / DB LIKE 降级 |
 | `semantic_search_articles` | 向量语义搜索 | `q / limit / source_id` | 双阶段 Meili seed → BGE kNN |
@@ -61,12 +62,21 @@ class ToolSpec:
 | `get_morning_brief` | 当日早报内容直取 | 无 | 只读缓存，cache miss 返回 hint |
 | `rank_events_by_sentiment` | 按情绪占比排序 Top-K 事件 | `event_ids / top_k / sentiment_type` | Counter 聚合 + 多事件情绪比较排序 |
 
+> **`compare_platforms` 设计说明**（2026-04-22 新增）
+>
+> 此工具是"把 `/api/ai/compare` 旧端点封装为 Agent 能力"的产物。之前前端用正则拦截`对比微博和知乎`触发旁路 SSE，违反"所有对话走统一 Agent 链路"的原则。抽成 Agent tool 后：
+> - 前端 `sendMessage` 删除 `parseCompareIntent` 前置分流，统一 `sendAgentMessage`
+> - Agent SSE 的 `tool_result` 事件里若 `name === 'compare_platforms'`，前端直接提取 `output.a` / `output.b` 填入 `msg.compare_metrics` → `CompareDashboard` 渲染
+> - Tool 的 `output` 额外带 `comparison_summary`（`winner_by_articles / more_positive / more_negative`）预先算好，降低 LLM 做数值比较时出错的概率
+> - 渲染顺序：`AgentTrace (思考链) → CompareDashboard (tool 结果) → 最终研判 (LLM 文字)`，形成"思考 → 数据 → 结论"的自然阅读流（而不是之前"结果先弹出、下面才看到 trace"的断层观感）
+
 ### 2.3 工具设计约束（所有工具必守）
 
 1. **handler 输出每个 item 必带元字段** `_id / _type / _title`：final answer 的 `event#N` / `article#N` 引用靠这三个字段拼装。
 2. **超参数自动 clamp 不拒绝**：LLM 偶尔给出 `limit=50`（超上限 20）时 clamp 到 20 并继续执行，不浪费一整步让 LLM 自修复。
 3. **handler 内部不崩**：所有异常由 Loop 捕获成 `ToolResult(error=...)`，作为 observation 给 LLM 看；同一工具连续两次 error 才会触 `too_many_errors` 终止。
 4. **延迟 import 外部依赖**：`SessionLocal` / `meili` 在 handler 内部引用，避免启动期 import 污染 + 单测 `patch('app.database.SessionLocal')` 从源头生效。
+5. **禁止自引用**：Tool handler 不能再调 `/api/agent/chat`（禁止 Agent 嵌套 Agent）；`compare_platforms` 虽和 HTTP 端点 `/api/ai/compare` 指标口径一致，但直接复用底层 pure function (`_build_compare_metrics` / `_resolve_compare_source`)，不走 HTTP。
 
 ---
 
@@ -392,7 +402,7 @@ python scripts/eval_agent.py --summary-only
 本 Agent 不是独立于聚类算法的功能，而是构建在聚类产出之上：
 
 ```
-[底层] 爬虫采集 → BERTopic 事件聚合 → BERT 情绪分析
+[底层] 爬虫采集 → 语义事件聚类 → BERT 情绪分析
    ↑            ↑                    ↑
 [工具] search_events   get_event_detail   analyze_event_sentiment
    ↑
@@ -411,11 +421,11 @@ python scripts/eval_agent.py --summary-only
 
 ## 十、未来工作
 
-### 短期（W5）
+### 短期（W5）✅ 已完成
 
-1. **并发工具调用**：`loop.py` 把串行 `for tc in resp.tool_calls` 改成 `await asyncio.gather(...)`。DeepSeek V3 支持 `parallel_tool_calls`，实测可把延迟从 37s 降到 ~15s
-2. **聚合工具** `rank_events_by_sentiment / rank_events_by_heat` 解决 T4 类多跳问题
-3. **会话记忆**：`conversation_id` 参数已预留，加轻量 Redis / SQLite 会话表即可
+1. ~~**并发工具调用**~~：已实现 `ThreadPoolExecutor` 多工具并发执行，延迟从 37s 降至 ~26s
+2. ~~**聚合工具**~~：`rank_events_by_sentiment` 已注册为第 10 个原子工具
+3. ~~**会话记忆**~~：`history` 参数已实现多轮上下文传递
 
 ### 中期（W6）
 
@@ -441,7 +451,7 @@ python scripts/eval_agent.py --summary-only
   - `app/services/agent/loop.py` · Loop 主循环（~270 行）
   - `app/services/agent/registry.py` · 工具注册表
   - `app/services/agent/llm_adapter.py` · DeepSeek / LangChain 抽象层
-  - `app/services/agent/tools/*.py` · 8 个工具 handler
+  - `app/services/agent/tools/*.py` · 10 个工具 handler（含 `tool_compare_platforms.py`）
   - `app/api/agent_routes.py` · SSE / 阻塞双模式接口
   - `yujing-ui/src/components/AgentTrace.vue` · 前端调用链时间线
   - `yujing-ui/src/components/AIConsultant.vue` · 合并后的 AI 助手（含智能体模式）

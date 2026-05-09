@@ -8,7 +8,7 @@ from app.crawler.sources.base import BaseSource
 class ThePaperHotNews(BaseSource):
     source_id = "thepaper_hot"
     interval_seconds = 300
-    default_item_limit = 30
+    default_item_limit = 50
     fetch_detail_content = True
 
     async def fetch(self):

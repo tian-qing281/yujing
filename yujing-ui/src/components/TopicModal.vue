@@ -163,7 +163,35 @@ const formatTime = (value) => {
 };
 
 const renderMarkdown = (text) => {
-  return marked.parse(text || "");
+  let html = marked.parse(text || "");
+  // 把 <code>article#数字</code> 转成可点击的引用徽章
+  html = html.replace(
+    /<code>article#(\d+)<\/code>/g,
+    '<span class="ref-badge ref-article" data-type="article" data-id="$1">📰 文章&nbsp;#$1</span>'
+  );
+  html = html.replace(
+    /<code>event#(\d+)<\/code>/g,
+    '<span class="ref-badge ref-event" data-type="event" data-id="$1">🔗 事件&nbsp;#$1</span>'
+  );
+  return html;
+};
+
+const handleMarkdownClick = (e) => {
+  const badge = e.target.closest('.ref-badge');
+  if (!badge) return;
+  const type = badge.dataset.type;
+  const id = Number(badge.dataset.id);
+  if (!id) return;
+  if (type === 'article') {
+    // 在已缓存的事件关联文章中查找
+    for (const articles of Object.values(eventArticlesCache.value)) {
+      const found = articles.find(a => a.id === id);
+      if (found) { emit('open-article', found); return; }
+    }
+  } else if (type === 'event') {
+    const ev = props.topic?.related_events?.find(e => e.id === id);
+    if (ev) emit('open-event', ev);
+  }
 };
 
 const isSingleArticleEvent = (event) => Number(event?.article_count || 0) <= 1;
@@ -422,6 +450,7 @@ watch(
                   v-if="analysisText"
                   class="markdown-view"
                   v-html="renderMarkdown(analysisText)"
+                  @click="handleMarkdownClick"
                 ></div>
                 <div v-else-if="!analyzing" class="empty-hint">暂无研判快照，请等待生成...</div>
               </div>
@@ -787,6 +816,20 @@ watch(
   font-size: 16px; font-weight: 900; margin: 20px 0 10px; color: #0f172a;
 }
 .markdown-view :deep(p) { margin-bottom: 12px; }
+.markdown-view :deep(.ref-badge) {
+  display: inline-flex; align-items: center; gap: 3px;
+  padding: 1px 8px; border-radius: 999px;
+  font-size: 12px; font-weight: 600; cursor: pointer;
+  vertical-align: middle; white-space: nowrap;
+  transition: opacity 0.15s;
+}
+.markdown-view :deep(.ref-badge:hover) { opacity: 0.75; }
+.markdown-view :deep(.ref-article) {
+  background: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe;
+}
+.markdown-view :deep(.ref-event) {
+  background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0;
+}
 
 .load-more-box {
   padding: 16px;

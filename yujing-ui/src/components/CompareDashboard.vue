@@ -328,6 +328,10 @@ onBeforeUnmount(() => {
   background: #fff;
   position: relative;
   transition: border-color 0.15s ease;
+  /* Grid 子项默认 min-width:auto，内部长标题（代表情报）会撑破 1fr 列，
+     导致左右双列比例失衡（知乎问题通常比微博热搜标题更长）。 */
+  min-width: 0;
+  overflow: hidden;
 }
 .cmp-col.is-leading { border-color: rgba(59, 130, 246, 0.45); box-shadow: 0 6px 18px rgba(59, 130, 246, 0.1); }
 
@@ -396,12 +400,19 @@ onBeforeUnmount(() => {
   border-radius: 6px; cursor: pointer;
   transition: background 0.15s ease;
   font-size: 12px; line-height: 1.5;
+  /* li 本身也是 flex 容器，min-width:0 让内部 flex item 能够按 ellipsis 收缩。 */
+  min-width: 0;
 }
 .cmp-reps li:hover { background: #eff6ff; }
 .cmp-rep-src {
   flex-shrink: 0; font-weight: 700; color: #3b82f6; font-size: 11px;
 }
-.cmp-rep-title { color: #334155; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* flex:1 + min-width:0 是 ellipsis 在 flex 容器里生效的经典组合缺一不可。 */
+.cmp-rep-title {
+  flex: 1; min-width: 0;
+  color: #334155;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 
 .cmp-chart-wrap {
   margin-top: 14px; padding: 12px; border-radius: 10px;

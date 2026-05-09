@@ -15,10 +15,25 @@
             <h1 class="article-subject">{{ item.title }}</h1>
             <div class="article-meta-row">
                <p class="article-timestamp">更新于：{{ formatTime(item.fetch_time || item.pub_date) }}</p>
-               <a :href="preferredSourceUrl" target="_blank" class="premium-source-btn btn btn-outline">
+               <a
+                  v-if="preferredSourceUrl"
+                  :href="preferredSourceUrl"
+                  target="_blank"
+                  class="premium-source-btn btn btn-outline"
+               >
                   <iconify-icon icon="mdi:open-in-new" />
                   <span>访问网页原文</span>
                </a>
+               <button
+                  v-else
+                  type="button"
+                  class="premium-source-btn btn btn-outline"
+                  disabled
+                  title="该文章没有原文链接"
+               >
+                  <iconify-icon icon="mdi:link-off" />
+                  <span>暂无原文链接</span>
+               </button>
             </div>
           </div>
 
@@ -115,12 +130,27 @@
                 <p class="status-bright-text">{{ statusMsg }}</p>
               </div>
               
-              <div v-if="item.ai_summary" class="report-box card animate-slide-up">
+              <div v-if="item.ai_summary && !isCredentialError" class="report-box card animate-slide-up">
                   <div class="report-lead-tag">
                     <iconify-icon icon="mdi:text-box-search-outline" />
                     <span>AI 总结</span>
                   </div>
                   <div class="report-body">{{ item.ai_summary }}</div>
+              </div>
+
+              <!-- 凭据失效专用提示（后端返回以 ❌ 开头的错误信息） -->
+              <div v-else-if="isCredentialError" class="report-credential-error">
+                <iconify-icon icon="mdi:key-alert-outline" />
+                <p class="empty-title">目标平台凭据失效</p>
+                <p class="empty-hint">{{ credentialErrorMessage }}</p>
+                <p class="empty-hint">请前往侧边栏 <strong>「凭据资产配置」</strong> 更新对应平台的 Cookie 后重试。</p>
+              </div>
+
+              <!-- 空态：未触发分析时引导用户点击右上角"开始深度分析" -->
+              <div v-if="!item.ai_summary && !item.isAnalyzing" class="report-empty">
+                <iconify-icon icon="mdi:robot-outline" />
+                <p class="empty-title">尚未生成 AI 总结</p>
+                <p class="empty-hint">点击右上角 <strong>「开始深度分析」</strong> 生成本篇情报的 AI 研判与摘要。</p>
               </div>
             </div>
           </div>
@@ -152,6 +182,16 @@ let radarChart = null
 let renderAnimationFrame = null
 let renderDebounceTimer = null
 let lastRenderedCloudLength = -1
+
+// 凭据失效识别：后端 ai_summary 字段以 ❌ 开头或包含「凭据失效」字样时，认定为凭据错误
+const isCredentialError = computed(() => {
+  const txt = props.item?.ai_summary || ''
+  return typeof txt === 'string' && (txt.startsWith('❌') || txt.includes('凭据失效'))
+})
+const credentialErrorMessage = computed(() => {
+  const raw = (props.item?.ai_summary || '').replace(/^❌\s*\[?[^\]]*\]?\s*/, '').trim()
+  return raw || '后端尝试抓取正文时被目标站点拦截，常见原因为登录态过期。'
+})
 
 const hasVisualData = computed(() => {
   const hasCloud = props.item?.wordcloud && props.item.wordcloud.length > 0
@@ -225,6 +265,41 @@ const formatTime = (d) => {
   const hh = String(date.getHours()).padStart(2, "0");
   const mm = String(date.getMinutes()).padStart(2, "0");
   return `${y}-${m}-${day} ${hh}:${mm}`;
+}
+
+const renderSentimentChart = () => {
+  if (!sentimentChartRef.value || !window.echarts) return
+  if (sentimentChart) sentimentChart.dispose()
+  sentimentChart = window.echarts.init(sentimentChartRef.value)
+  const _colorMap = { '正面': '#10b981', '中性': '#64748b', '负面': '#ef4444' }
+  // 从 8 类 emotions 聚合为正/中/负 3 类
+  // 关注/惊讶→中性（围观类，无明确倾向）；质疑→负面（舆情语境下多为负光谱）
+  const emo = props.item?.emotions || []
+  const groups = [
+    { name: '正面', value: emo.filter(e => e.label === '喜悦').reduce((s, e) => s + e.value, 0), color: _colorMap['正面'] },
+    { name: '中性', value: emo.filter(e => ['中性', '关注', '惊讶'].includes(e.label)).reduce((s, e) => s + e.value, 0), color: _colorMap['中性'] },
+    { name: '负面', value: emo.filter(e => ['愤怒', '厌恶', '悲伤', '质疑'].includes(e.label)).reduce((s, e) => s + e.value, 0), color: _colorMap['负面'] },
+  ].filter(g => g.value > 0)
+  if (!groups.length) return
+  const dominant = groups.reduce((a, b) => a.value > b.value ? a : b)
+  sentimentChart.setOption({
+    tooltip: { trigger: 'item', formatter: '{b}: {d}%' },
+    legend: { show: false },
+    series: [{
+      type: 'pie',
+      radius: ['45%', '72%'],
+      center: ['50%', '50%'],
+      avoidLabelOverlap: true,
+      itemStyle: { borderRadius: 6, borderColor: '#fff', borderWidth: 3 },
+      label: { show: true, fontSize: 11, fontWeight: 800, color: '#334155', formatter: '{b}\n{d}%' },
+      emphasis: { label: { fontSize: 13, fontWeight: 900 }, itemStyle: { shadowBlur: 10, shadowColor: 'rgba(0,0,0,0.1)' } },
+      data: groups.map(g => ({ value: +(g.value * 100).toFixed(1), name: g.name, itemStyle: { color: g.color } }))
+    }],
+    graphic: [{
+      type: 'text', left: 'center', top: 'center',
+      style: { text: dominant.name, fontSize: 16, fontWeight: 900, fill: dominant.color, textAlign: 'center' }
+    }]
+  })
 }
 
 const renderCloud = (data) => {
@@ -302,44 +377,7 @@ const renderCloud = (data) => {
   lastRenderedCloudLength = normalizedWordcloud.value.length;
 
   // 舆情倾向环形图
-  if (sentimentChartRef.value && window.echarts) {
-    if (sentimentChart) sentimentChart.dispose()
-    sentimentChart = window.echarts.init(sentimentChartRef.value)
-    const emo = props.item.emotions || []
-    const groups = [
-      { name: '正面', value: emo.filter(e => ['喜悦'].includes(e.label)).reduce((s, e) => s + e.value, 0), color: '#10b981' },
-      { name: '负面', value: emo.filter(e => ['愤怒', '厌恶', '悲伤'].includes(e.label)).reduce((s, e) => s + e.value, 0), color: '#ef4444' },
-      { name: '中性', value: emo.filter(e => ['中性'].includes(e.label)).reduce((s, e) => s + e.value, 0), color: '#64748b' },
-      { name: '关注', value: emo.filter(e => ['关注', '惊讶', '质疑'].includes(e.label)).reduce((s, e) => s + e.value, 0), color: '#3b82f6' },
-    ].filter(g => g.value > 0)
-    const dominant = groups.length ? groups.reduce((a, b) => a.value > b.value ? a : b) : null
-    sentimentChart.setOption({
-      tooltip: { trigger: 'item', formatter: '{b}: {d}%' },
-      legend: { show: false },
-      series: [{
-        type: 'pie',
-        radius: ['45%', '72%'],
-        center: ['50%', '50%'],
-        avoidLabelOverlap: true,
-        itemStyle: { borderRadius: 6, borderColor: '#fff', borderWidth: 3 },
-        label: { show: true, fontSize: 11, fontWeight: 800, color: '#334155', formatter: '{b}\n{d}%' },
-        emphasis: { label: { fontSize: 13, fontWeight: 900 }, itemStyle: { shadowBlur: 10, shadowColor: 'rgba(0,0,0,0.1)' } },
-        data: groups.map(g => ({ value: +(g.value * 100).toFixed(1), name: g.name, itemStyle: { color: g.color } }))
-      }],
-      graphic: dominant ? [{
-        type: 'text',
-        left: 'center',
-        top: 'center',
-        style: {
-          text: dominant.name,
-          fontSize: 16,
-          fontWeight: 900,
-          fill: dominant.color,
-          textAlign: 'center'
-        }
-      }] : []
-    })
-  }
+  renderSentimentChart()
 
   // 核心实体雷达图
   if (keywordRadarRef.value && window.echarts) {
@@ -380,6 +418,13 @@ const renderCloud = (data) => {
 watch(() => props.item?.wordcloud, (newData) => {
   if (newData?.length > 0 && props.activeTab === 'visual' && newData.length !== lastRenderedCloudLength) {
     scheduleRender(() => renderCloud(newData))
+  }
+}, { deep: true })
+
+// 监听 emotions 变化，单独重绘舆情倾向饼图（不依赖词云）
+watch(() => props.item?.emotions, (newData) => {
+  if (newData?.length > 0 && props.activeTab === 'visual') {
+    nextTick(() => renderSentimentChart())
   }
 }, { deep: true })
 
@@ -597,6 +642,30 @@ watch(() => props.activeTab, (newTab) => {
   margin-bottom: 24px; text-transform: uppercase; letter-spacing: 0.08em;
 }
 .report-body { font-size: 16px; line-height: 1.9; color: #1e293b; white-space: pre-wrap; font-weight: 500; text-align: left; }
+
+.report-empty {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 80px 24px; text-align: center;
+  background: radial-gradient(circle at center, rgba(99, 102, 241, 0.05) 0%, transparent 70%);
+  border-radius: 24px;
+}
+.report-empty iconify-icon { font-size: 48px; color: #94a3b8; margin-bottom: 14px; }
+.report-empty .empty-title { font-size: 16px; font-weight: 700; color: #475569; margin: 0 0 6px; }
+.report-empty .empty-hint { font-size: 13px; color: #64748b; margin: 0; max-width: 360px; line-height: 1.6; }
+.report-empty .empty-hint strong { color: #4f46e5; font-weight: 700; }
+
+/* 凭据失效提示卡片 */
+.report-credential-error {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 64px 24px; text-align: center; gap: 6px;
+  background: linear-gradient(135deg, rgba(248, 113, 113, 0.08) 0%, rgba(251, 146, 60, 0.06) 100%);
+  border: 1px solid rgba(248, 113, 113, 0.25);
+  border-radius: 20px;
+}
+.report-credential-error iconify-icon { font-size: 48px; color: #f97316; margin-bottom: 8px; }
+.report-credential-error .empty-title { font-size: 16px; font-weight: 800; color: #b91c1c; margin: 0 0 4px; }
+.report-credential-error .empty-hint { font-size: 13px; color: #475569; margin: 0; max-width: 420px; line-height: 1.7; }
+.report-credential-error .empty-hint strong { color: #b91c1c; font-weight: 700; }
 
 .analysis-spinner { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 100px 0; background: radial-gradient(circle at center, rgba(37, 99, 235, 0.05) 0%, transparent 70%); border-radius: 30px; }
 .aura-spin { 

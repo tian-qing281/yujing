@@ -999,11 +999,11 @@ def _refresh_events_cache():
         try:
             if _shutting_down.is_set():
                 return
-            recent_cutoff = utcnow() - timedelta(hours=168)
+            recent_cutoff = utcnow() - timedelta(hours=720)
             meili.sync_articles(db.query(Article).filter(Article.fetch_time >= recent_cutoff).all())
             if _shutting_down.is_set():
                 return
-            rebuild_events(db, lookback_hours=168)
+            rebuild_events(db, lookback_hours=720)
             if _shutting_down.is_set():
                 return
             rebuild_topics(db)
@@ -1249,7 +1249,7 @@ def _ensure_event_hub_data(force_refresh: bool = False, refresh_topics: bool = F
         try:
             if force_refresh:
                 meili.sync_articles(db.query(Article).all())
-                rebuild_events(db, lookback_hours=168)
+                rebuild_events(db, lookback_hours=720)
                 rebuild_topics(db)
             else:
                 if db.query(Event).count() == 0:
@@ -1453,10 +1453,13 @@ async def unified_search_endpoint(
 
         is_high_heat_mode = is_all_range or (time_range is not None and int(time_range) > 24)
         
+        # 尾部 Event.id.desc() 作稳定 tiebreaker：
+        #   同 heat/article_count/latest_time 的事件 SQLite 返回顺序不确定，
+        #   limit(9) 下每次刷新取到的 Top 9 集合会变，导致前端"闪一下换卡片"。
         if is_high_heat_mode:
-            e_list = q_events.order_by(Event.article_count.desc(), Event.latest_article_time.desc()).limit(limit).offset(offset).all()
+            e_list = q_events.order_by(Event.article_count.desc(), Event.latest_article_time.desc(), Event.id.desc()).limit(limit).offset(offset).all()
         else:
-            e_list = q_events.order_by(Event.latest_article_time.desc(), Event.article_count.desc()).limit(limit).offset(offset).all()
+            e_list = q_events.order_by(Event.latest_article_time.desc(), Event.article_count.desc(), Event.id.desc()).limit(limit).offset(offset).all()
             
         a_list = q_articles.order_by(Article.fetch_time.desc()).limit(limit).offset(offset).all()
 
@@ -1649,10 +1652,11 @@ async def get_events(response: Response, db: Session = Depends(get_db), force_re
         q_obj = q_obj.filter(Event.primary_source_id == normalized_source)
     
     total = q_obj.count()
+    # 尾部 Event.id.desc() 作稳定 tiebreaker（同 unified_search_endpoint 原因）。
     if sort_mode == "time":
-        events = q_obj.order_by(Event.latest_article_time.desc(), Event.heat_score.desc()).limit(9).all()
+        events = q_obj.order_by(Event.latest_article_time.desc(), Event.heat_score.desc(), Event.id.desc()).limit(9).all()
     else:
-        events = q_obj.order_by(Event.heat_score.desc(), Event.latest_article_time.desc()).limit(9).all()
+        events = q_obj.order_by(Event.heat_score.desc(), Event.latest_article_time.desc(), Event.id.desc()).limit(9).all()
     batch_sids = batch_collect_event_source_ids(db, [e.id for e in events])
     payload = [marshal_event(e, query=query, db=db, _source_ids_override=batch_sids.get(e.id, [])) for e in events]
     response.headers["X-Total-Count"] = str(total)
@@ -2184,6 +2188,20 @@ def get_word_frequencies(title: str, markdown_content: str) -> List[List]:
     except Exception:
         raw_words = [word for word in jieba.lcut(title) if len(word) > 1]
         return [[word, 50] for word in dict.fromkeys(raw_words)][:25]
+
+
+@router.get("/articles/{article_id}", response_model=ArticleResponse)
+def get_article_by_id(article_id: int, db: Session = Depends(get_db)):
+    """
+    单篇文章详情接口。
+    AI 助手里 agent 最终研判的 `article#N` 引用点击后，前端通过本接口拉完整
+    article 数据（source_id / url / fetch_time 等），避免 Modal 出现"未知源"+
+    "访问网页原文"无链接。
+    """
+    article = db.query(Article).filter(Article.id == article_id).first()
+    if not article:
+        raise HTTPException(status_code=404, detail=f"article {article_id} not found")
+    return article
 
 
 @router.get("/articles/{article_id}/analyze")

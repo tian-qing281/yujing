@@ -514,14 +514,12 @@ const scheduleEventHubHydration = (force = false) => {
   if (typeof window === "undefined") return;
   window.requestAnimationFrame(() => {
     if (!force && !shouldRefreshEventHub()) return;
-    if (eventQuery.value.trim()) {
-      fetchUnifiedSearch(eventQuery.value);
-      return;
-    }
-    fetchEvents(force, eventQuery.value);
-    if (!activeSourceFilter.value) {
-      fetchTopics(force, eventQuery.value);
-    }
+    // 统一走 fetchUnifiedSearch：无论空查询还是带词查询，事件/话题/文章由单一接口
+    // 负责，避免和 onMounted(#2) 里的 fetchUnifiedSearch 对 events.value 并发双写。
+    // 之前 bug：空查询时这里调 fetchEvents(/api/events 返 Top9) +
+    //   onMounted 调 fetchUnifiedSearch(/api/search/unified 返另一批 Top9)
+    //   → 两批 9 条事件集合不同（不同 ORDER BY 规则），刷新时"闪一下换顺序"。
+    fetchUnifiedSearch(eventQuery.value);
   });
 };
 
@@ -761,19 +759,26 @@ const activeSourceLabel = computed(
 );
 const getSourceLabel = (sourceId) =>
   sourceRegistry.find((item) => item.id === sourceId)?.name || SOURCE_LABEL_MAP[sourceId] || sourceId || "未知来源";
-const eventStrength = (item) => {
-  const articleWeight = (item?.article_count || 0) * 4;
-  const platformWeight = (item?.platform_count || 0) * 6;
-  const latest = item?.latest_article_time ? new Date(item.latest_article_time).getTime() : 0;
-  const freshnessHours = latest ? Math.max(0, (Date.now() - latest) / 3600000) : 999;
-  const freshnessWeight = Math.max(0, 24 - Math.min(freshnessHours, 24));
-  return articleWeight + platformWeight + freshnessWeight;
+// 分级整数比较：article_count > platform_count > id（降序）。
+// 为什么不用加权公式（article×4 + platform×6 + heat_score）：
+//   heat_score 是后端 rebuild 时写入的浮点，两次 Ctrl+F5 之间若 scheduler 触发过
+//   rebuild，分数会微变，sort 结果随之漂移；加权公式的浮点减法本身也可能引入
+//   ±ε 的不稳定比较。改成分级整数比较后，同一批数据的顺序完全由 article_count
+//   / platform_count / id 决定，绝对稳定。
+const compareEvents = (a, b) => {
+  const ca = Number(a?.article_count) || 0;
+  const cb = Number(b?.article_count) || 0;
+  if (ca !== cb) return cb - ca;
+  const pa = Number(a?.platform_count) || 0;
+  const pb = Number(b?.platform_count) || 0;
+  if (pa !== pb) return pb - pa;
+  return (Number(b?.id) || 0) - (Number(a?.id) || 0);
 };
 const sortedAggregatedEvents = computed(() =>
-  [...crossPlatformAggregatedEvents.value].sort((a, b) => eventStrength(b) - eventStrength(a))
+  [...crossPlatformAggregatedEvents.value].sort(compareEvents)
 );
 const sortedSignalEvents = computed(() =>
-  [...signalEvents.value].sort((a, b) => eventStrength(b) - eventStrength(a))
+  [...signalEvents.value].sort(compareEvents)
 );
 const aggregatedPageSize = computed(() => 9);
 const aggregatedTotalCount = computed(() =>
@@ -1071,14 +1076,35 @@ const goToAggregatedPage = (page) => {
   aggregatedPage.value = nextPage;
 };
 
-const openDetail = (item, options = {}) => {
+const openDetail = async (item, options = {}) => {
   if (!options.preserveStack) {
     clearOverlayStack();
   }
 
-  const article = articles.value.find((entry) => entry.id === item.id) || item;
+  // 查找本地缓存：如果是从文章列表点进来的，articles.value 里一般已有完整数据。
+  let article = articles.value.find((entry) => entry.id === item.id) || null;
+
+  // AI 助手最终研判里的 `article#N` 引用点击时，只 emit { id }，
+  // 本地缓存（当前 activePlatform 的 articles.value）里往往没有这条记录，
+  // 此时必须去后端拉完整 article，否则 Modal 会显示"未知源"+"访问网页原文"
+  // 无链接。传入 item 本身如果已经带 source_id / url 字段，也视为完整数据。
+  const needsFetch = !article && item?.id && !item?.source_id;
+  if (needsFetch) {
+    try {
+      const resp = await fetch(buildApiUrl(`/api/articles/${item.id}`));
+      if (resp.ok) {
+        article = await resp.json();
+      }
+    } catch {
+      // 静默：fetch 失败时退回原始 item，Modal 会按空数据渲染
+    }
+  }
+  if (!article) article = item;
+
   detailItem.value = article;
-  activeTab.value = "report";
+  // 默认进入"数据透视"tab：该 tab 的图表（情感/词云/雷达）通常已在采集时填充，
+  // 评委首次打开即可看到完整可视化；AI 总结放在 tab 2，按需触发。
+  activeTab.value = "visual";
 
   nextTick(() => {
     const hasVisual = article.wordcloud && article.wordcloud.length > 0;
@@ -1592,7 +1618,7 @@ body { font-family: "Fira Sans", "PingFang SC", "Microsoft YaHei", sans-serif; b
   display: grid;
   gap: 12px;
 }
-
+/* AI 辅助生成：DeepSeek-V3, 2026-03-18 */
 .compact-summary-strip {
   margin-top: 14px;
   display: flex;
@@ -2449,9 +2475,11 @@ body { font-family: "Fira Sans", "PingFang SC", "Microsoft YaHei", sans-serif; b
     padding: 18px 20px 28px;
   }
 
+  /* 单列断点：取消居中 max-width，让卡片占满主区，避免左右大块空白 */
   .article-grid {
     grid-template-columns: 1fr;
     gap: 18px;
+    max-width: 100%;
   }
 
   .event-toolbar {

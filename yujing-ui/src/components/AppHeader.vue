@@ -56,14 +56,14 @@ defineEmits(['refresh'])
   background: linear-gradient(90deg, rgba(148, 163, 184, 0) 0%, rgba(203, 213, 225, 0.9) 12%, rgba(203, 213, 225, 0.9) 88%, rgba(148, 163, 184, 0) 100%);
 }
 
-.header-left { display: flex; align-items: center; gap: 24px; }
-.header-copy { display: flex; flex-direction: column; gap: 0; }
-.header-kicker { font-size: 11px; font-weight: 800; letter-spacing: 0.04em; transform: scale(0.9); transform-origin: left; color: #64748b; background: transparent; border: none; margin-bottom: -2px; }
-.breadcrumb { display: flex; align-items: center; gap: 12px; font-size: 22px; font-weight: 900; color: #0f172a; letter-spacing: -0.02em; }
-.breadcrumb-icon { font-size: 24px; color: var(--hs-primary, #1e40af); display: flex; align-items: center; }
-.root-node { color: #020617; line-height: 1; display: flex; align-items: center; }
+.header-left { display: flex; align-items: center; gap: 24px; min-width: 0; flex: 1 1 auto; overflow: hidden; }
+.header-copy { display: flex; flex-direction: column; gap: 0; min-width: 0; }
+.header-kicker { font-size: 11px; font-weight: 800; letter-spacing: 0.04em; transform: scale(0.9); transform-origin: left; color: #64748b; background: transparent; border: none; margin-bottom: -2px; white-space: nowrap; }
+.breadcrumb { display: flex; align-items: center; gap: 12px; font-size: 22px; font-weight: 900; color: #0f172a; letter-spacing: -0.02em; min-width: 0; overflow: hidden; }
+.breadcrumb-icon { font-size: 24px; color: var(--hs-primary, #1e40af); display: flex; align-items: center; flex-shrink: 0; }
+.root-node { color: #020617; line-height: 1; display: flex; align-items: center; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-.header-right { display: flex; align-items: center; gap: 24px; }
+.header-right { display: flex; align-items: center; gap: 24px; flex-shrink: 0; }
 .btn-sync-all { 
   background: var(--hs-primary, #2563eb);
   color: #ffffff;
@@ -90,6 +90,19 @@ defineEmits(['refresh'])
   .breadcrumb {
     font-size: 18px;
   }
+}
+
+/* 窄屏：让"全站同步"按钮收缩为图标态，避免与左侧标题重叠 */
+@media (max-width: 768px) {
+  .header-left { gap: 12px; }
+  .header-right { gap: 12px; }
+  .btn-sync-all {
+    height: 40px;
+    padding: 0 14px;
+    font-size: 12px;
+    gap: 6px;
+  }
+  .btn-sync-all span { display: none; }
 }
 
 .anim-spin { animation: spin 1s infinite linear; }

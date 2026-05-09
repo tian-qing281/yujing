@@ -18,6 +18,7 @@ from unittest import mock
 from app.services.agent.tools import (
     tool_analyze_event_sentiment,
     tool_compare_events,
+    tool_compare_platforms,
     tool_get_event_detail,
     tool_get_morning_brief,
     tool_list_hot_platforms,
@@ -720,6 +721,75 @@ class RankEventsBySentimentToolTestCase(unittest.TestCase):
                 min_labelled=-5,       # 非法 → 至少 1
             )
         self.assertEqual(out["window_hours"], 720)
+
+
+class TestComparePlatforms(unittest.TestCase):
+    """compare_platforms 工具：把 /api/ai/compare 的指标口径包装成 agent 工具。"""
+
+    def _run(self, **kwargs):
+        """
+        跑 _handler 同时把依赖 (SessionLocal / _gather_side / _build_compare_metrics) patch 掉。
+        _gather_side 返回 (articles=[], events=[], source_id=sid) 简化断言；
+        _build_compare_metrics 返回只认 label 的占位 dict 让我们关注主流程。
+        """
+        fake_db = mock.MagicMock()
+
+        def fake_gather(db, name, topic):
+            return [], [], f"sid_{name}"
+
+        def fake_build(label, articles, events):
+            return {
+                "label": label,
+                "article_count": 10 if label == "微博" else 5,
+                "event_count": 0,
+                "platform_count": 1,
+                "platforms": [],
+                "sentiment": {"positive": 7, "negative": 1} if label == "微博" else {"positive": 2, "negative": 3},
+                "timeline": [],
+                "trend_24h": {"current": 0, "previous": 0, "pct": None},
+                "representative_articles": [],
+                "events": [],
+            }
+
+        with mock.patch("app.database.SessionLocal", return_value=fake_db), \
+             mock.patch.object(tool_compare_platforms, "_gather_side", side_effect=fake_gather), \
+             mock.patch("app.api.routes._build_compare_metrics", side_effect=fake_build):
+            return tool_compare_platforms._handler(**kwargs)
+
+    def test_handler_happy_path_returns_dashboard_payload(self):
+        out = self._run(platform_a="微博", platform_b="知乎", topic="伊朗")
+        # 结构契约：前端 CompareDashboard 依赖 a.label / b.label / a.sentiment 等
+        self.assertEqual(out["_type"], "platform_comparison")
+        self.assertEqual(out["a"]["label"], "微博")
+        self.assertEqual(out["b"]["label"], "知乎")
+        self.assertEqual(out["a_source_id"], "sid_微博")
+        self.assertEqual(out["b_source_id"], "sid_知乎")
+        # comparison_summary 把"谁文章多 / 谁更正 / 谁更负"预先算好，降低 LLM 数值比较出错
+        self.assertEqual(out["comparison_summary"]["winner_by_articles"], "a")
+        self.assertEqual(out["comparison_summary"]["more_positive"], "a")
+        self.assertEqual(out["comparison_summary"]["more_negative"], "b")
+        self.assertEqual(out["comparison_summary"]["topic"], "伊朗")
+
+    def test_handler_rejects_empty_platform(self):
+        with self.assertRaises(ValueError):
+            tool_compare_platforms._handler(platform_a="", platform_b="知乎")
+        with self.assertRaises(ValueError):
+            tool_compare_platforms._handler(platform_a="微博", platform_b="")
+
+    def test_handler_rejects_same_platform(self):
+        with self.assertRaises(ValueError):
+            tool_compare_platforms._handler(platform_a="微博", platform_b="微博")
+
+    def test_spec_registered_with_required_schema(self):
+        # Spec 契约：LLM JSON schema 必须 required 两个平台名
+        spec = tool_compare_platforms.SPEC
+        self.assertEqual(spec.name, "compare_platforms")
+        self.assertIn("platform_a", spec.input_schema["properties"])
+        self.assertIn("platform_b", spec.input_schema["properties"])
+        self.assertEqual(
+            sorted(spec.input_schema["required"]),
+            ["platform_a", "platform_b"],
+        )
 
 
 if __name__ == "__main__":

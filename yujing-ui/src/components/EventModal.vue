@@ -456,6 +456,31 @@ const openRepresentativeArticle = () => {
   emit("open-article", representativeArticle.value);
 };
 
+// 不同平台 extra_info.hot_value 量纲差异极大（微博百万级 / 财联社常缺失），
+// 用"平均值"会让单条微博把其他平台全淹没。改为：平台权重 × log10(hot+1) 累加，
+// 并对未填 hot 的平台按权重给一个保底代表分，保证条数多时热度也能随之上升。
+const PLATFORM_HEAT_WEIGHT = {
+  weibo_hot: 0.5,
+  zhihu_hot: 0.3,
+  baidu_hot: 0.3,
+  toutiao_hot: 0.25,
+  bilibili_hot_video: 0.2,
+  thepaper_hot: 0.15,
+  wallstreetcn_news: 0.1,
+  cls_telegraph: 0.1,
+};
+const DEFAULT_HEAT_WEIGHT = 0.1;
+
+const heatContribution = (article) => {
+  const extra = typeof article.extra_info === "string" ? safeParse(article.extra_info) : (article.extra_info || {});
+  const rawHot = Number(extra.hot_value || extra.hot_score || extra.view || 0);
+  const weight = PLATFORM_HEAT_WEIGHT[article.source_id] ?? DEFAULT_HEAT_WEIGHT;
+  // 有 hot 值 → log10 压缩（微博 7M → ~7，避免一条爼骤）
+  // 没 hot 值 → 按权重给个代表分（财联社 ~10，微博 ~50），维持"多条=更高热度"的单调性
+  const base = rawHot > 0 ? Math.log10(rawHot + 1) * 100 : 100;
+  return base * weight;
+};
+
 const timeSeries = computed(() => {
   const buckets = new Map();
   for (const article of allArticles.value) {
@@ -463,12 +488,9 @@ const timeSeries = computed(() => {
     if (Number.isNaN(date.getTime())) continue;
     date.setHours(date.getHours(), 0, 0, 0);
     const key = date.getTime();
-    const extra = typeof article.extra_info === "string" ? safeParse(article.extra_info) : {};
-    const rawHot = Number(extra.hot_value || extra.hot_score || extra.view || 1);
-    const hot = Number.isFinite(rawHot) && rawHot > 0 ? rawHot : 1;
     const current = buckets.get(key) || { count: 0, heat: 0 };
     current.count += 1;
-    current.heat += hot;
+    current.heat += heatContribution(article);
     buckets.set(key, current);
   }
   return [...buckets.entries()]
@@ -479,7 +501,7 @@ const timeSeries = computed(() => {
       return {
         label: `${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")} ${String(date.getHours()).padStart(2, "0")}:00`,
         count: value.count,
-        heat: Number((value.heat / value.count).toFixed(1)),
+        heat: Number(value.heat.toFixed(1)),
       };
     });
 });
@@ -542,7 +564,7 @@ const emotionBreakdown = computed(() => {
   }
   return buckets.filter((item) => item.value > 0);
 });
-
+//  AI 辅助生成：DeepSeek-V3, 2026-04-02
 const sentimentSummary = computed(() => {
   const totals = {
     positive: 0,
@@ -619,12 +641,12 @@ const renderCharts = () => {
       },
       {
         type: "value",
-        name: "热度",
+        name: "热度分",
         nameTextStyle: { color: "#94a3b8", fontSize: 10 },
         splitLine: { show: false },
         axisLabel: {
           color: "#94a3b8", fontSize: 10,
-          formatter: (v) => v >= 1e6 ? (v / 1e6).toFixed(0) + "M" : v >= 1e4 ? (v / 1e4).toFixed(0) + "w" : v,
+          formatter: (v) => v >= 1000 ? (v / 1000).toFixed(1) + "k" : Math.round(v),
         },
       },
     ],

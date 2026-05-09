@@ -109,8 +109,8 @@
 
         <div v-if="alerts.length" class="alerts-panel">
           <div class="alerts-header">
-            <iconify-icon icon="ri:alarm-warning-line" />
-            <span>舆情异动告警</span>
+            <iconify-icon icon="ri:notification-3-line" />
+            <span>舆情推送中心</span>
             <span class="alerts-count">{{ alerts.length }}</span>
             <button class="alerts-clear" type="button" @click="clearAlerts">全部忽略</button>
           </div>
@@ -135,7 +135,7 @@
           <div class="welcome-copy">
             <span class="welcome-label badge badge-outline badge-primary">AI 助手</span>
             <h2>检索、分析、生成报告。</h2>
-            <p>输入“日报”生成每日简报，“对比 X 和 Y”做舆情对比，或直接搜索平台、话题、事件。</p>
+            <p>用自然语言提问即可：智能体会自动调用 10 余个数据工具完成跨平台检索、热度对比、情绪研判与早报生成。</p>
           </div>
 
           <div class="prompt-strip">
@@ -167,16 +167,17 @@
               <span v-if="msg.agent_running" class="agent-meta-elapsed">进行中…</span>
             </div>
 
-            <!-- 对比仪表盘：当消息携带 compare_metrics 时，在正文之上渲染双列对比卡 -->
-            <CompareDashboard
-              v-if="msg.role === 'assistant' && msg.compare_metrics"
-              :metrics="msg.compare_metrics"
-              @open-article="$emit('open-item', $event)"
-            />
-
-            <!-- 智能体调用链 + final answer -->
+            <!-- 智能体调用链 + 对比仪表盘 + final answer
+                 顺序：AgentTrace (思考链) → CompareDashboard (tool 结果可视化) → 最终研判 (LLM 文字)
+                 之前把 CompareDashboard 放最前会让用户感到"结果突然弹出、下方 trace 像断层"，
+                 现在改为 trace 后、final 前，形成"思考 → 数据 → 结论"的自然阅读流。 -->
             <template v-if="msg.role === 'assistant' && msg.agent_events">
               <AgentTrace :events="msg.agent_events" :isRunning="!!msg.agent_running" />
+              <CompareDashboard
+                v-if="msg.compare_metrics"
+                :metrics="msg.compare_metrics"
+                @open-article="$emit('open-item', $event)"
+              />
               <div v-if="msg.agent_final" class="agent-final-card">
                 <div class="agent-final-head">
                   <iconify-icon icon="ri:sparkling-2-fill"></iconify-icon>
@@ -280,6 +281,7 @@
 
 <script setup>
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
+import { marked } from "marked";
 import { buildApiUrl } from "../config/api";
 import html2canvas from "html2canvas";
 import AgentTrace from "./AgentTrace.vue";
@@ -392,7 +394,7 @@ const startBriefPolling = async () => {
   }, BRIEF_POLL_INTERVAL_MS);
 };
 
-// --- 舆情异动告警 ---
+// --- 舆情推送中心 ---
 const alerts = ref([]);
 let alertPollTimer = null;
 
@@ -417,7 +419,7 @@ const clearAlerts = async () => {
 };
 
 const openAlertDetail = (alert) => {
-  sendMessage(`分析舆情异动事件「${alert.title}」的详细情况`);
+  sendMessage(`分析此条舆情推送「${alert.title}」的详细情况`);
 };
 
 const startAlertPolling = () => {
@@ -778,14 +780,25 @@ defineExpose({ syncItemState });
 const escapeHtmlForAgent = (raw) =>
   String(raw).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
+// 用 marked 完整渲染（支持表格/代码块/引用块/有序无序列表），再做引用替换。
+// gfm + breaks 确保 LLM 输出的 GitHub 风格 Markdown（含表格）正确转 HTML。
+marked.setOptions({ gfm: true, breaks: true });
+
 const formatAgentFinal = (text) => {
   if (!text) return "";
-  const escaped = escapeHtmlForAgent(text);
+  let html;
+  try {
+    html = marked.parse(String(text));
+  } catch {
+    // 解析失败时退回纯文本（HTML 转义 + 换行）
+    html = escapeHtmlForAgent(text).replace(/\n/g, "<br>");
+  }
   // 引用识别：中英文双支持
-  //   英文：event#123 / article#456 （LLM system prompt 约定）
-  //   中文：事件#123 / 文章#456 / 事件 # 123 / 事件＃123（DeepSeek 中文回答常见写法）
+  //   英文：event#123 / article#456
+  //   中文：事件#123 / 文章#456 / 事件 # 123 / 事件＃123
   // 归一化成 data-kind=event|article，让 click delegate 统一 emit。
-  const withRefs = escaped.replace(
+  // 注意：marked 已把 #N 形式的字符以 HTML 实体输出（# 不会被转义，仍保留）。
+  return html.replace(
     /(event|article|事件|文章)\s*[#＃]\s*(\d+)/gi,
     (_m, kind, id) => {
       const lower = kind.toLowerCase();
@@ -794,30 +807,6 @@ const formatAgentFinal = (text) => {
       return `<a href="#" class="agent-ref agent-ref--${dataKind}" data-kind="${dataKind}" data-id="${id}">${icon}</a>`;
     },
   );
-  const lines = withRefs.split("\n");
-  const parts = [];
-  let inList = false;
-  for (const raw of lines) {
-    const line = raw.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
-    if (/^\s*####?\s+/.test(line)) {
-      if (inList) { parts.push("</ul>"); inList = false; }
-      parts.push(`<h4>${line.replace(/^\s*####?\s+/, "")}</h4>`);
-    } else if (/^\s*###?\s+/.test(line)) {
-      if (inList) { parts.push("</ul>"); inList = false; }
-      parts.push(`<h3>${line.replace(/^\s*###?\s+/, "")}</h3>`);
-    } else if (/^\s*[-•]\s+/.test(line)) {
-      if (!inList) { parts.push("<ul>"); inList = true; }
-      parts.push(`<li>${line.replace(/^\s*[-•]\s+/, "")}</li>`);
-    } else if (!line.trim()) {
-      if (inList) { parts.push("</ul>"); inList = false; }
-      parts.push("");
-    } else {
-      if (inList) { parts.push("</ul>"); inList = false; }
-      parts.push(`<p>${line}</p>`);
-    }
-  }
-  if (inList) parts.push("</ul>");
-  return parts.join("\n");
 };
 
 const sendAgentMessage = async (sessionId, outgoing) => {
@@ -900,6 +889,11 @@ const sendAgentMessage = async (sessionId, outgoing) => {
             finalBuffer = ev.text || finalBuffer;
             patch.agent_final = finalBuffer;
           }
+          // 检测到平台对比工具输出时，提取 {a, b} 喂给 CompareDashboard。
+          // output 结构由 tool_compare_platforms._handler 定义，含 _type / a / b / a_source_id / b_source_id。
+          if (ev.type === "tool_result" && ev.name === "compare_platforms" && ev.ok && ev.output?.a && ev.output?.b) {
+            patch.compare_metrics = { a: ev.output.a, b: ev.output.b };
+          }
           if (ev.type === "error") {
             // loop 内部终止信号（max_steps / too_many_errors）已由 AgentTrace 的
             // trace-terminated 卡片显示，气泡级 agent_error 只保留"硬错误"（LLM 调用失败等无 terminated_reason）。
@@ -946,6 +940,8 @@ const TOOL_FOLLOW_UPS = {
   get_event_detail: ["分析该事件的情绪走势", "该事件是否有后续发展？"],
   analyze_event_sentiment: ["哪些平台的负面情绪最多？", "和上周相比情绪有变化吗？"],
   compare_events: ["这些事件有什么共性？", "哪个事件后续影响更大？"],
+  compare_platforms: ["两个平台的主要分歧是什么？", "再补上头条一起对比"],
+  rank_events_by_sentiment: ["最愤怒的事件有什么共性？", "哪些事件的情绪最复杂"],
   search_articles: ["帮我总结这些文章的核心观点", "有哪些不同的立场？"],
   semantic_search_articles: ["有没有相关但被忽略的冷门事件？", "这些内容的主要分歧在哪？"],
   list_hot_platforms: ["各平台热点有什么差异？", "哪些热点只在单一平台出现？"],
@@ -984,7 +980,8 @@ const sendMessage = async (presetText = null) => {
   const outgoing = (presetText ?? inputQuery.value).trim();
   if (!outgoing || pendingSessionIds.value.includes(sessionId)) return;
 
-  // 统一走智能体链路
+  // 统一走智能体链路：平台对比由 agent 工具 `compare_platforms` 接管，
+  // SSE tool_result 事件会直接填 msg.compare_metrics 触发仪表盘。
   return sendAgentMessage(sessionId, outgoing);
 };
 
@@ -1497,8 +1494,50 @@ onUnmounted(() => {
 .agent-final-body :deep(h4) { margin: 0.45rem 0 0.2rem; font-size: 0.94rem; }
 .agent-final-body :deep(p)  { margin: 0.2rem 0; }
 .agent-final-body :deep(ul) { margin: 0.3rem 0 0.3rem 1.2rem; padding: 0; }
+.agent-final-body :deep(ol) { margin: 0.3rem 0 0.3rem 1.4rem; padding: 0; }
 .agent-final-body :deep(li) { list-style: disc; margin: 0.12rem 0; }
+.agent-final-body :deep(ol li) { list-style: decimal; }
 .agent-final-body :deep(strong) { color: #111827; }
+.agent-final-body :deep(code) {
+  background: #f3f4f6; color: #be185d;
+  padding: 1px 6px; border-radius: 4px;
+  font-size: 0.86em;
+}
+.agent-final-body :deep(pre) {
+  background: #0f172a; color: #e5e7eb;
+  padding: 0.6rem 0.8rem; border-radius: 8px;
+  overflow-x: auto; font-size: 0.85em; margin: 0.4rem 0;
+}
+.agent-final-body :deep(pre code) {
+  background: transparent; color: inherit; padding: 0;
+}
+.agent-final-body :deep(blockquote) {
+  margin: 0.4rem 0; padding: 0.4rem 0.8rem;
+  border-left: 3px solid #c4b5fd;
+  background: #faf5ff; color: #4c1d95;
+  border-radius: 0 6px 6px 0;
+}
+.agent-final-body :deep(hr) {
+  border: 0; border-top: 1px dashed #e5e7eb; margin: 0.6rem 0;
+}
+/* GFM 表格：保持视觉一致的紧凑卡片样式 */
+.agent-final-body :deep(table) {
+  border-collapse: collapse;
+  margin: 0.5rem 0; width: 100%;
+  font-size: 0.88rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px; overflow: hidden;
+}
+.agent-final-body :deep(thead) { background: #f3f4f6; }
+.agent-final-body :deep(th),
+.agent-final-body :deep(td) {
+  padding: 0.4rem 0.7rem;
+  border-bottom: 1px solid #f1f5f9;
+  text-align: left; vertical-align: top;
+}
+.agent-final-body :deep(th) { color: #111827; font-weight: 600; }
+.agent-final-body :deep(tbody tr:last-child td) { border-bottom: 0; }
+.agent-final-body :deep(tbody tr:hover) { background: #fafafa; }
 .agent-final-body :deep(.agent-ref) {
   display: inline-flex; align-items: center;
   text-decoration: none;

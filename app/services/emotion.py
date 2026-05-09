@@ -5,12 +5,15 @@ import threading
 import torch
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
-
-# 只保留"静默噪声"相关的开关；不再把整个进程钉成离线模式。
-# 原先的 TRANSFORMERS_OFFLINE=1 / HF_DATASETS_OFFLINE=1 会污染其他模块（如 embedding.py 的 bge 下载），
-# 而每个 from_pretrained 已显式传 local_files_only=True，精确达成离线加载，全局污染多此一举。
 os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
 os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
+
+# 国内镜像支持：与 embedding.py 共用同一个开关
+if os.getenv("EMBED_USE_MIRROR", "0").strip() in ("1", "true", "True", "yes"):
+    if not os.getenv("HF_ENDPOINT"):
+        os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
+    os.environ["HF_HUB_OFFLINE"] = "0"
+    os.environ["TRANSFORMERS_OFFLINE"] = "0"
 
 
 class EmotionEngine:
@@ -51,17 +54,16 @@ class EmotionEngine:
             try:
                 self._torch = torch
                 device = "cuda" if torch.cuda.is_available() else "cpu"
-                print(f"[情绪引擎] 后台加载离线 BERT 模型，设备: {device}")
-                self._tokenizer = AutoTokenizer.from_pretrained(model_name, local_files_only=True)
+                print(f"[情绪引擎] 后台加载 BERT 模型，设备: {device}")
+                self._tokenizer = AutoTokenizer.from_pretrained(model_name)
                 self._model = AutoModelForSequenceClassification.from_pretrained(
                     model_name,
-                    local_files_only=True,
                 ).to(device)
                 self._ready = True
-                print("[情绪引擎] 离线 BERT 情绪模型已就绪。")
+                print("[情绪引擎] BERT 情绪模型已就绪。")
             except Exception as exc:
                 self._load_failed = True
-                print(f"[情绪引擎] 离线模型加载失败，规则兜底: {exc}")
+                print(f"[情绪引擎] 模型加载失败，规则兜底: {exc}")
             finally:
                 self._loading = False
 
