@@ -150,7 +150,7 @@ const searchReasons = computed(() =>
   border: 1px solid rgba(148, 163, 184, 0.2);
   gap: 20px;
   position: relative;
-  min-height: 178px;
+  min-height: 140px;
   min-width: 0;
   overflow: hidden;
   box-shadow: 0 18px 55px rgba(15, 23, 42, 0.07);
@@ -307,7 +307,7 @@ const searchReasons = computed(() =>
 
 @media (max-width: 960px) {
   .news-card {
-    min-height: 150px;
+    min-height: 120px;
     padding: 18px 18px 20px;
   }
 

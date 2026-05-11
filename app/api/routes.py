@@ -3646,22 +3646,33 @@ async def get_recommendations(
     limit: int = 15,
     offset: int = 0,
     fallback: bool = True,
+    w_keyword: float = 5.0,
+    w_source: float = 3.0,
+    w_profile_source: float = 3.0,
+    w_profile_tag: float = 3.0,
 ):
     """根据画像 + 订阅 + 屏蔽生成今日推荐事件列表。
 
     打分规则（每个事件初始 0 分）：
-    - 标题命中订阅 keyword/event：+5 分（按订阅 weight 缩放）
-    - 事件 primary_source_id 命中订阅 source：+3 分
-    - 事件 primary_source_id 命中画像 top_sources：按权重 +0~3 分
-    - 事件 keywords 命中画像 top_tags：按权重 +0~3 分
+    - 标题命中订阅 keyword/event：+w_keyword 分（按订阅 weight 缩放，默认 5）
+    - 事件 primary_source_id 命中订阅 source：+w_source 分（默认 3）
+    - 事件 primary_source_id 命中画像 top_sources：按权重 +0~w_profile_source 分（默认 3）
+    - 事件 keywords 命中画像 top_tags：按权重 +0~w_profile_tag 分（默认 3）
     - 标题命中任意 blocklist 词：直接剔除
     最终按分数降序，相同分按 heat_score。
+
+    A1: 四个权重均通过 query 参数暴露（0~10 区间），便于前端 UI 实时调权。
 
     分页参数：
     - limit / offset：常规分页
     - fallback：当 score>0 的命中数为 0 时，是否按热度兜底返回 TOP（标记 _fallback=True）
-    返回字段新增：total（命中总数）、page_size、offset、fallback_used
+    返回字段新增：total（命中总数）、page_size、offset、fallback_used、weights
     """
+    # A1: 防御性 clamp，避免负数或极大值
+    w_keyword = max(0.0, min(10.0, w_keyword))
+    w_source = max(0.0, min(10.0, w_source))
+    w_profile_source = max(0.0, min(10.0, w_profile_source))
+    w_profile_tag = max(0.0, min(10.0, w_profile_tag))
     subs = db.query(Subscription).filter(Subscription.user_id == _PROFILE_USER_ID).all()
     blocks = db.query(Blocklist).filter(Blocklist.user_id == _PROFILE_USER_ID).all()
     block_terms = [b.term for b in blocks if b.term]
@@ -3698,18 +3709,18 @@ async def get_recommendations(
         # 订阅命中
         for kw, w in keyword_subs:
             if kw and kw in title:
-                score += 5.0 * w
+                score += w_keyword * w
                 reasons.append(f"订阅词「{kw}」")
         for kw, w in event_subs:
             if kw and kw in title:
-                score += 5.0 * w
+                score += w_keyword * w
                 reasons.append(f"订阅事件「{kw}」")
         if ev.primary_source_id and ev.primary_source_id in source_subs:
-            score += 3.0 * source_subs[ev.primary_source_id]
+            score += w_source * source_subs[ev.primary_source_id]
             reasons.append("订阅源")
         # 画像加权
         if ev.primary_source_id and ev.primary_source_id in source_w:
-            score += 3.0 * (source_w[ev.primary_source_id] / max_source_w)
+            score += w_profile_source * (source_w[ev.primary_source_id] / max_source_w)
         try:
             ev_keywords = json.loads(ev.keywords) if ev.keywords else []
         except Exception:
@@ -3717,7 +3728,7 @@ async def get_recommendations(
         if isinstance(ev_keywords, list):
             hit_tags = [k for k in ev_keywords if k in tag_w]
             if hit_tags:
-                tag_score = sum(tag_w[k] for k in hit_tags) / max_tag_w * 3.0
+                tag_score = sum(tag_w[k] for k in hit_tags) / max_tag_w * w_profile_tag
                 score += tag_score
                 reasons.append(f"画像兴趣 {','.join(hit_tags[:3])}")
         if score <= 0:
@@ -3756,4 +3767,321 @@ async def get_recommendations(
         "page_size": limit,
         "offset": offset,
         "fallback_used": fallback_used,
+        "weights": {
+            "keyword": w_keyword,
+            "source": w_source,
+            "profile_source": w_profile_source,
+            "profile_tag": w_profile_tag,
+        },
     }
+
+
+# ============================================================================
+# B6: B 站评论 + 弹幕情绪聚合（仅哔哩哔哩榜文章）
+# ----------------------------------------------------------------------------
+# 数据源：B 站官方公开接口
+#   view 接口 → 拿 aid + cid
+#   reply main(mode=3, ps=20) → 热评 20 条
+#   dm/list.so?oid=cid → 全部弹幕（XML）
+# 情感聚合：emotion_engine.analyze_batch（与正文情感分析共用 BERT）
+# 缓存：内存 dict + 30 分钟 TTL，避免重复打 B 站
+# ============================================================================
+
+_BILI_SENT_CACHE: dict[str, tuple[float, dict]] = {}
+_BILI_SENT_TTL = 1800.0  # 30 分钟
+# B 站反风控会话 cookie（buvid3 / b_nut）预热后复用，避免 -352
+_BILI_COOKIES: dict[str, str] = {}
+_BILI_COOKIES_AT: float = 0.0
+_BILI_COOKIES_TTL = 1800.0
+# B 站评论/弹幕本地数据目录（采集器预落盘的 jsonl/xml）
+from pathlib import Path as _BiliPath
+_BILI_DATA_DIR = _BiliPath(
+    os.environ.get(
+        "BILI_DATA_DIR",
+        str(_BiliPath(__file__).resolve().parent.parent.parent / "data" / "bili"),
+    )
+)
+
+
+def _load_local_bili_comments(bvid: str) -> list[dict]:
+    """从 data/bili/comments/{bvid}.jsonl 读评论（采集器原始备份格式）。。"""
+    fp = _BILI_DATA_DIR / "comments" / f"{bvid}.jsonl"
+    if not fp.exists():
+        return []
+    out: list[dict] = []
+    seen: set[int] = set()
+    try:
+        with fp.open("r", encoding="utf-8") as fr:
+            for line in fr:
+                try:
+                    page = json.loads(line)
+                except Exception:
+                    continue
+                for c in (page.get("replies") or []):
+                    rpid = c.get("rpid")
+                    if rpid in seen:
+                        continue
+                    seen.add(rpid)
+                    msg = ((c.get("content") or {}).get("message") or "").strip()
+                    if msg:
+                        out.append({
+                            "uname": (c.get("member") or {}).get("uname") or "",
+                            "likes": int(c.get("like") or 0),
+                            "content": msg[:200],
+                        })
+    except Exception as exc:
+        print(f"[BILI_SENT] read local comments {bvid} failed: {exc}")
+    return out
+
+
+def _load_local_bili_danmaku(bvid: str) -> list[dict]:
+    """从 data/bili/danmaku/{bvid}.xml 读弹幕。"""
+    from lxml import etree as _etree
+    fp = _BILI_DATA_DIR / "danmaku" / f"{bvid}.xml"
+    if not fp.exists():
+        return []
+    out: list[dict] = []
+    try:
+        tree = _etree.fromstring(fp.read_bytes())
+        for d in tree.findall("d"):
+            txt = (d.text or "").strip()
+            if not txt:
+                continue
+            p = (d.get("p") or "").split(",")
+            out.append({
+                "progress_ms": int(float(p[0]) * 1000) if p and p[0] else 0,
+                "content": txt[:120],
+            })
+    except Exception as exc:
+        print(f"[BILI_SENT] read local danmaku {bvid} failed: {exc}")
+    return out
+
+
+def _aggregate_emotions(batch: list[list[dict]]) -> list[dict]:
+    """把 N 条文本的 8 维情绪结果聚合为整体分布。"""
+    if not batch:
+        return []
+    sums: dict[str, float] = {}
+    counts: dict[str, int] = {}
+    for row in batch:
+        if not row:
+            continue
+        for it in row:
+            label = it.get("label")
+            value = float(it.get("value") or 0)
+            sums[label] = sums.get(label, 0.0) + value
+            counts[label] = counts.get(label, 0) + 1
+    if not sums:
+        return []
+    total = sum(sums.values()) or 1.0
+    out = [{"label": k, "value": round(v / total, 4)} for k, v in sums.items()]
+    out.sort(key=lambda x: x["value"], reverse=True)
+    return out
+
+
+@router.get("/bili-sentiment/{bvid}")
+async def get_bili_sentiment(bvid: str, force: bool = False):
+    """聚合某 BV 的评论 + 弹幕 8 维情绪分布。
+
+    仅适用于哔哩哔哩榜文章；非 B 站文章前端不会调用此接口。
+    """
+    import time as _time
+    import httpx as _httpx
+    from lxml import etree as _etree
+
+    bvid = (bvid or "").strip()
+    if not bvid.startswith("BV") or len(bvid) < 10:
+        return {"error": "invalid_bvid", "bvid": bvid}
+
+    # 缓存命中
+    now = _time.time()
+    if not force:
+        cached = _BILI_SENT_CACHE.get(bvid)
+        if cached and (now - cached[0] < _BILI_SENT_TTL):
+            payload = dict(cached[1])
+            payload["from_cache"] = True
+            return payload
+
+    # 本地采集数据作为底（采集器预落盘）
+    local_comments = _load_local_bili_comments(bvid)
+    local_danmaku = _load_local_bili_danmaku(bvid)
+
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                      "(KHTML, like Gecko) Chrome/121.0 Safari/537.36",
+        "Referer": "https://www.bilibili.com/",
+    }
+
+    # 预热 buvid3 cookie（避免 reply 接口 -352）
+    global _BILI_COOKIES, _BILI_COOKIES_AT
+    if not _BILI_COOKIES or now - _BILI_COOKIES_AT > _BILI_COOKIES_TTL:
+        try:
+            async with _httpx.AsyncClient(timeout=8.0, headers=headers, follow_redirects=True) as warm:
+                wr = await warm.get("https://www.bilibili.com/")
+                ck = {k: v for k, v in wr.cookies.items()}
+                if ck.get("buvid3"):
+                    _BILI_COOKIES = ck
+                    _BILI_COOKIES_AT = now
+                    print(f"[BILI_SENT] cookie 已预热: buvid3={ck.get('buvid3','')[:20]}...")
+        except Exception as exc:
+            print(f"[BILI_SENT] cookie 预热失败: {exc}")
+
+    aid: int | None = None
+    cid: int | None = None
+    title = ""
+    comments: list[dict] = list(local_comments)
+    danmaku: list[dict] = list(local_danmaku)
+    seen_comment_keys: set[str] = {(c.get("content") or "")[:40] for c in comments}
+    seen_danmaku_keys: set[str] = {(d.get("content") or "")[:40] for d in danmaku}
+    live_comments_added = 0
+    live_danmaku_added = 0
+    reply_code: int | None = None
+
+    try:
+        async with _httpx.AsyncClient(
+            timeout=10.0, headers=headers, cookies=_BILI_COOKIES or None
+        ) as client:
+            view_resp = await client.get(
+                "https://api.bilibili.com/x/web-interface/view",
+                params={"bvid": bvid},
+            )
+            view_data = view_resp.json().get("data") or {}
+            aid = view_data.get("aid")
+            cid = view_data.get("cid")
+            title = view_data.get("title") or ""
+            if not aid or not cid:
+                if not (local_comments or local_danmaku):
+                    return {"error": "view_no_aid_cid", "bvid": bvid}
+            else:
+                # 弹幕一次拉
+                danmaku_resp = await client.get(
+                    "https://api.bilibili.com/x/v1/dm/list.so",
+                    params={"oid": cid},
+                )
+                # 评论：mode=3(热度) → mode=2(时间)，基于 cursor.next 游标连续翻页
+                # 同时把 top_replies 和 upper.top（置顶+UP主置顶）合并进来
+                def _ingest_replies(replies_list, *, allow_nested=True):
+                    """把扁平评论 + 二级评论塞进 comments，返回新增数。"""
+                    added = 0
+                    for c in (replies_list or []):
+                        msg = ((c.get("content") or {}).get("message") or "").strip()
+                        if msg:
+                            key = msg[:40]
+                            if key not in seen_comment_keys:
+                                seen_comment_keys.add(key)
+                                comments.append({
+                                    "uname": (c.get("member") or {}).get("uname") or "",
+                                    "likes": int(c.get("like") or 0),
+                                    "content": msg[:200],
+                                })
+                                added += 1
+                        if allow_nested:
+                            added += _ingest_replies(c.get("replies") or [], allow_nested=False)
+                    return added
+
+                MAX_PAGES = 6  # 每个 mode 最多翻 6 页 ≈ 120 条
+                for mode in (3, 2):
+                    cursor = 0
+                    for _ in range(MAX_PAGES):
+                        try:
+                            rresp = await client.get(
+                                "https://api.bilibili.com/x/v2/reply/main",
+                                params={"type": 1, "oid": aid, "mode": mode,
+                                        "next": cursor, "plat": 1},
+                            )
+                            rj = rresp.json() or {}
+                            if reply_code is None:
+                                reply_code = rj.get("code")
+                            rdata = rj.get("data") or {}
+                            replies = rdata.get("replies") or []
+                            # 置顶 / UP 主置顶
+                            if cursor == 0 and mode == 3:
+                                for k in ("top_replies", "upper"):
+                                    extra = rdata.get(k)
+                                    if isinstance(extra, dict):
+                                        extra = extra.get("top")
+                                    if extra:
+                                        extra = extra if isinstance(extra, list) else [extra]
+                                        replies = list(extra) + replies
+                            if not replies:
+                                break
+                            added = _ingest_replies(replies)
+                            live_comments_added += added
+                            cur = rdata.get("cursor") or {}
+                            cursor = cur.get("next") or 0
+                            if added == 0 or cur.get("is_end") or not cursor:
+                                break
+                        except Exception:
+                            break
+
+                if not isinstance(danmaku_resp, Exception):
+                    try:
+                        tree = _etree.fromstring(danmaku_resp.content)
+                        for d in tree.findall("d")[:500]:
+                            txt = (d.text or "").strip()
+                            if not txt:
+                                continue
+                            key = txt[:40]
+                            if key in seen_danmaku_keys:
+                                continue
+                            seen_danmaku_keys.add(key)
+                            p = (d.get("p") or "").split(",")
+                            danmaku.append({
+                                "progress_ms": int(float(p[0]) * 1000) if p and p[0] else 0,
+                                "content": txt[:120],
+                            })
+                            live_danmaku_added += 1
+                    except Exception:
+                        pass
+    except Exception as exc:
+        print(f"[BILI_SENT] {bvid} view fetch 异常: {exc}")
+
+    # data_source 标识
+    if (local_comments or local_danmaku) and (live_comments_added or live_danmaku_added):
+        data_source = "mixed"
+    elif local_comments or local_danmaku:
+        data_source = "local"
+    else:
+        data_source = "live"
+    print(f"[BILI_SENT] {bvid} 本地评论={len(local_comments)} 实时新增评论={live_comments_added} "
+          f"本地弹幕={len(local_danmaku)} 实时新增弹幕={live_danmaku_added} reply_code={reply_code}")
+
+    # 情绪聚合（评论用全部命中，弹幕采前 200 条避免过慢）
+    comment_texts = [c["content"] for c in comments]
+    danmaku_sample = danmaku[:200]
+    danmaku_texts = [d["content"] for d in danmaku_sample]
+
+    comment_emotions: list[dict] = []
+    danmaku_emotions: list[dict] = []
+    try:
+        all_texts = comment_texts + danmaku_texts
+        if all_texts:
+            batch = await asyncio.to_thread(
+                emotion_engine.analyze_batch, all_texts, 8
+            )
+            comment_emotions = _aggregate_emotions(batch[: len(comment_texts)])
+            danmaku_emotions = _aggregate_emotions(batch[len(comment_texts):])
+    except Exception as exc:
+        print(f"[BILI_SENT] {bvid} emotion 异常: {exc}")
+
+    # 取热评 TOP5（按点赞）
+    top_comments = sorted(comments, key=lambda c: c["likes"], reverse=True)[:5]
+
+    payload = {
+        "bvid": bvid,
+        "aid": aid,
+        "cid": cid,
+        "title": title,
+        "total_comments": len(comments),
+        "total_danmaku": len(danmaku),
+        "comment_emotions": comment_emotions,
+        "danmaku_emotions": danmaku_emotions,
+        "top_comments": top_comments,
+        "top_danmaku": danmaku[:8],
+        "data_source": data_source,
+        "reply_code": reply_code,
+        "from_cache": False,
+        "fetched_at": int(now),
+    }
+    _BILI_SENT_CACHE[bvid] = (now, payload)
+    return payload

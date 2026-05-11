@@ -122,11 +122,57 @@
         <span class="sub-count">
           候选 {{ candidatesCount }} · 命中 {{ matchedCount }} · 共 {{ totalCount }} 条
         </span>
+        <span v-if="dismissedIds.size > 0" class="sub-dismiss-info">
+          已忽略 {{ dismissedIds.size }} 条
+          <button type="button" class="sub-dismiss-restore" @click="restoreDismissed">撤销</button>
+        </span>
+        <button
+          type="button"
+          class="sub-weights-toggle"
+          :class="{ 'is-open': weightsOpen }"
+          @click="weightsOpen = !weightsOpen"
+          title="调整推荐打分权重"
+        >
+          <iconify-icon icon="mdi:tune-vertical" />
+          <span>权重</span>
+        </button>
         <label class="sub-fallback-toggle" :title="'未命中订阅时，按热度返回 TOP 兜底'">
           <input type="checkbox" v-model="useFallback" @change="reloadRecommend(0)" />
           <span>无命中时按热度兜底</span>
         </label>
       </div>
+
+      <transition name="slide-fade">
+        <div v-if="weightsOpen" class="sub-weights-panel">
+          <div class="sub-weights-grid">
+            <div class="sub-weight-row">
+              <span class="sub-weight-label">订阅词命中</span>
+              <input type="range" min="0" max="10" step="0.5" v-model.number="weights.keyword" @input="onWeightsChange" />
+              <span class="sub-weight-value">{{ weights.keyword.toFixed(1) }}</span>
+            </div>
+            <div class="sub-weight-row">
+              <span class="sub-weight-label">订阅源命中</span>
+              <input type="range" min="0" max="10" step="0.5" v-model.number="weights.source" @input="onWeightsChange" />
+              <span class="sub-weight-value">{{ weights.source.toFixed(1) }}</span>
+            </div>
+            <div class="sub-weight-row">
+              <span class="sub-weight-label">画像·常看源</span>
+              <input type="range" min="0" max="10" step="0.5" v-model.number="weights.profile_source" @input="onWeightsChange" />
+              <span class="sub-weight-value">{{ weights.profile_source.toFixed(1) }}</span>
+            </div>
+            <div class="sub-weight-row">
+              <span class="sub-weight-label">画像·兴趣词</span>
+              <input type="range" min="0" max="10" step="0.5" v-model.number="weights.profile_tag" @input="onWeightsChange" />
+              <span class="sub-weight-value">{{ weights.profile_tag.toFixed(1) }}</span>
+            </div>
+          </div>
+          <div class="sub-weights-foot">
+            <span class="sub-weights-hint">调整后自动重新打分（已持久化到本地）</span>
+            <button type="button" class="sub-weights-reset" @click="resetWeights">恢复默认</button>
+          </div>
+        </div>
+      </transition>
+
       <div v-if="loading && !recommendations.length" class="sub-empty sub-empty--big">
         <iconify-icon icon="mdi:loading" class="text-3xl opacity-60 animate-spin" />
         <p>加载中…</p>
@@ -138,15 +184,18 @@
       </div>
       <ol v-else class="sub-rec-list">
         <li
-          v-for="(item, idx) in recommendations"
+          v-for="(item, idx) in visibleRecommendations"
           :key="item.id"
           class="sub-rec-item"
-          :class="{ 'sub-rec-item--fallback': item._fallback }"
-          @click="$emit('open-event', item)"
+          :class="{ 'sub-rec-item--fallback': item._fallback, 'sub-rec-item--read': readIds.has(item.id) }"
+          @click="handleOpen(item)"
         >
           <span class="sub-rec-rank">{{ offset + idx + 1 }}</span>
           <div class="sub-rec-body">
-            <strong>{{ item.title }}</strong>
+            <strong>
+              {{ item.title }}
+              <span v-if="readIds.has(item.id)" class="sub-rec-readtag">已读</span>
+            </strong>
             <div class="sub-rec-meta">
               <span class="sub-rec-score" v-if="!item._fallback">
                 <iconify-icon icon="mdi:fire" />匹配 {{ item._recommend_score }}
@@ -158,6 +207,14 @@
               <span class="sub-rec-platform">{{ SOURCE_LABEL[item.primary_source_id] || item.primary_source_id }} · {{ item.article_count }} 条</span>
             </div>
           </div>
+          <button
+            type="button"
+            class="sub-rec-dismiss"
+            title="忽略该推荐"
+            @click.stop="dismissItem(item.id)"
+          >
+            <iconify-icon icon="mdi:close" />
+          </button>
           <iconify-icon icon="mdi:chevron-right" class="sub-rec-arrow" />
         </li>
       </ol>
@@ -175,10 +232,35 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { buildApiUrl } from "../config/api";
 
-defineEmits(["open-event"]);
+const emit = defineEmits(["open-event"]);
+
+/* A2: 已读 / 已忽略持久化键 */
+const LS_READ_KEY = "yujing.sub.readIds";
+const LS_DISMISS_KEY = "yujing.sub.dismissedIds";
+const loadIdSet = (key) => {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return new Set();
+    const arr = JSON.parse(raw);
+    return new Set(Array.isArray(arr) ? arr : []);
+  } catch {
+    return new Set();
+  }
+};
+const saveIdSet = (key, set) => {
+  try {
+    localStorage.setItem(key, JSON.stringify(Array.from(set)));
+  } catch {
+    /* 全局静默：陰私/限额场景可能写入失败 */
+  }
+};
+const readIds = ref(loadIdSet(LS_READ_KEY));
+const dismissedIds = ref(loadIdSet(LS_DISMISS_KEY));
+watch(readIds, (v) => saveIdSet(LS_READ_KEY, v), { deep: true });
+watch(dismissedIds, (v) => saveIdSet(LS_DISMISS_KEY, v), { deep: true });
 
 const KIND_LABEL = { keyword: "关键词", event: "事件", source: "数据源" };
 const SOURCE_LABEL = {
@@ -203,8 +285,62 @@ const totalCount = ref(0);
 const offset = ref(0);
 const pageSize = ref(15);
 const useFallback = ref(true);
+
+/* A1: 打分权重（可调 + 持久化） */
+const LS_WEIGHTS_KEY = "yujing.sub.weights";
+const DEFAULT_WEIGHTS = { keyword: 5.0, source: 3.0, profile_source: 3.0, profile_tag: 3.0 };
+const loadWeights = () => {
+  try {
+    const raw = localStorage.getItem(LS_WEIGHTS_KEY);
+    if (!raw) return { ...DEFAULT_WEIGHTS };
+    const parsed = JSON.parse(raw);
+    return { ...DEFAULT_WEIGHTS, ...parsed };
+  } catch {
+    return { ...DEFAULT_WEIGHTS };
+  }
+};
+const weights = ref(loadWeights());
+const weightsOpen = ref(false);
+let weightsDebounce = null;
+const onWeightsChange = () => {
+  try {
+    localStorage.setItem(LS_WEIGHTS_KEY, JSON.stringify(weights.value));
+  } catch {
+    /* 静默 */
+  }
+  if (weightsDebounce) clearTimeout(weightsDebounce);
+  weightsDebounce = setTimeout(() => reloadRecommend(0), 220);
+};
+const resetWeights = () => {
+  weights.value = { ...DEFAULT_WEIGHTS };
+  onWeightsChange();
+};
 const currentPage = computed(() => Math.floor(offset.value / pageSize.value) + 1);
 const totalPages = computed(() => Math.max(1, Math.ceil(totalCount.value / pageSize.value)));
+
+/* A2: 过滤已忽略条目；已读仍然展示但连同样式决定 */
+const visibleRecommendations = computed(() =>
+  recommendations.value.filter((it) => !dismissedIds.value.has(it.id))
+);
+
+const handleOpen = (item) => {
+  if (!readIds.value.has(item.id)) {
+    const next = new Set(readIds.value);
+    next.add(item.id);
+    readIds.value = next;
+  }
+  emit("open-event", item);
+};
+
+const dismissItem = (id) => {
+  const next = new Set(dismissedIds.value);
+  next.add(id);
+  dismissedIds.value = next;
+};
+
+const restoreDismissed = () => {
+  dismissedIds.value = new Set();
+};
 
 const newSubKind = ref("keyword");
 const newSubValue = ref("");
@@ -221,6 +357,10 @@ const fetchRecommend = async (newOffset = offset.value) => {
     limit: String(pageSize.value),
     offset: String(newOffset),
     fallback: useFallback.value ? "true" : "false",
+    w_keyword: String(weights.value.keyword),
+    w_source: String(weights.value.source),
+    w_profile_source: String(weights.value.profile_source),
+    w_profile_tag: String(weights.value.profile_tag),
   });
   const rec = await fetchJSON(`/api/recommendations?${params}`);
   recommendations.value = rec.items || [];
@@ -746,6 +886,166 @@ onMounted(loadAll);
 .sub-rec-score--fb {
   background: #f1f5f9 !important;
   color: #64748b !important;
+}
+
+/* A2: 已读 / 已忽略相关样式 */
+.sub-rec-item--read {
+  opacity: 0.62;
+}
+.sub-rec-item--read .sub-rec-body strong {
+  color: #64748b;
+  font-weight: 600;
+}
+.sub-rec-readtag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  background: #e2e8f0;
+  color: #64748b;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  vertical-align: middle;
+}
+.sub-rec-dismiss {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #cbd5e1;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+.sub-rec-dismiss:hover {
+  border-color: #fca5a5;
+  background: #fef2f2;
+  color: #ef4444;
+}
+.sub-dismiss-info {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 8px;
+  padding: 2px 10px;
+  background: #fff7ed;
+  color: #c2410c;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+}
+.sub-dismiss-restore {
+  background: transparent;
+  border: 1px solid #fdba74;
+  color: #c2410c;
+  border-radius: 999px;
+  padding: 0 8px;
+  font-size: 10px;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+.sub-dismiss-restore:hover {
+  background: #fed7aa;
+}
+
+/* A1: 权重调节面板 */
+.sub-weights-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 8px;
+  padding: 3px 10px;
+  border: 1px solid #c7d2fe;
+  background: #eef2ff;
+  color: #4338ca;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+.sub-weights-toggle:hover {
+  background: #e0e7ff;
+}
+.sub-weights-toggle.is-open {
+  background: #4338ca;
+  color: #fff;
+  border-color: #4338ca;
+}
+.sub-weights-panel {
+  margin: 12px 0 4px;
+  padding: 14px 18px;
+  background: linear-gradient(135deg, rgba(238, 242, 255, 0.85), rgba(245, 243, 255, 0.7));
+  border: 1px solid rgba(199, 210, 254, 0.7);
+  border-radius: 14px;
+}
+.sub-weights-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px 24px;
+}
+.sub-weight-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.sub-weight-label {
+  flex-shrink: 0;
+  width: 80px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #475569;
+}
+.sub-weight-row input[type="range"] {
+  flex: 1;
+  accent-color: #6366f1;
+  cursor: pointer;
+}
+.sub-weight-value {
+  flex-shrink: 0;
+  min-width: 32px;
+  text-align: right;
+  font-family: "Fira Code", monospace;
+  font-size: 12px;
+  font-weight: 700;
+  color: #4338ca;
+}
+.sub-weights-foot {
+  margin-top: 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+.sub-weights-hint {
+  font-size: 11px;
+  color: #64748b;
+}
+.sub-weights-reset {
+  padding: 3px 12px;
+  background: transparent;
+  border: 1px solid #c7d2fe;
+  color: #4338ca;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+.sub-weights-reset:hover {
+  background: #eef2ff;
+}
+.slide-fade-enter-active,
+.slide-fade-leave-active {
+  transition: all 0.22s ease;
+}
+.slide-fade-enter-from,
+.slide-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-6px);
 }
 
 @media (max-width: 1100px) {

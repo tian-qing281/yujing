@@ -1645,19 +1645,28 @@ body { font-family: "Fira Sans", "PingFang SC", "Microsoft YaHei", sans-serif; b
 .content-scroll::before {
   content: "";
   display: block;
-  width: min(1560px, 100%);
+  width: min(1800px, 100%);
   height: 12px;
   margin: 0 auto 16px;
   border-top: 1px solid rgba(226, 232, 240, 0.94);
   opacity: 0.92;
 }
 
-.article-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 28px; max-width: 1560px; margin: 0 auto; align-content: start; }
-.event-grid { grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); }
-.signal-grid { grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); }
+/* E15: 列宽下探到 320px，让 800px 主区也能两列；最大宽度放宽到 1800 以适配 2K/4K 屏 */
+.article-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 24px; max-width: 1800px; margin: 0 auto; align-content: start; }
+.event-grid { grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); }
+.signal-grid { grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); }
+
+@media (min-width: 1280px) {
+  .article-grid { gap: 28px; }
+  .content-scroll { padding: 32px 48px 64px; }
+}
+@media (max-width: 900px) {
+  .content-scroll { padding: 20px 16px 48px; }
+}
 
 .event-toolbar-shell {
-  max-width: 1560px;
+  max-width: 1800px;
   margin: 0 auto 18px;
   display: grid;
   gap: 12px;

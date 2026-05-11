@@ -12,11 +12,11 @@ from typing import List, Dict, Any
 from app.llm import chat_with_news
 
 
-_PROMPT = """你是舆情方面级情感分析（ABSA）专家。请从下文新闻中抽取 3-5 个核心"方面"（aspect），
+_PROMPT = """你是舆情方面级情感分析（ABSA）专家。请从下文新闻中抽取 5-8 个核心“方面”（aspect），
 每个方面给出该方面在文中的情感（positive / neutral / negative）以及一句最能体现该情感的证据句。
 
 要求：
-1. 方面优先级：人物 > 机构 > 政策/事件 > 行业/赛道 > 概念。每个方面 2-8 个汉字。
+1. 方面优先级：人物 > 机构 > 政策/事件 > 行业/赛道 > 概念。每个方面 2-8 个汉字，应尽量覆盖文中出现的核心实体与议题。
 2. 不要泛泛的"市场""情况"等空词；优先抽具体实体或议题。
 3. 情感只能取 positive / neutral / negative 三选一。
 4. 证据句必须摘自原文（≤40 字），不要改写。
@@ -62,7 +62,7 @@ def _safe_parse_json(text: str) -> List[Dict[str, Any]]:
 def extract_aspects(title: str, content: str) -> List[Dict[str, Any]]:
     """对单篇文章做方面级情感分析。
 
-    返回结构（最多 5 项）：
+    返回结构（最多 8 项）：
         [{"aspect": "外交部", "sentiment": "positive", "evidence": "中方代表展现了风度。"}, ...]
 
     任何异常或解析失败均返回空列表（前端会回退到旧三色环）。
@@ -95,6 +95,6 @@ def extract_aspects(title: str, content: str) -> List[Dict[str, Any]]:
             "sentiment": sentiment,
             "evidence": evidence[:60],
         })
-        if len(cleaned) >= 5:
+        if len(cleaned) >= 8:
             break
     return cleaned

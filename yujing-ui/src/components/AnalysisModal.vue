@@ -140,7 +140,7 @@
                       </div>
                       <p class="absa-source-tip">
                         <iconify-icon icon="mdi:information-outline" />
-                        基于 LLM 对正文抽取的 3-5 个核心方面（人物 / 机构 / 议题），每条配证据句。
+                        基于 LLM 对正文抽取的 5-8 个核心方面（人物 / 机构 / 议题），每条配证据句。
                       </p>
                     </div>
 
@@ -179,14 +179,64 @@
                     </div>
                   </div>
 
-                  <!-- 核心实体雷达 -->
+                  <!-- 核心实体雷达 / ABSA 维度雷达（B5：当抽取到 aspects 时优先显示语义雷达） -->
                   <div class="intel-box radar-intel-box">
                     <div class="intel-label">
-                      <iconify-icon icon="mdi:radar" />
-                      <span>核心实体雷达</span>
+                      <iconify-icon :icon="hasAspects ? 'mdi:hexagon-multiple-outline' : 'mdi:radar'" />
+                      <span>{{ hasAspects ? 'ABSA 维度雷达' : '核心实体雷达' }}</span>
+                      <span v-if="hasAspects" class="absa-badge">情感</span>
                     </div>
                     <div class="chart-shell">
-                      <div ref="keywordRadarRef" class="chart-render-area"></div>
+                      <div v-show="!hasAspects" ref="keywordRadarRef" class="chart-render-area"></div>
+                      <div v-show="hasAspects" ref="aspectRadarRef" class="chart-render-area"></div>
+                    </div>
+                  </div>
+
+                  <!-- B6: B 站评论 + 弹幕情绪聚合（仅哔哩哔哩榜文章） -->
+                  <div v-if="isBilibiliArticle" class="intel-box bili-sent-box">
+                    <div class="intel-label">
+                      <iconify-icon icon="mdi:bilibili" />
+                      <span>B 站评论 · 弹幕情绪</span>
+                      <span v-if="biliSent?.data_source" class="absa-badge">{{ biliSent.data_source === 'local' ? '本地' : '实时' }}</span>
+                      <span v-if="biliSentLoading" class="absa-badge absa-badge--loading">加载中</span>
+                    </div>
+                    <div v-if="biliSentLoading" class="bili-sent-loading">
+                      <div class="absa-skeleton" v-for="n in 2" :key="n">
+                        <div class="sk-bar sk-bar-aspect"></div>
+                        <div class="sk-bar sk-bar-evi"></div>
+                      </div>
+                    </div>
+                    <div v-else-if="biliSentError" class="absa-empty">
+                      <iconify-icon icon="mdi:database-off-outline" />
+                      <p class="absa-empty-title">{{ biliSentError }}</p>
+                    </div>
+                    <div v-else-if="biliSent" class="bili-sent-grid">
+                      <div class="bili-sent-col">
+                        <div class="bili-sent-col-head">
+                          <iconify-icon icon="mdi:comment-text-multiple-outline" />
+                          <span>评论 · {{ biliSent.total_comments }} 条</span>
+                        </div>
+                        <div ref="biliCommentChartRef" class="bili-sent-pie"></div>
+                        <ul v-if="biliSent.top_comments?.length" class="bili-sent-top">
+                          <li v-for="(c, i) in biliSent.top_comments.slice(0,3)" :key="i">
+                            <span class="bili-sent-likes">♥ {{ c.likes }}</span>
+                            <span class="bili-sent-text">{{ c.content }}</span>
+                          </li>
+                        </ul>
+                      </div>
+                      <div class="bili-sent-col">
+                        <div class="bili-sent-col-head">
+                          <iconify-icon icon="mdi:subtitles-outline" />
+                          <span>弹幕 · {{ biliSent.total_danmaku }} 条</span>
+                        </div>
+                        <div ref="biliDanmakuChartRef" class="bili-sent-pie"></div>
+                        <ul v-if="biliSent.top_danmaku?.length" class="bili-sent-top">
+                          <li v-for="(d, i) in biliSent.top_danmaku.slice(0,3)" :key="i">
+                            <span class="bili-sent-time">{{ Math.floor((d.progress_ms||0)/1000) }}s</span>
+                            <span class="bili-sent-text">{{ d.content }}</span>
+                          </li>
+                        </ul>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -245,12 +295,94 @@ const wcCanvas = ref(null)
 const emotionChartRef = ref(null)
 const sentimentChartRef = ref(null)
 const keywordRadarRef = ref(null)
+const aspectRadarRef = ref(null)
+const biliCommentChartRef = ref(null)
+const biliDanmakuChartRef = ref(null)
 let emotionChart = null
 let sentimentChart = null
 let radarChart = null
+let aspectRadarChart = null
+let biliCommentChart = null
+let biliDanmakuChart = null
 let renderAnimationFrame = null
 let renderDebounceTimer = null
 let lastRenderedCloudLength = -1
+
+// B6: B 站评论 / 弹幕情绪聚合
+const biliSent = ref(null)
+const biliSentLoading = ref(false)
+const biliSentError = ref('')
+const isBilibiliArticle = computed(() => {
+  const it = props.item
+  if (!it) return false
+  return it.source_id === 'bilibili_hot_video' || /^BV[\w]{8,}$/.test(String(it.item_id || it.itemId || ''))
+})
+
+async function fetchBiliSentiment(bvid) {
+  if (!bvid) return
+  biliSentLoading.value = true
+  biliSentError.value = ''
+  biliSent.value = null
+  try {
+    const r = await fetch(`/api/bili-sentiment/${bvid}`)
+    const j = await r.json()
+    if (j.error) {
+      biliSentError.value = '该视频暂无评论/弹幕数据'
+    } else {
+      biliSent.value = j
+      nextTick(() => renderBiliSentCharts())
+    }
+  } catch (e) {
+    biliSentError.value = '加载失败：' + (e?.message || e)
+  } finally {
+    biliSentLoading.value = false
+  }
+}
+
+const EMO_COLORS = { '愤怒': '#ef4444', '厌恶': '#a855f7', '悲伤': '#94a3b8', '喜悦': '#10b981', '关注': '#3b82f6', '惊讶': '#f59e0b', '质疑': '#ec4899', '中性': '#64748b' }
+
+function renderEmoPie(domRef, instRef, data) {
+  if (!domRef?.value || !window.echarts) return null
+  if (instRef) instRef.dispose()
+  const inst = window.echarts.init(domRef.value)
+  const arr = (data || []).filter(e => e.value > 0)
+  if (!arr.length) {
+    inst.setOption({
+      graphic: [{ type: 'text', left: 'center', top: 'middle', style: { text: '暂无数据', fill: '#94a3b8', fontSize: 12, fontWeight: 700 } }]
+    })
+    return inst
+  }
+  inst.setOption({
+    tooltip: { trigger: 'item', formatter: '{b}: {d}%' },
+    legend: {
+      orient: 'horizontal',
+      bottom: 0,
+      left: 'center',
+      itemWidth: 10,
+      itemHeight: 10,
+      itemGap: 8,
+      icon: 'circle',
+      textStyle: { fontSize: 10, color: '#475569' }
+    },
+    series: [{
+      type: 'pie',
+      radius: ['46%', '70%'],
+      center: ['50%', '42%'],
+      avoidLabelOverlap: true,
+      itemStyle: { borderRadius: 4, borderColor: '#fff', borderWidth: 2 },
+      label: { show: false },
+      labelLine: { show: false },
+      data: arr.map(e => ({ value: +(e.value * 100).toFixed(1), name: e.label, itemStyle: { color: EMO_COLORS[e.label] || '#94a3b8' } }))
+    }]
+  })
+  return inst
+}
+
+function renderBiliSentCharts() {
+  if (!biliSent.value) return
+  biliCommentChart = renderEmoPie(biliCommentChartRef, biliCommentChart, biliSent.value.comment_emotions)
+  biliDanmakuChart = renderEmoPie(biliDanmakuChartRef, biliDanmakuChart, biliSent.value.danmaku_emotions)
+}
 
 // 凭据失效识别：后端 ai_summary 字段以 ❌ 开头或包含「凭据失效」字样时，认定为凭据错误
 const isCredentialError = computed(() => {
@@ -526,6 +658,61 @@ const renderCloud = (data) => {
       })
     }
   }
+
+  // B5: ABSA 维度雷达图，轴 = aspect，值 = 情感极性映射（0=负 / 1=中性 / 2=正）
+  renderAspectRadar()
+}
+
+function renderAspectRadar() {
+  if (!aspectRadarRef.value || !window.echarts) return
+  const aspects = (props.item?.aspects || []).filter(a => a && a.aspect)
+  if (aspects.length < 3) {
+    if (aspectRadarChart) { aspectRadarChart.dispose(); aspectRadarChart = null; }
+    return
+  }
+  if (aspectRadarChart) aspectRadarChart.dispose()
+  aspectRadarChart = window.echarts.init(aspectRadarRef.value)
+  const polarityScore = (s) => (s === 'positive' ? 2 : s === 'negative' ? 0 : 1)
+  const polarityLabel = (s) => (s === 'positive' ? '正面' : s === 'negative' ? '负面' : '中性')
+  const axisColor = (s) => (s === 'positive' ? '#16a34a' : s === 'negative' ? '#dc2626' : '#64748b')
+  aspectRadarChart.setOption({
+    tooltip: {
+      formatter: (p) => {
+        const items = aspects.map((a, i) => `<div style="display:flex;justify-content:space-between;gap:12px"><span>${a.aspect}</span><strong style="color:${axisColor(a.sentiment)}">${polarityLabel(a.sentiment)}</strong></div>`).join('')
+        return `<div style="font-weight:700;margin-bottom:6px">方面情感极性</div>${items}`
+      }
+    },
+    radar: {
+      indicator: aspects.map(a => ({ name: a.aspect, max: 2 })),
+      shape: 'polygon',
+      splitNumber: 2,
+      axisName: {
+        formatter: (name, ind) => {
+          const a = aspects.find(x => x.aspect === name)
+          return `{c|${name}}\n{p|${polarityLabel(a?.sentiment)}}`
+        },
+        rich: {
+          c: { color: '#0f172a', fontSize: 11, fontWeight: 800, padding: [0, 0, 2, 0] },
+          p: { color: '#94a3b8', fontSize: 9, fontWeight: 700 }
+        }
+      },
+      splitArea: { areaStyle: { color: ['rgba(168,85,247,0.03)', 'rgba(168,85,247,0.07)'] } },
+      splitLine: { lineStyle: { color: 'rgba(148,163,184,0.18)' } },
+      axisLine: { lineStyle: { color: 'rgba(148,163,184,0.22)' } }
+    },
+    series: [{
+      type: 'radar',
+      name: 'ABSA 极性',
+      data: [{
+        value: aspects.map(a => polarityScore(a.sentiment)),
+        areaStyle: { color: 'rgba(168,85,247,0.18)' },
+        lineStyle: { color: '#a855f7', width: 2 },
+        itemStyle: { color: '#9333ea', borderWidth: 2 },
+        symbol: 'circle',
+        symbolSize: 7
+      }]
+    }]
+  })
 }
 
 watch(() => props.item?.wordcloud, (newData) => {
@@ -544,13 +731,21 @@ watch(() => props.item?.emotions, (newData) => {
 // 监听 ABSA 方面变化，重绘为方面级条形图
 watch(() => props.item?.aspects, (newData) => {
   if (Array.isArray(newData) && newData.length > 0 && props.activeTab === 'visual') {
-    nextTick(() => renderSentimentChart())
+    nextTick(() => {
+      renderSentimentChart()
+      renderAspectRadar()
+    })
   }
 }, { deep: true })
 
 onMounted(() => {
   if (props.activeTab === 'visual' && hasVisualData.value) {
     nextTick(() => renderCloud(props.item?.wordcloud))
+  }
+  // B6: 首次挂载时若已是 B 站文章则触发拉取
+  if (isBilibiliArticle.value) {
+    const bv = props.item?.item_id || props.item?.itemId
+    if (bv && /^BV[\w]{8,}$/.test(bv)) fetchBiliSentiment(bv)
   }
 })
 
@@ -559,6 +754,11 @@ watch(() => props.item?.id, (newId) => {
   if (emotionChart) { emotionChart.dispose(); emotionChart = null; }
   if (sentimentChart) { sentimentChart.dispose(); sentimentChart = null; }
   if (radarChart) { radarChart.dispose(); radarChart = null; }
+  if (aspectRadarChart) { aspectRadarChart.dispose(); aspectRadarChart = null; }
+  if (biliCommentChart) { biliCommentChart.dispose(); biliCommentChart = null; }
+  if (biliDanmakuChart) { biliDanmakuChart.dispose(); biliDanmakuChart = null; }
+  biliSent.value = null
+  biliSentError.value = ''
   // 清空词云画布
   if (wcCanvas.value) {
     const ctx = wcCanvas.value.getContext('2d');
@@ -568,12 +768,20 @@ watch(() => props.item?.id, (newId) => {
   if (newId && props.activeTab === 'visual' && hasVisualData.value) {
     nextTick(() => renderCloud(props.item?.wordcloud))
   }
+  // B6: B 站文章自动加载评论/弹幕情绪
+  if (newId && isBilibiliArticle.value) {
+    const bv = props.item?.item_id || props.item?.itemId
+    if (bv && /^BV[\w]{8,}$/.test(bv)) fetchBiliSentiment(bv)
+  }
 })
 
 onUnmounted(() => {
   if (emotionChart) emotionChart.dispose()
   if (sentimentChart) sentimentChart.dispose()
   if (radarChart) radarChart.dispose()
+  if (aspectRadarChart) aspectRadarChart.dispose()
+  if (biliCommentChart) biliCommentChart.dispose()
+  if (biliDanmakuChart) biliDanmakuChart.dispose()
   if (renderDebounceTimer) clearTimeout(renderDebounceTimer)
   if (renderAnimationFrame) cancelAnimationFrame(renderAnimationFrame)
 })
@@ -581,6 +789,9 @@ onUnmounted(() => {
 watch(() => props.activeTab, (newTab) => {
   if (newTab === 'visual' && hasVisualData.value) {
     nextTick(() => renderCloud(props.item?.wordcloud))
+  }
+  if (newTab === 'visual' && biliSent.value) {
+    nextTick(() => renderBiliSentCharts())
   }
 })
 </script>
@@ -782,6 +993,23 @@ watch(() => props.activeTab, (newTab) => {
 .absa-empty iconify-icon { font-size: 36px; color: #cbd5e1; margin-bottom: 6px; }
 .absa-empty-title { font-size: 13px; font-weight: 800; color: #475569; margin: 0 0 4px; }
 .absa-empty-hint { font-size: 11.5px; color: #94a3b8; line-height: 1.55; max-width: 320px; margin: 0; }
+
+/* B6: B 站评论 / 弹幕情绪聚合卡 */
+.bili-sent-box .intel-label iconify-icon { color: #fb7299; }
+.bili-sent-loading { padding: 8px 0; }
+.bili-sent-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.bili-sent-col { display: flex; flex-direction: column; gap: 8px; background: rgba(251,114,153,0.04); border: 1px solid rgba(251,114,153,0.12); border-radius: 12px; padding: 10px; }
+.bili-sent-col-head { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 800; color: #475569; }
+.bili-sent-col-head iconify-icon { color: #fb7299; font-size: 16px; }
+.bili-sent-pie { width: 100%; height: 200px; }
+.bili-sent-top { list-style: none; margin: 0; padding: 6px 0 0; display: flex; flex-direction: column; gap: 5px; border-top: 1px dashed rgba(251,114,153,0.18); }
+.bili-sent-top li { display: flex; align-items: flex-start; gap: 6px; font-size: 11px; line-height: 1.45; color: #334155; }
+.bili-sent-likes { flex-shrink: 0; color: #fb7299; font-weight: 800; min-width: 32px; }
+.bili-sent-time { flex-shrink: 0; color: #94a3b8; font-weight: 700; min-width: 32px; font-family: 'Fira Code', monospace; font-size: 10px; }
+.bili-sent-text { flex: 1; word-break: break-word; }
+@media (max-width: 760px) {
+  .bili-sent-grid { grid-template-columns: 1fr; }
+}
 
 .capsule-scroll-body { flex:1; overflow-y: auto; padding: 20px 32px 30px; }
 .article-header-group { margin-bottom: 16px; display: grid; gap: 10px; }
