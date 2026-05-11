@@ -77,13 +77,13 @@
                 <p class="err-hint" v-else-if="/JavaScript|前端壳|热点聚合页/.test(item.analyze_error)">
                   原站为纯 JS 渲染页面（或热搜跳转页），无法直接抽取文本。请点击上方「访问网页原文」查看原始内容。
                 </p>
-                <button class="btn-empty-sync btn btn-primary" @click="$emit('trigger-ai')">重新分析</button>
+                <button class="btn-empty-sync btn btn-primary" @click="$emit('trigger-ai', true)">重新分析</button>
               </div>
 
               <div v-else-if="!hasVisualData && !item.isAnalyzing" class="empty-vis">
                 <iconify-icon icon="mdi:database-search" />
                 <p class="status-bright-text">数据分析特征未就绪</p>
-                <button class="btn-empty-sync btn btn-primary" @click="$emit('trigger-ai')">开始深度分析</button>
+                <button class="btn-empty-sync btn btn-primary" @click="$emit('trigger-ai', true)">开始深度分析</button>
               </div>
               
               <div v-show="hasVisualData" class="vis-intel-dashboard">
@@ -93,7 +93,7 @@
                     <strong>原文采集受限：</strong>{{ item.analyze_error }}
                     <span v-if="/凭据|登录|cookie|Cookie|验证/.test(item.analyze_error)">（请更新左侧「凭据资产配置」中的 Cookie 后重试）</span>
                   </div>
-                  <button class="vis-error-banner__retry btn btn-xs" @click="$emit('trigger-ai')">重试</button>
+                  <button class="vis-error-banner__retry btn btn-xs" @click="$emit('trigger-ai', true)">重试</button>
                 </div>
                 <div class="intel-visual-grid">
                   <!-- 情感极性分布 -->

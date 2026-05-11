@@ -2366,12 +2366,20 @@ async def analyze_article(article_id: int, force_refresh: bool = False, db: Sess
             return
 
         if isinstance(markdown_content, str) and (markdown_content.startswith("❌") or markdown_content.startswith("鉂")):
+            # 透明诊断：原文采集失败时不再用标题伪造词云/情感（避免误导用户）
+            # 同时清空缓存与数据库中无效的旧分析结果，防止下次缓存命中显示陈旧数据
+            analysis_cache.pop(article_id, None)
+            inner_db = SessionLocal()
             try:
-                fallback_wc = get_word_frequencies(snap_title, "")
-                fallback_emo = emotion_engine.analyze(snap_title or "")
-                yield f"data: {json.dumps({'type': 'metadata', 'wordcloud': fallback_wc, 'emotions': fallback_emo}, ensure_ascii=False)}\n\n"
+                art = inner_db.query(Article).filter(Article.id == article_id).first()
+                if art:
+                    art.ai_summary = ""
+                    art.ai_sentiment = None
+                    inner_db.commit()
             except Exception:
-                pass
+                inner_db.rollback()
+            finally:
+                inner_db.close()
             yield f"data: {json.dumps({'type': 'error', 'msg': markdown_content}, ensure_ascii=False)}\n\n"
             return
 

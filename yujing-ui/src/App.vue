@@ -1294,11 +1294,17 @@ const triggerAI = async (force = false) => {
           } else if (data.type === "content_end") {
             syncArticleState({ id: articleId, isAnalyzing: false });
           } else if (data.type === "error") {
-            // 后端返回采集/LLM 异常 → 把原始错误透传到 UI，避免静默闪回空态
+            // 后端返回采集/LLM 异常 → 把原始错误透传到 UI，并清空残留的旧特征，
+            // 避免用户看到"凭据失效但还有图表"的误导
             syncArticleState({
               id: articleId,
               isAnalyzing: false,
               analyze_error: data.msg || "未知错误",
+              wordcloud: [],
+              emotions: [],
+              aspects: [],
+              ai_summary: "",
+              raw_content: "",
             });
             statusMsg.value = data.msg || "分析失败";
           } else if (data.type === "skip_video") {
