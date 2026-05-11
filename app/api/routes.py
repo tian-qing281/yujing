@@ -27,17 +27,23 @@ from app.crawler.sources.toutiao import ToutiaoHotBoard
 from app.crawler.sources.weibo import WeiboHotSearch
 from app.crawler.sources.wallstreetcn import WallstreetcnNews
 from app.crawler.sources.zhihu import ZhihuHotQuestion
-from app.database import Article, Event, EventArticle, SessionLocal, Topic, TopicEvent, utcnow
+from app.database import Article, Blocklist, Event, EventArticle, SessionLocal, Subscription, Topic, TopicEvent, UserProfile, utcnow
 from app.schemas import (
     ArticleResponse,
+    BlocklistCreate,
+    BlocklistResponse,
     ChatRequest,
     ChatResponse,
     CompareRequest,
     EventDetailResponse,
     EventResponse,
+    SubscriptionCreate,
+    SubscriptionResponse,
     TopicDetailResponse,
     TopicResponse,
+    TrackEvent,
 )
+from app.services.absa import extract_aspects
 from app.services.emotion import emotion_engine
 from app.services.events import classify_event_confidence, ensure_events, rebuild_events, search_events
 from app.services.search_engine import meili
@@ -788,6 +794,67 @@ def _cached_search_events_count(db: Session, query: str, *, time_range=None, sou
         for k in stale:
             _search_events_cache.pop(k, None)
     return count
+
+def _build_sentiment_trend(related_articles: List[dict]) -> List[dict]:
+    """根据事件相关文章构造情感演变时间序列。
+
+    - 按文章发布时间(fetch_time)聚合到时间桶
+    - 时间桶粒度自适应：跨度 ≤24h 用 1 小时；≤7 天用 6 小时；>7 天用 1 天
+    - 输出 [{time, positive, neutral, negative}] 升序，前端可直接渲染堆叠面积图
+    - 仅在文章数 ≥3 时返回，否则空列表（前端会隐藏卡片）
+    """
+    if not related_articles or len(related_articles) < 3:
+        return []
+
+    pairs: list = []
+    for art in related_articles:
+        ts = art.get("fetch_time")
+        if not ts:
+            continue
+        try:
+            if isinstance(ts, str):
+                dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+            else:
+                dt = ts
+            if dt.tzinfo is not None:
+                dt = dt.replace(tzinfo=None)
+        except Exception:
+            continue
+        sentiment = art.get("ai_sentiment") or "neutral"
+        if sentiment not in ("positive", "negative", "neutral"):
+            sentiment = "neutral"
+        pairs.append((dt, sentiment))
+
+    if not pairs:
+        return []
+
+    times = [p[0] for p in pairs]
+    span_hours = (max(times) - min(times)).total_seconds() / 3600
+    if span_hours <= 24:
+        bucket_hours = 1
+    elif span_hours <= 24 * 7:
+        bucket_hours = 6
+    else:
+        bucket_hours = 24
+
+    buckets: dict = {}
+    bucket_seconds = bucket_hours * 3600
+    for dt, sent in pairs:
+        epoch = int(dt.timestamp() // bucket_seconds) * bucket_seconds
+        bucket_dt = datetime.fromtimestamp(epoch)
+        b = buckets.setdefault(bucket_dt, {"positive": 0, "neutral": 0, "negative": 0})
+        b[sent] += 1
+
+    return [
+        {
+            "time": bdt.isoformat(),
+            "positive": b["positive"],
+            "neutral": b["neutral"],
+            "negative": b["negative"],
+        }
+        for bdt, b in sorted(buckets.items(), key=lambda x: x[0])
+    ]
+
 
 def marshal_event(event: Event, query: str = "", search_hit: dict | None = None, db: Session | None = None, _source_ids_override: List[str] | None = None):
     keywords = []
@@ -1784,6 +1851,7 @@ async def get_event_detail(event_id: int, db: Session = Depends(get_db)):
 
     payload = marshal_event(event, db=db)
     payload["related_articles"] = related_articles
+    payload["sentiment_trend"] = _build_sentiment_trend(related_articles)
     return payload
 
 
@@ -2216,22 +2284,39 @@ async def analyze_article(article_id: int, force_refresh: bool = False, db: Sess
         article.ai_sentiment = None
         db.commit()
 
+    # 关键修复：StreamingResponse 的 generator 会在 endpoint return 之后才执行，
+    # 而 FastAPI 在此时已经关闭了 Depends(get_db) 提供的 session。
+    # 因此先把所有需要的字段值快照出来，generator 内部再开新 session 做写入。
+    snap_title = article.title or ""
+    snap_url = article.url or ""
+    snap_content = article.content or ""
+    snap_extra = article.extra_info or ""
+
     async def _analyze_core():
         """实际的分析流程（原 event_generator 的 body）。为支持外层去重/限流，抽成独立生成器。"""
         started_at = time.perf_counter()
-        can_use_cached_content = bool(article.content) and not _is_invalid_cached_content(article.content) and not force_refresh
+        # 注意：endpoint 已 return，原 db 已被 FastAPI 关闭，此处只能使用 snap_* 快照
+        # 与新建的 inner_db。
+        cur_content = snap_content
+        can_use_cached_content = bool(cur_content) and not _is_invalid_cached_content(cur_content) and not force_refresh
 
         if not can_use_cached_content:
-            if article.content and _is_invalid_cached_content(article.content):
-                article.content = ""
-                article.ai_summary = ""
-                article.ai_sentiment = None
-                db.commit()
+            if cur_content and _is_invalid_cached_content(cur_content):
+                inner_db = SessionLocal()
+                try:
+                    art = inner_db.query(Article).filter(Article.id == article_id).first()
+                    if art:
+                        art.content = ""
+                        art.ai_summary = ""
+                        art.ai_sentiment = None
+                        inner_db.commit()
+                finally:
+                    inner_db.close()
 
             yield f"data: {json.dumps({'type': 'status', 'msg': '正在抓取正文与结构化数据...'}, ensure_ascii=False)}\n\n"
             fetch_started_at = time.perf_counter()
             try:
-                markdown_content = await extract_article_content(article.url)
+                markdown_content = await extract_article_content(snap_url)
             except Exception as exc:
                 yield f"data: {json.dumps({'type': 'error', 'msg': f'采集异常: {exc}'}, ensure_ascii=False)}\n\n"
                 return
@@ -2240,43 +2325,50 @@ async def analyze_article(article_id: int, force_refresh: bool = False, db: Sess
                 f"[ANALYZE] article={article_id} fetch={time.perf_counter() - fetch_started_at:.2f}s"
             )
         else:
-            markdown_content = article.content
+            markdown_content = cur_content
 
-        _print_analysis_debug(article, markdown_content)
+        # 调试输出（不依赖 ORM 实体）
+        try:
+            print(f"[ANALYZE] article={article_id} title={snap_title!r} content_len={len(markdown_content or '')}")
+        except Exception:
+            pass
 
         # 视频事件识别：reader 返回以 🎬 开头 → 说明此热点主体为视频/微头条
         # → 级联删除（article + event_articles；事件若因此 article_count=0 也删）
         if isinstance(markdown_content, str) and markdown_content.startswith("🎬"):
+            inner_db = SessionLocal()
             try:
-                ea_rows = db.query(EventArticle).filter(EventArticle.article_id == article.id).all()
+                ea_rows = inner_db.query(EventArticle).filter(EventArticle.article_id == article_id).all()
                 affected_event_ids = {r.event_id for r in ea_rows}
                 for r in ea_rows:
-                    db.delete(r)
-                db.delete(article)
-                db.commit()
-                # 清理因此而变空的事件
+                    inner_db.delete(r)
+                art = inner_db.query(Article).filter(Article.id == article_id).first()
+                if art:
+                    inner_db.delete(art)
+                inner_db.commit()
                 for eid in affected_event_ids:
-                    remaining = db.query(EventArticle).filter(EventArticle.event_id == eid).count()
+                    remaining = inner_db.query(EventArticle).filter(EventArticle.event_id == eid).count()
                     if remaining == 0:
-                        ev = db.query(Event).filter(Event.id == eid).first()
+                        ev = inner_db.query(Event).filter(Event.id == eid).first()
                         if ev:
-                            db.delete(ev)
+                            inner_db.delete(ev)
                     else:
-                        # 仍有其他文章 → 同步更新 article_count
-                        ev = db.query(Event).filter(Event.id == eid).first()
+                        ev = inner_db.query(Event).filter(Event.id == eid).first()
                         if ev:
                             ev.article_count = remaining
-                db.commit()
+                inner_db.commit()
             except Exception as exc:
-                db.rollback()
+                inner_db.rollback()
                 print(f"[视频清理] 失败: {exc}")
+            finally:
+                inner_db.close()
             yield f"data: {json.dumps({'type': 'skip_video', 'msg': '此热点为视频内容，已从榜单移除'}, ensure_ascii=False)}\n\n"
             return
 
         if isinstance(markdown_content, str) and (markdown_content.startswith("❌") or markdown_content.startswith("鉂")):
             try:
-                fallback_wc = get_word_frequencies(article.title, "")
-                fallback_emo = emotion_engine.analyze(article.title or "")
+                fallback_wc = get_word_frequencies(snap_title, "")
+                fallback_emo = emotion_engine.analyze(snap_title or "")
                 yield f"data: {json.dumps({'type': 'metadata', 'wordcloud': fallback_wc, 'emotions': fallback_emo}, ensure_ascii=False)}\n\n"
             except Exception:
                 pass
@@ -2285,27 +2377,28 @@ async def analyze_article(article_id: int, force_refresh: bool = False, db: Sess
 
         if article_id in analysis_cache and not force_refresh:
             cached_data = analysis_cache[article_id]
-            cached_summary = cached_data.get("summary") or (article.ai_summary if article.ai_summary else "")
+            cached_summary = cached_data.get("summary") or ""
             if cached_summary:
                 yield f"data: {json.dumps({'type': 'metadata', 'wordcloud': cached_data.get('wordcloud'), 'emotions': cached_data.get('emotions')}, ensure_ascii=False)}\n\n"
-                yield f"data: {json.dumps({'type': 'raw_content', 'text': article.content or markdown_content}, ensure_ascii=False)}\n\n"
+                yield f"data: {json.dumps({'type': 'raw_content', 'text': snap_content or markdown_content}, ensure_ascii=False)}\n\n"
                 yield f"data: {json.dumps({'type': 'content_start'}, ensure_ascii=False)}\n\n"
                 yield f"data: {json.dumps({'type': 'content', 'text': cached_summary}, ensure_ascii=False)}\n\n"
                 yield "data: {\"type\": \"content_end\"}\n\n"
+                if cached_data.get("aspects"):
+                    yield f"data: {json.dumps({'type': 'aspects', 'aspects': cached_data['aspects']}, ensure_ascii=False)}\n\n"
                 return
 
         try:
             from app.llm import analyze_article_content_stream
-            
+
             # 使用 Queue 编排并行任务，实现“双轨并行”推送
             event_queue = asyncio.Queue()
 
             async def feature_producer():
                 try:
-                    # 并行执行本地 NLP 特征提取（不阻塞 LLM 启动）
                     feature_started_at = time.perf_counter()
                     wordcloud, emotions = await asyncio.gather(
-                        asyncio.to_thread(get_word_frequencies, article.title, markdown_content),
+                        asyncio.to_thread(get_word_frequencies, snap_title, markdown_content),
                         asyncio.to_thread(emotion_engine.analyze, markdown_content[:4000])
                     )
                     print(f"[{datetime.now().strftime('%H:%M:%S')}] [ANALYZE] article={article_id} features_ready={time.perf_counter() - feature_started_at:.2f}s")
@@ -2318,51 +2411,77 @@ async def analyze_article(article_id: int, force_refresh: bool = False, db: Sess
                     full_text = ""
                     await event_queue.put({"type": "status", "msg": "正在启动决策模型，深度内容生成中..."})
                     await event_queue.put({"type": "content_start"})
-                    
-                    async for chunk in analyze_article_content_stream(article.title, article.extra_info or "", markdown_content):
+
+                    async for chunk in analyze_article_content_stream(snap_title, snap_extra, markdown_content):
                         full_text += chunk
                         await event_queue.put({"type": "content", "text": chunk})
-                    
+
                     await event_queue.put({"type": "content_end"})
-                    # 保存到缓存与数据库
-                    analysis_cache[article_id] = {"summary": full_text} # 稍后补充 metadata
+                    analysis_cache[article_id] = {"summary": full_text}
                     return full_text
                 except Exception as e:
                     await event_queue.put({"type": "error", "msg": f"LLM 研判失败: {e}"})
                     return ""
 
-            # 启动两个生产任务
             f_task = asyncio.create_task(feature_producer())
             l_task = asyncio.create_task(llm_producer())
-            
-            # 消费队列直至 LLM 完成
+
             while not l_task.done() or not event_queue.empty():
                 try:
-                    # 使用 wait_for 防止死等导致 generator 泄露
                     msg = await asyncio.wait_for(event_queue.get(), timeout=0.1)
                     yield f"data: {json.dumps(msg, ensure_ascii=False)}\n\n"
                     if msg.get("type") == "metadata":
-                        # 同步到缓存
                         if article_id in analysis_cache:
-                           analysis_cache[article_id].update({"wordcloud": msg["wordcloud"], "emotions": msg["emotions"]})
+                            analysis_cache[article_id].update({"wordcloud": msg["wordcloud"], "emotions": msg["emotions"]})
                         else:
-                           analysis_cache[article_id] = {"wordcloud": msg["wordcloud"], "emotions": msg["emotions"]}
+                            analysis_cache[article_id] = {"wordcloud": msg["wordcloud"], "emotions": msg["emotions"]}
                 except asyncio.TimeoutError:
-                    if l_task.done() and event_queue.empty(): break
+                    if l_task.done() and event_queue.empty():
+                        break
                     continue
 
-            # 最后持久化并同步数据
             final_summary = await l_task
-            await f_task # 确保特性任务也结束了
-            
+            await f_task
+
             cached = analysis_cache.get(article_id, {})
             cached["summary"] = final_summary
             analysis_cache[article_id] = cached
-            if not can_use_cached_content:
-                article.content = markdown_content
-            article.ai_summary = final_summary
-            article.ai_sentiment = cached.get("emotions", [{"label": "neutral"}])[0]["label"] if cached.get("emotions") else "neutral"
-            db.commit()
+
+            # 持久化：开新 session
+            inner_db = SessionLocal()
+            try:
+                art = inner_db.query(Article).filter(Article.id == article_id).first()
+                if art is not None:
+                    if not can_use_cached_content:
+                        art.content = markdown_content
+                    art.ai_summary = final_summary
+                    art.ai_sentiment = (
+                        cached.get("emotions", [{"label": "neutral"}])[0]["label"]
+                        if cached.get("emotions") else "neutral"
+                    )
+                    inner_db.commit()
+            except Exception as exc:
+                inner_db.rollback()
+                print(f"[ANALYZE 持久化失败] {exc}")
+            finally:
+                inner_db.close()
+
+            # 升级 1：方面级情感（ABSA）
+            try:
+                absa_started = time.perf_counter()
+                aspects = await asyncio.to_thread(
+                    extract_aspects, snap_title, markdown_content or ""
+                )
+                if aspects:
+                    cached["aspects"] = aspects
+                    analysis_cache[article_id] = cached
+                    yield f"data: {json.dumps({'type': 'aspects', 'aspects': aspects}, ensure_ascii=False)}\n\n"
+                    print(
+                        f"[{datetime.now().strftime('%H:%M:%S')}] "
+                        f"[ABSA] article={article_id} count={len(aspects)} cost={time.perf_counter() - absa_started:.2f}s"
+                    )
+            except Exception as exc:
+                print(f"[ABSA] article={article_id} 异常: {exc}")
 
         except Exception as exc:
             yield f"data: {json.dumps({'type': 'error', 'msg': f'研判中断: {exc}'}, ensure_ascii=False)}\n\n"
@@ -2371,8 +2490,6 @@ async def analyze_article(article_id: int, force_refresh: bool = False, db: Sess
                 f"[{datetime.now().strftime('%H:%M:%S')}] "
                 f"[ANALYZE] article={article_id} total={time.perf_counter() - started_at:.2f}s"
             )
-        except Exception as exc:
-            yield f"data: {json.dumps({'type': 'error', 'msg': f'研判链路中断: {exc}'}, ensure_ascii=False)}\n\n"
 
     async def event_generator():
         """
@@ -3339,3 +3456,296 @@ def export_chat_pdf(req: ExportChatPdfRequest):
         media_type="application/pdf",
         headers=_pdf_disposition(fname),
     )
+
+
+# ===== 升级 4：个性化订阅与画像 =====
+
+_PROFILE_USER_ID = "local"
+_PROFILE_HISTORY_LIMIT = 200
+
+
+def _load_profile_data(db: Session) -> tuple[UserProfile | None, dict]:
+    profile = db.query(UserProfile).filter(UserProfile.user_id == _PROFILE_USER_ID).first()
+    if not profile:
+        return None, {
+            "view_history": [],
+            "source_weights": {},
+            "tag_weights": {},
+            "aspect_weights": {},
+        }
+    try:
+        data = json.loads(profile.data) if profile.data else {}
+    except Exception:
+        data = {}
+    data.setdefault("view_history", [])
+    data.setdefault("source_weights", {})
+    data.setdefault("tag_weights", {})
+    data.setdefault("aspect_weights", {})
+    return profile, data
+
+
+def _save_profile_data(db: Session, profile: UserProfile | None, data: dict) -> UserProfile:
+    payload = json.dumps(data, ensure_ascii=False)
+    if profile is None:
+        profile = UserProfile(user_id=_PROFILE_USER_ID, data=payload)
+        db.add(profile)
+    else:
+        profile.data = payload
+    db.commit()
+    return profile
+
+
+@router.post("/profile/track")
+async def track_profile_event(payload: TrackEvent, db: Session = Depends(get_db)):
+    """前端上报浏览/打开/停留事件，更新用户画像。"""
+    if payload.action not in ("view", "open", "dwell"):
+        raise HTTPException(status_code=400, detail="不支持的 action")
+
+    article = None
+    if payload.article_id:
+        article = db.query(Article).filter(Article.id == payload.article_id).first()
+    if not article and not payload.event_id:
+        return {"ok": True, "skipped": "no article or event"}
+
+    profile, data = _load_profile_data(db)
+
+    record = {
+        "ts": utcnow().isoformat(),
+        "action": payload.action,
+        "article_id": payload.article_id,
+        "event_id": payload.event_id,
+        "dwell_ms": payload.dwell_ms,
+    }
+    if article:
+        record["source_id"] = article.source_id
+        record["title"] = article.title
+        # 提取关键词权重（简单从 extra_info 或 title 中切词）
+        try:
+            tags = []
+            if article.extra_info:
+                ex = json.loads(article.extra_info) if isinstance(article.extra_info, str) else article.extra_info
+                if isinstance(ex, dict):
+                    if ex.get("category"):
+                        tags.append(str(ex["category"]))
+            record["tags"] = tags
+        except Exception:
+            pass
+
+        # 更新源/标签权重；停留越久权重越高
+        weight_inc = 1.0
+        if payload.action == "dwell":
+            weight_inc = max(1.0, min(5.0, payload.dwell_ms / 5000))
+        elif payload.action == "open":
+            weight_inc = 2.0
+        sw = data["source_weights"]
+        sw[article.source_id] = sw.get(article.source_id, 0) + weight_inc
+        for tag in record.get("tags") or []:
+            tw = data["tag_weights"]
+            tw[tag] = tw.get(tag, 0) + weight_inc
+
+    history = data["view_history"]
+    history.insert(0, record)
+    data["view_history"] = history[:_PROFILE_HISTORY_LIMIT]
+
+    _save_profile_data(db, profile, data)
+    return {"ok": True}
+
+
+@router.get("/profile")
+async def get_profile(db: Session = Depends(get_db)):
+    """返回当前画像（top sources / tags / 最近浏览）。"""
+    _, data = _load_profile_data(db)
+    sources = sorted(data["source_weights"].items(), key=lambda x: -x[1])[:8]
+    tags = sorted(data["tag_weights"].items(), key=lambda x: -x[1])[:12]
+    return {
+        "history_count": len(data["view_history"]),
+        "top_sources": [{"source_id": k, "weight": round(v, 2)} for k, v in sources],
+        "top_tags": [{"tag": k, "weight": round(v, 2)} for k, v in tags],
+        "recent_views": data["view_history"][:10],
+    }
+
+
+@router.get("/subscriptions", response_model=List[SubscriptionResponse])
+async def list_subscriptions(db: Session = Depends(get_db)):
+    return db.query(Subscription).filter(Subscription.user_id == _PROFILE_USER_ID).order_by(Subscription.created_at.desc()).all()
+
+
+@router.post("/subscriptions", response_model=SubscriptionResponse)
+async def create_subscription(payload: SubscriptionCreate, db: Session = Depends(get_db)):
+    if payload.kind not in ("keyword", "source", "event"):
+        raise HTTPException(status_code=400, detail="kind 必须是 keyword/source/event")
+    val = (payload.value or "").strip()
+    if not val:
+        raise HTTPException(status_code=400, detail="value 不能为空")
+    # 去重：同 user + kind + value 已存在则直接返回
+    existed = db.query(Subscription).filter(
+        Subscription.user_id == _PROFILE_USER_ID,
+        Subscription.kind == payload.kind,
+        Subscription.value == val,
+    ).first()
+    if existed:
+        return existed
+    sub = Subscription(user_id=_PROFILE_USER_ID, kind=payload.kind, value=val, weight=payload.weight or 1.0)
+    db.add(sub)
+    db.commit()
+    db.refresh(sub)
+    return sub
+
+
+@router.delete("/subscriptions/{sub_id}")
+async def delete_subscription(sub_id: int, db: Session = Depends(get_db)):
+    sub = db.query(Subscription).filter(Subscription.id == sub_id, Subscription.user_id == _PROFILE_USER_ID).first()
+    if not sub:
+        raise HTTPException(status_code=404, detail="未找到订阅")
+    db.delete(sub)
+    db.commit()
+    return {"ok": True}
+
+
+@router.get("/blocklist", response_model=List[BlocklistResponse])
+async def list_blocklist(db: Session = Depends(get_db)):
+    return db.query(Blocklist).filter(Blocklist.user_id == _PROFILE_USER_ID).order_by(Blocklist.created_at.desc()).all()
+
+
+@router.post("/blocklist", response_model=BlocklistResponse)
+async def create_blocklist(payload: BlocklistCreate, db: Session = Depends(get_db)):
+    term = (payload.term or "").strip()
+    if not term:
+        raise HTTPException(status_code=400, detail="term 不能为空")
+    existed = db.query(Blocklist).filter(Blocklist.user_id == _PROFILE_USER_ID, Blocklist.term == term).first()
+    if existed:
+        return existed
+    bl = Blocklist(user_id=_PROFILE_USER_ID, term=term)
+    db.add(bl)
+    db.commit()
+    db.refresh(bl)
+    return bl
+
+
+@router.delete("/blocklist/{bl_id}")
+async def delete_blocklist(bl_id: int, db: Session = Depends(get_db)):
+    bl = db.query(Blocklist).filter(Blocklist.id == bl_id, Blocklist.user_id == _PROFILE_USER_ID).first()
+    if not bl:
+        raise HTTPException(status_code=404, detail="未找到屏蔽词")
+    db.delete(bl)
+    db.commit()
+    return {"ok": True}
+
+
+@router.get("/recommendations")
+async def get_recommendations(
+    db: Session = Depends(get_db),
+    limit: int = 15,
+    offset: int = 0,
+    fallback: bool = True,
+):
+    """根据画像 + 订阅 + 屏蔽生成今日推荐事件列表。
+
+    打分规则（每个事件初始 0 分）：
+    - 标题命中订阅 keyword/event：+5 分（按订阅 weight 缩放）
+    - 事件 primary_source_id 命中订阅 source：+3 分
+    - 事件 primary_source_id 命中画像 top_sources：按权重 +0~3 分
+    - 事件 keywords 命中画像 top_tags：按权重 +0~3 分
+    - 标题命中任意 blocklist 词：直接剔除
+    最终按分数降序，相同分按 heat_score。
+
+    分页参数：
+    - limit / offset：常规分页
+    - fallback：当 score>0 的命中数为 0 时，是否按热度兜底返回 TOP（标记 _fallback=True）
+    返回字段新增：total（命中总数）、page_size、offset、fallback_used
+    """
+    subs = db.query(Subscription).filter(Subscription.user_id == _PROFILE_USER_ID).all()
+    blocks = db.query(Blocklist).filter(Blocklist.user_id == _PROFILE_USER_ID).all()
+    block_terms = [b.term for b in blocks if b.term]
+
+    _, profile_data = _load_profile_data(db)
+    source_w = profile_data.get("source_weights", {})
+    tag_w = profile_data.get("tag_weights", {})
+
+    keyword_subs = [(s.value, s.weight or 1.0) for s in subs if s.kind == "keyword"]
+    source_subs = {s.value: (s.weight or 1.0) for s in subs if s.kind == "source"}
+    event_subs = [(s.value, s.weight or 1.0) for s in subs if s.kind == "event"]
+
+    # 取最近 7 天热度前 200 的事件做候选，避免全表扫
+    cutoff = utcnow() - timedelta(days=7)
+    candidates = (
+        db.query(Event)
+        .filter(Event.latest_article_time >= cutoff)
+        .order_by(Event.heat_score.desc())
+        .limit(200)
+        .all()
+    )
+
+    max_source_w = max(source_w.values()) if source_w else 1
+    max_tag_w = max(tag_w.values()) if tag_w else 1
+
+    scored: list = []
+    for ev in candidates:
+        title = ev.title or ""
+        # 屏蔽
+        if any(t and t in title for t in block_terms):
+            continue
+        score = 0.0
+        reasons: list = []
+        # 订阅命中
+        for kw, w in keyword_subs:
+            if kw and kw in title:
+                score += 5.0 * w
+                reasons.append(f"订阅词「{kw}」")
+        for kw, w in event_subs:
+            if kw and kw in title:
+                score += 5.0 * w
+                reasons.append(f"订阅事件「{kw}」")
+        if ev.primary_source_id and ev.primary_source_id in source_subs:
+            score += 3.0 * source_subs[ev.primary_source_id]
+            reasons.append("订阅源")
+        # 画像加权
+        if ev.primary_source_id and ev.primary_source_id in source_w:
+            score += 3.0 * (source_w[ev.primary_source_id] / max_source_w)
+        try:
+            ev_keywords = json.loads(ev.keywords) if ev.keywords else []
+        except Exception:
+            ev_keywords = []
+        if isinstance(ev_keywords, list):
+            hit_tags = [k for k in ev_keywords if k in tag_w]
+            if hit_tags:
+                tag_score = sum(tag_w[k] for k in hit_tags) / max_tag_w * 3.0
+                score += tag_score
+                reasons.append(f"画像兴趣 {','.join(hit_tags[:3])}")
+        if score <= 0:
+            continue
+        scored.append((score, ev, reasons))
+
+    scored.sort(key=lambda x: (-x[0], -(x[1].heat_score or 0)))
+    total_hit = len(scored)
+    fallback_used = False
+    if total_hit == 0 and fallback:
+        # 兜底：无任何命中时，按候选热度返回 TOP，标记 _fallback
+        fallback_used = True
+        for ev in candidates:
+            title = ev.title or ""
+            if any(t and t in title for t in block_terms):
+                continue
+            scored.append((0.0, ev, ["热度兜底"]))
+        scored.sort(key=lambda x: -(x[1].heat_score or 0))
+
+    page_slice = scored[offset : offset + limit]
+    items = []
+    for score, ev, reasons in page_slice:
+        items.append({
+            **marshal_event(ev, db=db),
+            "_recommend_score": round(score, 2),
+            "_recommend_reasons": reasons[:3],
+            "_fallback": fallback_used,
+        })
+    return {
+        "items": items,
+        "subscriptions_count": len(subs),
+        "blocklist_count": len(blocks),
+        "candidates": len(candidates),
+        "total": len(scored),
+        "matched": total_hit,
+        "page_size": limit,
+        "offset": offset,
+        "fallback_used": fallback_used,
+    }

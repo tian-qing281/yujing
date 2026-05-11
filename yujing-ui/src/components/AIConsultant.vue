@@ -545,20 +545,42 @@ const captureDashboardImage = async (msgIndex) => {
   }
 };
 
+// 检测一条消息是否本质上是"早报"内容：
+// 1) trace 里调用过 get_morning_brief 工具
+// 2) 或会话标题/用户问句里包含"早报""日报"关键词
+const isMorningBriefMessage = (msg) => {
+  try {
+    const events = msg?.agent_events || [];
+    if (events.some((ev) => (ev?.tool || ev?.name || "") === "get_morning_brief")) return true;
+  } catch {}
+  const sessionTitle = activeSession.value?.title || "";
+  const userQuery = msg?.user_query || "";
+  return /早报|日报/.test(sessionTitle) || /早报|日报/.test(userQuery);
+};
+
 const exportMessagePdf = async (msg, msgIndex) => {
   const textContent = msg.agent_final || msg.content;
   if (!textContent && !msg.compare_metrics) return;
+
+  // 早报内容直接复用后端早报 PDF 端点，文件名/标题统一"舆情早报_YYYY-MM-DD.pdf"
+  if (isMorningBriefMessage(msg)) {
+    window.open(buildApiUrl("/api/ai/morning_brief/pdf"), "_blank");
+    return;
+  }
+
   try {
     const images = [];
     if (msg.compare_metrics) {
       const dataUrl = await captureDashboardImage(msgIndex);
       if (dataUrl) images.push(dataUrl);
     }
+    // 标题统一来源：会话标题 → PDF 内嵌标题 + 文件名 全部一致
+    const reportTitle = (activeSession.value?.title || "AI 舆情分析报告").trim() || "AI 舆情分析报告";
     const res = await fetch(buildApiUrl("/api/ai/export_pdf"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        title: "AI 舆情分析报告",
+        title: reportTitle,
         content: textContent || "",
         images: images.length ? images : undefined,
       }),
@@ -568,7 +590,7 @@ const exportMessagePdf = async (msg, msgIndex) => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = (activeSession.value?.title || "report") + ".pdf";
+    a.download = reportTitle + ".pdf";
     a.click();
     URL.revokeObjectURL(url);
   } catch {

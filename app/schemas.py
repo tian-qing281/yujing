@@ -60,6 +60,7 @@ class EventResponse(BaseModel):
 
 class EventDetailResponse(EventResponse):
     related_articles: List[dict] = Field(default_factory=list)
+    sentiment_trend: List[dict] = Field(default_factory=list)
 
 
 class TopicResponse(BaseModel):
@@ -83,3 +84,37 @@ class TopicResponse(BaseModel):
 
 class TopicDetailResponse(TopicResponse):
     related_events: List[EventResponse] = Field(default_factory=list)
+
+
+# ===== 升级 4：个性化订阅 =====
+class SubscriptionResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    kind: str
+    value: str
+    weight: float = 1.0
+    created_at: Optional[datetime] = None
+
+
+class SubscriptionCreate(BaseModel):
+    kind: str  # keyword | source | event
+    value: str
+    weight: float = 1.0
+
+
+class BlocklistResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    term: str
+    created_at: Optional[datetime] = None
+
+
+class BlocklistCreate(BaseModel):
+    term: str
+
+
+class TrackEvent(BaseModel):
+    action: str  # view | open | dwell
+    article_id: Optional[int] = None
+    event_id: Optional[int] = None
+    dwell_ms: int = 0

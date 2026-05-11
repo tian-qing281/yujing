@@ -78,6 +78,15 @@
                 </div>
                 <div ref="sentimentRingRef" class="chart-viewport"></div>
               </section>
+
+              <section v-if="hasSentimentTrend" class="intel-card intel-card--wide card bg-base-100">
+                <div class="intel-card-head">
+                  <iconify-icon icon="mdi:chart-areaspline" />
+                  <span>情感演变</span>
+                  <span class="intel-badge">时间轴</span>
+                </div>
+                <div ref="sentimentTrendRef" class="chart-viewport"></div>
+              </section>
             </div>
           </section>
 
@@ -100,15 +109,25 @@
               <article
                 v-for="(article, idx) in displayedArticles"
                 :key="article.id"
-                class="timeline-row"
+                class="timeline-row tl-card"
                 @click="$emit('open-article', article)"
               >
-                <div
-                  class="timeline-dot"
-                  :style="{ background: getSentimentColor(article.ai_sentiment), boxShadow: `0 0 0 4px ${getSentimentColor(article.ai_sentiment)}22` }"
-                  :title="getSentimentLabel(article.ai_sentiment)"
-                ></div>
-                <div class="timeline-copy">
+                <div class="tl-axis">
+                  <div
+                    v-if="formatDatePill(timelineTimeOf(article))"
+                    class="tl-date-pill"
+                  >
+                    <span class="tl-date-year">{{ formatDatePill(timelineTimeOf(article)).year }}</span>
+                    <span class="tl-date-md">{{ formatDatePill(timelineTimeOf(article)).monthDay }}</span>
+                    <span class="tl-date-time">{{ formatDatePill(timelineTimeOf(article)).time }}</span>
+                  </div>
+                  <div
+                    class="timeline-dot tl-dot-large"
+                    :style="{ background: getSentimentColor(article.ai_sentiment), boxShadow: `0 0 0 5px ${getSentimentColor(article.ai_sentiment)}22, 0 0 0 9px ${getSentimentColor(article.ai_sentiment)}11` }"
+                    :title="getSentimentLabel(article.ai_sentiment)"
+                  ></div>
+                </div>
+                <div class="timeline-copy tl-card-body">
                   <div
                     v-if="timelineMode === 'time' && idx > 0 && formatTimeGap(timelineTimeOf(displayedArticles[0]), timelineTimeOf(article))"
                     class="timeline-gap"
@@ -121,7 +140,6 @@
                       <iconify-icon :icon="getSourceIcon(article.source_id)" />
                       {{ getSourceName(article.source_id) }}
                     </span>
-                    <span v-if="formatTime(timelineTimeOf(article))">{{ formatTime(timelineTimeOf(article)) }}</span>
                     <span
                       v-if="getSentimentLabel(article.ai_sentiment)"
                       class="timeline-sentiment-chip"
@@ -157,6 +175,7 @@ const timeTrendChartRef = ref(null);
 const platformBarRef = ref(null);
 const keywordBarRef = ref(null);
 const sentimentRingRef = ref(null);
+const sentimentTrendRef = ref(null);
 const aiSummaryLoading = ref(false);
 const aiSummaryText = ref("");
 const timelineMode = ref("time"); // 'time' | 'heat'
@@ -166,6 +185,7 @@ let timeTrendChart = null;
 let platformChart = null;
 let keywordChart = null;
 let sentimentChart = null;
+let sentimentTrendChart = null;
 
 const SOURCE_LABEL_MAP = {
   weibo_hot_search: "微博热搜榜",
@@ -429,6 +449,18 @@ const formatTime = (value) => {
   return `${month}-${day} ${hour}:${minute}`;
 };
 
+// 年表卡片左侧日期胶囊：YYYY · MM-DD
+const formatDatePill = (value) => {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return {
+    year: String(date.getFullYear()),
+    monthDay: `${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`,
+    time: `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`,
+  };
+};
+
 const safeParse = (value) => {
   try {
     return JSON.parse(value || "{}");
@@ -586,6 +618,9 @@ const sentimentSummary = computed(() => {
   ].filter((item) => item.value > 0);
 });
 
+
+const sentimentTrendData = computed(() => Array.isArray(props.item?.sentiment_trend) ? props.item.sentiment_trend : []);
+const hasSentimentTrend = computed(() => sentimentTrendData.value.length >= 2);
 
 const ensureChart = (instanceRef, existingChart) => {
   if (!window.echarts || !instanceRef.value) return existingChart;
@@ -810,6 +845,155 @@ const renderCharts = () => {
       })),
     }],
   });
+
+  // 5. 情感演变 — 时间序列堆叠面积图（升级 3：事件时间轴）
+  if (hasSentimentTrend.value && sentimentTrendRef.value) {
+    sentimentTrendChart = ensureChart(sentimentTrendRef, sentimentTrendChart);
+    const trend = sentimentTrendData.value;
+    const fmt = (iso) => {
+      try {
+        const d = new Date(iso);
+        const pad = (n) => String(n).padStart(2, "0");
+        return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:00`;
+      } catch (e) { return iso; }
+    };
+    sentimentTrendChart?.setOption({
+      tooltip: {
+        trigger: "axis",
+        axisPointer: {
+          type: "line",
+          lineStyle: { color: "#6366f1", type: "dashed", width: 1.2 },
+        },
+        backgroundColor: "rgba(255,255,255,0.98)",
+        borderColor: "rgba(99,102,241,0.25)",
+        borderWidth: 1,
+        padding: [10, 14],
+        textStyle: { color: "#0f172a", fontSize: 12, fontWeight: 600 },
+        extraCssText:
+          "box-shadow: 0 10px 24px -10px rgba(15,23,42,0.18); border-radius: 10px;",
+      },
+      legend: {
+        data: [
+          { name: "正面", icon: "roundRect" },
+          { name: "中性", icon: "roundRect" },
+          { name: "负面", icon: "roundRect" },
+        ],
+        top: 6,
+        right: 16,
+        textStyle: { color: "#475569", fontSize: 11, fontWeight: 700 },
+        itemWidth: 14,
+        itemHeight: 8,
+        itemGap: 16,
+      },
+      grid: { top: 42, right: 26, bottom: 50, left: 52, containLabel: false },
+      xAxis: {
+        type: "category",
+        boundaryGap: false,
+        data: trend.map((d) => fmt(d.time)),
+        axisLabel: {
+          color: "#64748b",
+          fontSize: 10,
+          fontWeight: 600,
+          rotate: 28,
+          interval: "auto",
+          margin: 10,
+        },
+        axisLine: { lineStyle: { color: "#cbd5e1" } },
+        axisTick: { show: false },
+        splitLine: { show: false },
+      },
+      yAxis: {
+        type: "value",
+        name: "情报数",
+        nameTextStyle: {
+          color: "#94a3b8",
+          fontSize: 10,
+          fontWeight: 700,
+          padding: [0, 0, 8, 0],
+        },
+        splitLine: {
+          lineStyle: {
+            color: "rgba(148,163,184,0.18)",
+            type: "dashed",
+          },
+        },
+        axisLabel: { color: "#94a3b8", fontSize: 10, fontWeight: 600 },
+        axisLine: { show: false },
+        axisTick: { show: false },
+      },
+      series: [
+        {
+          name: "正面",
+          type: "line",
+          stack: "total",
+          smooth: 0.4,
+          symbol: "circle",
+          symbolSize: 6,
+          showSymbol: false,
+          emphasis: { focus: "series", scale: 1.6 },
+          areaStyle: {
+            color: {
+              type: "linear",
+              x: 0, y: 0, x2: 0, y2: 1,
+              colorStops: [
+                { offset: 0, color: "rgba(16,185,129,0.6)" },
+                { offset: 1, color: "rgba(16,185,129,0.08)" },
+              ],
+            },
+          },
+          lineStyle: { color: "#10b981", width: 2 },
+          itemStyle: { color: "#10b981", borderColor: "#fff", borderWidth: 2 },
+          data: trend.map((d) => d.positive || 0),
+        },
+        {
+          name: "中性",
+          type: "line",
+          stack: "total",
+          smooth: 0.4,
+          symbol: "circle",
+          symbolSize: 6,
+          showSymbol: false,
+          emphasis: { focus: "series", scale: 1.6 },
+          areaStyle: {
+            color: {
+              type: "linear",
+              x: 0, y: 0, x2: 0, y2: 1,
+              colorStops: [
+                { offset: 0, color: "rgba(148,163,184,0.55)" },
+                { offset: 1, color: "rgba(148,163,184,0.08)" },
+              ],
+            },
+          },
+          lineStyle: { color: "#94a3b8", width: 2 },
+          itemStyle: { color: "#94a3b8", borderColor: "#fff", borderWidth: 2 },
+          data: trend.map((d) => d.neutral || 0),
+        },
+        {
+          name: "负面",
+          type: "line",
+          stack: "total",
+          smooth: 0.4,
+          symbol: "circle",
+          symbolSize: 6,
+          showSymbol: false,
+          emphasis: { focus: "series", scale: 1.6 },
+          areaStyle: {
+            color: {
+              type: "linear",
+              x: 0, y: 0, x2: 0, y2: 1,
+              colorStops: [
+                { offset: 0, color: "rgba(239,68,68,0.6)" },
+                { offset: 1, color: "rgba(239,68,68,0.08)" },
+              ],
+            },
+          },
+          lineStyle: { color: "#ef4444", width: 2 },
+          itemStyle: { color: "#ef4444", borderColor: "#fff", borderWidth: 2 },
+          data: trend.map((d) => d.negative || 0),
+        },
+      ],
+    });
+  }
 };
 
 const resizeCharts = () => {
@@ -817,6 +1001,7 @@ const resizeCharts = () => {
   platformChart?.resize();
   keywordChart?.resize();
   sentimentChart?.resize();
+  sentimentTrendChart?.resize();
 };
 
 watch(
@@ -829,6 +1014,15 @@ watch(
     await nextTick();
     setTimeout(renderCharts, 80);
     fetchAiSummary();
+  }
+);
+
+// 当 sentiment_trend 异步到达时（同一事件 id 但 detail 后注入），重绘演变图
+watch(
+  () => sentimentTrendData.value.length,
+  async () => {
+    await nextTick();
+    setTimeout(renderCharts, 60);
   }
 );
 
@@ -846,6 +1040,7 @@ onUnmounted(() => {
   platformChart?.dispose();
   keywordChart?.dispose();
   sentimentChart?.dispose();
+  sentimentTrendChart?.dispose();
 });
 </script>
 
@@ -963,6 +1158,21 @@ onUnmounted(() => {
   border-radius: 24px;
   padding: 18px;
   box-shadow: 0 12px 30px rgba(15, 23, 42, 0.04);
+}
+
+.intel-card--wide {
+  grid-column: 1 / -1;
+}
+
+.intel-badge {
+  margin-left: auto;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
 }
 
 .intel-card-head {
@@ -1123,8 +1333,8 @@ onUnmounted(() => {
 }
 
 .timeline-list {
-  padding: 12px;
-  max-height: 560px;
+  padding: 18px 12px 12px;
+  max-height: 620px;
   overflow-y: auto;
 }
 
@@ -1135,13 +1345,95 @@ onUnmounted(() => {
 .timeline-list--rail::before {
   content: "";
   position: absolute;
-  top: 20px;
-  bottom: 20px;
-  left: 28px;
+  top: 30px;
+  bottom: 30px;
+  left: 96px;
   width: 2px;
-  background: linear-gradient(to bottom, #e2e8f0 0%, #cbd5e1 50%, #e2e8f0 100%);
+  background: linear-gradient(to bottom, #c7d2fe 0%, #a5b4fc 50%, #c7d2fe 100%);
   border-radius: 2px;
   pointer-events: none;
+}
+
+/* === 年表卡片样式 === */
+.timeline-row.tl-card {
+  display: grid;
+  grid-template-columns: 84px 24px minmax(0, 1fr);
+  gap: 14px;
+  padding: 12px 12px 12px 0;
+  border-radius: 16px;
+  cursor: pointer;
+  position: relative;
+  transition: transform 0.18s ease;
+  align-items: flex-start;
+}
+
+.timeline-row.tl-card:hover {
+  background: transparent;
+  transform: translateX(2px);
+}
+
+.tl-axis {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  grid-column: 1 / span 2;
+  position: relative;
+  min-height: 56px;
+}
+
+.tl-date-pill {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  width: 78px;
+  padding: 8px 6px;
+  background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+  color: #fff;
+  border-radius: 12px;
+  box-shadow: 0 6px 14px -8px rgba(15, 23, 42, 0.45);
+  font-family: "Fira Code", "Cascadia Code", monospace;
+}
+.tl-date-year {
+  font-size: 10px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.6);
+  letter-spacing: 0.08em;
+}
+.tl-date-md {
+  font-size: 14px;
+  font-weight: 900;
+  color: #fff;
+  letter-spacing: 0.02em;
+}
+.tl-date-time {
+  font-size: 10px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.7);
+  letter-spacing: 0.05em;
+}
+
+.tl-dot-large {
+  width: 16px !important;
+  height: 16px !important;
+  border: 3px solid #ffffff !important;
+  margin: 0 !important;
+  flex-shrink: 0;
+  z-index: 2;
+}
+
+.tl-card-body {
+  background: #ffffff;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 14px;
+  padding: 12px 16px 14px;
+  box-shadow: 0 4px 12px -8px rgba(15, 23, 42, 0.12);
+  transition: box-shadow 0.18s ease, border-color 0.18s ease;
+}
+
+.timeline-row.tl-card:hover .tl-card-body {
+  box-shadow: 0 12px 26px -12px rgba(59, 130, 246, 0.32);
+  border-color: rgba(59, 130, 246, 0.35);
 }
 
 .timeline-row {

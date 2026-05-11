@@ -66,7 +66,20 @@
                 <div class="aura-spin"></div>
                 <p class="status-bright-text">{{ statusMsg }}</p>
               </div>
-              
+
+              <div v-else-if="item.analyze_error && !hasVisualData" class="empty-vis empty-vis--error">
+                <iconify-icon icon="mdi:alert-circle-outline" style="color:#ef4444" />
+                <p class="status-bright-text" style="color:#ef4444">采集或分析失败</p>
+                <p class="err-detail">{{ item.analyze_error }}</p>
+                <p class="err-hint" v-if="/凭据|登录|cookie|Cookie|验证/.test(item.analyze_error)">
+                  该站点需要有效登录态，请在左侧「凭据资产配置」重新填入 Cookie 后重试。
+                </p>
+                <p class="err-hint" v-else-if="/JavaScript|前端壳|热点聚合页/.test(item.analyze_error)">
+                  原站为纯 JS 渲染页面（或热搜跳转页），无法直接抽取文本。请点击上方「访问网页原文」查看原始内容。
+                </p>
+                <button class="btn-empty-sync btn btn-primary" @click="$emit('trigger-ai')">重新分析</button>
+              </div>
+
               <div v-else-if="!hasVisualData && !item.isAnalyzing" class="empty-vis">
                 <iconify-icon icon="mdi:database-search" />
                 <p class="status-bright-text">数据分析特征未就绪</p>
@@ -74,6 +87,14 @@
               </div>
               
               <div v-show="hasVisualData" class="vis-intel-dashboard">
+                <div v-if="item.analyze_error" class="vis-error-banner">
+                  <iconify-icon icon="mdi:alert-circle-outline" />
+                  <div class="vis-error-banner__body">
+                    <strong>原文采集受限：</strong>{{ item.analyze_error }}
+                    <span v-if="/凭据|登录|cookie|Cookie|验证/.test(item.analyze_error)">（请更新左侧「凭据资产配置」中的 Cookie 后重试）</span>
+                  </div>
+                  <button class="vis-error-banner__retry btn btn-xs" @click="$emit('trigger-ai')">重试</button>
+                </div>
                 <div class="intel-visual-grid">
                   <!-- 情感极性分布 -->
                   <div class="intel-box emotion-intel-box">
@@ -88,14 +109,62 @@
                     </div>
                   </div>
 
-                  <!-- 舆情倾向分析 -->
+                  <!-- 舆情倾向分析 / 方面级情感（ABSA） -->
                   <div class="intel-box sentiment-intel-box">
                     <div class="intel-label">
                       <iconify-icon icon="mdi:gauge" />
-                      <span>舆情倾向分析</span>
+                      <span>{{ hasAspects ? '方面级情感（ABSA）' : '舆情倾向分析' }}</span>
+                      <span v-if="hasAspects" class="absa-badge">LLM</span>
+                      <span v-else-if="absaLoading" class="absa-badge absa-badge--loading">分析中</span>
                     </div>
-                    <div class="chart-shell">
+
+                    <!-- 1) ABSA 命中：卡片列表 -->
+                    <div v-if="hasAspects" class="absa-list">
+                      <div
+                        v-for="(asp, idx) in normalizedAspects"
+                        :key="idx"
+                        class="absa-card"
+                        :class="`absa-card--${asp.sentiment}`"
+                      >
+                        <div class="absa-card-head">
+                          <span class="absa-aspect">{{ asp.aspect }}</span>
+                          <span class="absa-chip" :class="`absa-chip--${asp.sentiment}`">
+                            <iconify-icon :icon="asp.icon" />
+                            <span>{{ asp.label }}</span>
+                          </span>
+                        </div>
+                        <div v-if="asp.evidence" class="absa-evidence">
+                          <iconify-icon icon="mdi:format-quote-open" />
+                          <span>{{ asp.evidence }}</span>
+                        </div>
+                      </div>
+                      <p class="absa-source-tip">
+                        <iconify-icon icon="mdi:information-outline" />
+                        基于 LLM 对正文抽取的 3-5 个核心方面（人物 / 机构 / 议题），每条配证据句。
+                      </p>
+                    </div>
+
+                    <!-- 2) ABSA 加载中 -->
+                    <div v-else-if="absaLoading" class="absa-loading">
+                      <div class="absa-skeleton" v-for="n in 3" :key="n">
+                        <div class="sk-bar sk-bar-aspect"></div>
+                        <div class="sk-bar sk-bar-evi"></div>
+                      </div>
+                      <p class="absa-loading-text">LLM 正在抽取方面与证据，通常 3-8 秒…</p>
+                    </div>
+
+                    <!-- 3) ABSA 不可用但有 emotions：旧的三色环兜底 -->
+                    <div v-else-if="hasEmotionFallback" class="chart-shell">
                       <div ref="sentimentChartRef" class="chart-render-area"></div>
+                    </div>
+
+                    <!-- 4) 完全无数据 -->
+                    <div v-else class="absa-empty">
+                      <iconify-icon icon="mdi:database-off-outline" />
+                      <p class="absa-empty-title">暂无方面级情感数据</p>
+                      <p class="absa-empty-hint">
+                        ABSA 由 LLM 在完成 AI 总结后自动触发；若原文采集失败或正文过短（≤ 60 字），将无法抽取方面。
+                      </p>
                     </div>
                   </div>
 
@@ -199,6 +268,43 @@ const hasVisualData = computed(() => {
   return !!(hasCloud || hasEmo)
 })
 
+const hasAspects = computed(() => {
+  const list = props.item?.aspects
+  return Array.isArray(list) && list.length > 0
+})
+
+// ABSA 卡片渲染所需：情感标签 / 图标
+const _ABSA_META = {
+  positive: { label: '正面', icon: 'mdi:emoticon-happy-outline' },
+  neutral:  { label: '中性', icon: 'mdi:emoticon-neutral-outline' },
+  negative: { label: '负面', icon: 'mdi:emoticon-sad-outline' },
+}
+const normalizedAspects = computed(() => {
+  const list = Array.isArray(props.item?.aspects) ? props.item.aspects : []
+  return list
+    .filter(a => a && a.aspect)
+    .map(a => {
+      const sent = ['positive', 'neutral', 'negative'].includes(a.sentiment) ? a.sentiment : 'neutral'
+      const meta = _ABSA_META[sent]
+      return {
+        aspect: String(a.aspect),
+        sentiment: sent,
+        evidence: a.evidence ? String(a.evidence) : '',
+        label: meta.label,
+        icon: meta.icon,
+      }
+    })
+})
+
+// 加载态：分析中且尚未拿到 aspects（aspects 通常在 AI 总结之后才到达）
+const absaLoading = computed(() => !!props.item?.isAnalyzing && !hasAspects.value)
+
+// 兜底环图条件：有 emotions 但无 aspects
+const hasEmotionFallback = computed(() => {
+  const emo = props.item?.emotions
+  return Array.isArray(emo) && emo.length > 0 && !hasAspects.value
+})
+
 const normalizedWordcloud = computed(() => {
   const source = props.item?.wordcloud || []
   return source
@@ -271,6 +377,13 @@ const renderSentimentChart = () => {
   if (!sentimentChartRef.value || !window.echarts) return
   if (sentimentChart) sentimentChart.dispose()
   sentimentChart = window.echarts.init(sentimentChartRef.value)
+
+  // ABSA 命中时模板已切换为 HTML 卡片列表，sentimentChartRef 不会挂载；
+  // 这里仅渲染兜底的整体三色环。
+  const aspects = (props.item?.aspects || []).filter(a => a && a.aspect)
+  if (aspects.length > 0) return
+
+  // 兜底：旧的整体三色环（仅当 ABSA 不可用时）
   const _colorMap = { '正面': '#10b981', '中性': '#64748b', '负面': '#ef4444' }
   // 从 8 类 emotions 聚合为正/中/负 3 类
   // 关注/惊讶→中性（围观类，无明确倾向）；质疑→负面（舆情语境下多为负光谱）
@@ -428,6 +541,13 @@ watch(() => props.item?.emotions, (newData) => {
   }
 }, { deep: true })
 
+// 监听 ABSA 方面变化，重绘为方面级条形图
+watch(() => props.item?.aspects, (newData) => {
+  if (Array.isArray(newData) && newData.length > 0 && props.activeTab === 'visual') {
+    nextTick(() => renderSentimentChart())
+  }
+}, { deep: true })
+
 onMounted(() => {
   if (props.activeTab === 'visual' && hasVisualData.value) {
     nextTick(() => renderCloud(props.item?.wordcloud))
@@ -435,6 +555,16 @@ onMounted(() => {
 })
 
 watch(() => props.item?.id, (newId) => {
+  // 切换文章时立即销毁旧图表实例，避免新文章数据未到位前渲染上一篇旧图
+  if (emotionChart) { emotionChart.dispose(); emotionChart = null; }
+  if (sentimentChart) { sentimentChart.dispose(); sentimentChart = null; }
+  if (radarChart) { radarChart.dispose(); radarChart = null; }
+  // 清空词云画布
+  if (wcCanvas.value) {
+    const ctx = wcCanvas.value.getContext('2d');
+    if (ctx) ctx.clearRect(0, 0, wcCanvas.value.width, wcCanvas.value.height);
+  }
+  lastRenderedCloudLength = 0;
   if (newId && props.activeTab === 'visual' && hasVisualData.value) {
     nextTick(() => renderCloud(props.item?.wordcloud))
   }
@@ -505,6 +635,153 @@ watch(() => props.activeTab, (newTab) => {
   letter-spacing: 0.12em; 
 }
 .source-tag { font-size: 11px; font-weight: 800; color: #64748b; display: flex; align-items: center; gap: 8px; text-transform: uppercase; letter-spacing: 0.12em; }
+.absa-badge {
+  display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 999px;
+  background: linear-gradient(135deg, #6366f1, #ec4899);
+  color: #fff; font-size: 9px; font-weight: 900; letter-spacing: 0.08em;
+  margin-left: auto;
+}
+.absa-badge--loading {
+  background: linear-gradient(135deg, #94a3b8, #cbd5e1);
+  animation: absa-pulse 1.4s ease-in-out infinite;
+}
+@keyframes absa-pulse { 0%,100%{opacity:1;} 50%{opacity:0.55;} }
+
+/* === ABSA 卡片列表 === */
+.absa-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 4px 2px 2px;
+}
+.absa-card {
+  position: relative;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 14px;
+  padding: 12px 14px 12px 18px;
+  box-shadow: 0 2px 6px -3px rgba(15, 23, 42, 0.08);
+  transition: transform 0.16s ease, box-shadow 0.16s ease;
+}
+.absa-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 22px -10px rgba(15, 23, 42, 0.18);
+}
+.absa-card::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 12px; bottom: 12px;
+  width: 4px;
+  border-radius: 0 4px 4px 0;
+  background: #94a3b8;
+}
+.absa-card--positive::before { background: linear-gradient(180deg, #34d399, #10b981); }
+.absa-card--neutral::before  { background: linear-gradient(180deg, #cbd5e1, #94a3b8); }
+.absa-card--negative::before { background: linear-gradient(180deg, #f87171, #ef4444); }
+
+.absa-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.absa-aspect {
+  font-size: 15px;
+  font-weight: 900;
+  color: #0f172a;
+  letter-spacing: 0.01em;
+}
+.absa-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+.absa-chip iconify-icon { font-size: 13px; }
+.absa-chip--positive { background: rgba(16, 185, 129, 0.12); color: #047857; }
+.absa-chip--neutral  { background: rgba(100, 116, 139, 0.12); color: #475569; }
+.absa-chip--negative { background: rgba(239, 68, 68, 0.12); color: #b91c1c; }
+
+.absa-evidence {
+  margin-top: 8px;
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  background: rgba(148, 163, 184, 0.08);
+  border-radius: 8px;
+  padding: 7px 10px;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: #475569;
+  font-style: italic;
+}
+.absa-evidence iconify-icon {
+  font-size: 14px;
+  color: #94a3b8;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.absa-source-tip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: #94a3b8;
+  margin: 4px 2px 0;
+  line-height: 1.4;
+}
+.absa-source-tip iconify-icon { font-size: 13px; }
+
+/* ABSA 骨架加载 */
+.absa-loading {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 4px 2px;
+}
+.absa-skeleton {
+  background: #ffffff;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 14px;
+  padding: 12px 14px;
+}
+.sk-bar {
+  height: 12px;
+  border-radius: 6px;
+  background: linear-gradient(90deg, #f1f5f9 0%, #e2e8f0 50%, #f1f5f9 100%);
+  background-size: 200% 100%;
+  animation: sk-shimmer 1.4s linear infinite;
+}
+.sk-bar-aspect { width: 38%; margin-bottom: 8px; }
+.sk-bar-evi { width: 86%; height: 10px; }
+@keyframes sk-shimmer { 0%{background-position:200% 0;} 100%{background-position:-200% 0;} }
+.absa-loading-text {
+  text-align: center;
+  font-size: 12px;
+  color: #64748b;
+  margin: 4px 0 0;
+}
+
+/* ABSA 空态 */
+.absa-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 24px 16px;
+  background: rgba(148, 163, 184, 0.04);
+  border: 1px dashed rgba(148, 163, 184, 0.3);
+  border-radius: 14px;
+}
+.absa-empty iconify-icon { font-size: 36px; color: #cbd5e1; margin-bottom: 6px; }
+.absa-empty-title { font-size: 13px; font-weight: 800; color: #475569; margin: 0 0 4px; }
+.absa-empty-hint { font-size: 11.5px; color: #94a3b8; line-height: 1.55; max-width: 320px; margin: 0; }
 
 .capsule-scroll-body { flex:1; overflow-y: auto; padding: 20px 32px 30px; }
 .article-header-group { margin-bottom: 16px; display: grid; gap: 10px; }
@@ -683,6 +960,23 @@ watch(() => props.activeTab, (newTab) => {
 .panel-visual--idle .empty-vis iconify-icon { color: rgba(148,163,184,0.3); }
 
 .empty-vis { text-align: center; padding: 110px 0; position: relative; }
+.empty-vis--error { padding: 70px 24px; }
+.empty-vis--error .err-detail {
+  margin: 12px auto 6px; max-width: 560px; color: #475569; font-size: 13px;
+  background: rgba(239, 68, 68, 0.06); border: 1px solid rgba(239, 68, 68, 0.18);
+  padding: 10px 14px; border-radius: 10px; font-family: "Fira Code", monospace; word-break: break-all;
+}
+.empty-vis--error .err-hint { margin: 4px auto 16px; max-width: 560px; color: #64748b; font-size: 12px; line-height: 1.6; }
+.vis-error-banner {
+  display: flex; align-items: center; gap: 10px;
+  margin: 0 0 14px; padding: 10px 14px;
+  background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.22);
+  border-radius: 10px; color: #b91c1c; font-size: 13px;
+}
+.vis-error-banner iconify-icon { font-size: 20px; flex: 0 0 auto; color: #ef4444; }
+.vis-error-banner__body { flex: 1 1 auto; word-break: break-all; line-height: 1.6; }
+.vis-error-banner__retry { flex: 0 0 auto; background: #ef4444; color: #fff; border: 0; }
+.vis-error-banner__retry:hover { background: #dc2626; color: #fff; }
 .empty-vis iconify-icon { font-size: 48px; color: rgba(59, 130, 246, 0.15); margin-bottom: 24px; filter: drop-shadow(0 0 8px rgba(59, 130, 246, 0.1)); }
 .btn-empty-sync {
   margin-top: 24px; background: #2563eb; color: #fff; border:none; padding: 10px 24px;

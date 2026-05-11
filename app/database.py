@@ -153,3 +153,44 @@ class ArticleEmbedding(Base):
     dim = Column(Integer, nullable=False)
     vector = Column(LargeBinary, nullable=False)  # float32 bytes, len == dim * 4
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+
+
+# ===== 升级 4：个性化订阅（Subscription / Blocklist / UserProfile）=====
+class Subscription(Base):
+    """用户订阅条目。kind=keyword/source/event。"""
+    __tablename__ = "subscriptions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(String(50), nullable=False, default="local", index=True)
+    kind = Column(String(20), nullable=False, index=True)  # keyword | source | event
+    value = Column(String(200), nullable=False)
+    weight = Column(Float, default=1.0)
+    created_at = Column(DateTime, default=utcnow)
+
+
+class Blocklist(Base):
+    """屏蔽关键词（命中标题/摘要即过滤）。"""
+    __tablename__ = "blocklist"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(String(50), nullable=False, default="local", index=True)
+    term = Column(String(200), nullable=False)
+    created_at = Column(DateTime, default=utcnow)
+
+
+class UserProfile(Base):
+    """用户行为画像。整体存为 JSON。
+
+    data 结构：{
+      "view_history": [{article_id, ts, dwell_ms, source_id, title, aspects:[]}, ...]  # 最近 200 条
+      "source_weights": {source_id: count, ...}
+      "tag_weights": {keyword: count, ...}
+      "aspect_weights": {aspect: count, ...}
+    }
+    """
+    __tablename__ = "user_profiles"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(String(50), nullable=False, unique=True, index=True, default="local")
+    data = Column(Text, nullable=True)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)

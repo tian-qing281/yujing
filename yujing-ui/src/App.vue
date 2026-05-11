@@ -6,6 +6,7 @@ import AIConsultant from "./components/AIConsultant.vue";
 import AnalysisModal from "./components/AnalysisModal.vue";
 import AppHeader from "./components/AppHeader.vue";
 import AppSidebar from "./components/AppSidebar.vue";
+import SubscriptionPanel from "./components/SubscriptionPanel.vue";
 import CredentialModal from "./components/CredentialModal.vue";
 import EventCard from "./components/EventCard.vue";
 import EventModal from "./components/EventModal.vue";
@@ -150,6 +151,7 @@ const sidebarItems = [
   { id: "cls_telegraph", name: "财联社热榜", icon: "ri:flashlight-line" },
   { id: "event_hub", name: "全景事件", icon: "ri:node-tree" },
   { id: "ai_consultant", name: "AI 助手", icon: "ri:robot-line" },
+  { id: "my_subscriptions", name: "我的订阅", icon: "ri:bookmark-line" },
 ];
 
 const sourceRegistry = sidebarItems;
@@ -1102,6 +1104,9 @@ const openDetail = async (item, options = {}) => {
   if (!article) article = item;
 
   detailItem.value = article;
+  if (article?.id) {
+    trackProfile({ action: "open", article_id: article.id });
+  }
   // 默认进入"数据透视"tab：该 tab 的图表（情感/词云/雷达）通常已在采集时填充，
   // 评委首次打开即可看到完整可视化；AI 总结放在 tab 2，按需触发。
   activeTab.value = "visual";
@@ -1115,6 +1120,20 @@ const openDetail = async (item, options = {}) => {
   });
 };
 
+const trackProfile = (payload) => {
+  // 静默上报用户行为，失败不影响主流程
+  try {
+    fetch(buildApiUrl("/api/profile/track"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      keepalive: true,
+    }).catch(() => {});
+  } catch {
+    // ignore
+  }
+};
+
 const openEventDetail = async (item, options = {}) => {
   if (!options.preserveStack) {
     clearOverlayStack();
@@ -1125,6 +1144,9 @@ const openEventDetail = async (item, options = {}) => {
     const data = await response.json();
     
     eventDetail.value = data?.id ? data : null;
+    if (data?.id) {
+      trackProfile({ action: "open", event_id: data.id });
+    }
   } catch (error) {
     eventDetail.value = null;
   }
@@ -1234,6 +1256,7 @@ const triggerAI = async (force = false) => {
     raw_content: force ? "" : item.raw_content || "",
     wordcloud: force ? [] : item.wordcloud || [],
     emotions: force ? [] : item.emotions || [],
+    analyze_error: "",
   };
   syncArticleState(baseState);
   statusMsg.value = "正在从全站镜像同步分析数据...";
@@ -1261,6 +1284,8 @@ const triggerAI = async (force = false) => {
             syncArticleState({ id: articleId, ai_summary: "" });
           } else if (data.type === "metadata") {
             syncArticleState({ id: articleId, wordcloud: data.wordcloud, emotions: data.emotions });
+          } else if (data.type === "aspects") {
+            syncArticleState({ id: articleId, aspects: data.aspects });
           } else if (data.type === "raw_content") {
             syncArticleState({ id: articleId, raw_content: data.text });
           } else if (data.type === "content") {
@@ -1268,6 +1293,14 @@ const triggerAI = async (force = false) => {
             syncArticleState({ id: articleId, ai_summary: summaryBuffer });
           } else if (data.type === "content_end") {
             syncArticleState({ id: articleId, isAnalyzing: false });
+          } else if (data.type === "error") {
+            // 后端返回采集/LLM 异常 → 把原始错误透传到 UI，避免静默闪回空态
+            syncArticleState({
+              id: articleId,
+              isAnalyzing: false,
+              analyze_error: data.msg || "未知错误",
+            });
+            statusMsg.value = data.msg || "分析失败";
           } else if (data.type === "skip_video") {
             // 后端已识别为视频并从库中移除 → 关闭 modal + 刷新列表
             syncArticleState({ id: articleId, isAnalyzing: false });
@@ -1338,6 +1371,11 @@ onMounted(() => {
           ref="aiConsultantRef"
           :sourceRegistry="sourceRegistry"
           @open-item="openDetail"
+          @open-event="(p) => openEventDetail(p)"
+        />
+        <SubscriptionPanel
+          v-else-if="activePlatform === 'my_subscriptions'"
+          key="my_subscriptions"
           @open-event="(p) => openEventDetail(p)"
         />
         <div v-else-if="activePlatform === 'event_hub'" key="event_workspace" class="article-workspace">
