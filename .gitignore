@@ -21,8 +21,6 @@ runtime/meili/*.exe
 # IDE / AI config
 .vscode/
 .idea/
-.codex/
-CLAUDE.md
 
 # OS
 Thumbs.db
@@ -44,4 +42,11 @@ app/crawler/cookies/*.json
 *.bin
 *.safetensors
 
-AGENTS.md
+# Local model checkpoints (本地模型权重，数百 MB 不入库)
+checkpoints/
+
+# Runtime
+logs/
+.pytest_cache/
+_backups/
+
