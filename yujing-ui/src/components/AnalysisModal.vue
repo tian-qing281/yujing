@@ -884,8 +884,11 @@ watch(() => props.activeTab, (newTab) => {
   flex-direction: column;
   gap: 10px;
   padding: 4px 2px 2px;
-  /* P2：限高内滚，避免方面太多撑高右栏，与左栏极性环高度失衡 */
-  max-height: 460px;
+  /* 高度对齐策略：左栏「情感极性分布」chart-shell 高 320px + label 区 ~ 24px
+     + 卡片自身 padding 24×2，总外高约 416px。所以 ABSA 内可滚区放到 ~ 300px
+     最合适——总外高 ≈ 348px < 左侧 416px，grid stretch 时整张卡以左侧为准
+     被拉到 416px，ABSA 卡内部留出留白，不会反向把左侧撑高。 */
+  max-height: 300px;
   overflow-y: auto;
   scrollbar-width: thin;
   scrollbar-color: rgba(148, 163, 184, 0.45) transparent;

@@ -845,10 +845,13 @@ onMounted(loadAll);
   font-size: 11px;
 }
 
+/* 卡片右侧 → 箭头：原 #cbd5e1 在白底几乎不可见，加深到 slate-400 */
 .sub-rec-arrow {
-  color: #cbd5e1;
+  color: #64748b;
   font-size: 20px;
+  opacity: 0.85;
 }
+.sub-rec-item:hover .sub-rec-arrow { color: #6366f1; opacity: 1; }
 
 /* === 分页器与兜底开关 === */
 .sub-fallback-toggle {
@@ -871,12 +874,26 @@ onMounted(loadAll);
   padding: 14px 0 6px;
 }
 .sub-pager-info {
-  font-size: 12px;
-  color: #64748b;
+  font-size: 13px;
+  color: #334155;
+  font-weight: 700;
   font-family: "Fira Code", monospace;
 }
+/* 翻页按钮：原 .sub-btn 默认无 background 在白底几乎隐形，这里显式给一组紫色渐变 */
+.sub-pager .sub-btn {
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  color: #fff;
+  box-shadow: 0 4px 12px -6px rgba(99, 102, 241, 0.6);
+}
+.sub-pager .sub-btn:hover:not([disabled]) {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 18px -8px rgba(99, 102, 241, 0.7);
+}
 .sub-pager .sub-btn[disabled] {
-  opacity: 0.4;
+  background: #e2e8f0;
+  color: #94a3b8;
+  box-shadow: none;
+  opacity: 1;
   cursor: not-allowed;
 }
 
@@ -914,9 +931,9 @@ onMounted(loadAll);
   width: 26px;
   height: 26px;
   border-radius: 8px;
-  border: 1px solid transparent;
-  background: transparent;
-  color: #cbd5e1;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  color: #64748b;
   cursor: pointer;
   transition: all 0.18s ease;
 }
