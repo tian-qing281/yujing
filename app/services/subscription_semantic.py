@@ -73,7 +73,7 @@ def get_subscription_vectors(values: Iterable[str]) -> Dict[str, np.ndarray]:
 def score_events_for_subscriptions(
     events: List[Event],
     subscription_values: List[str],
-    threshold: float = 0.40,
+    threshold: float = 0.45,
 ) -> Dict[int, Tuple[float, str]]:
     """
     对每个 event（要求 centroid 非空），算其与所有订阅词向量的最大 cosine；

@@ -3711,7 +3711,7 @@ async def get_recommendations(
     w_profile_tag: float = 3.0,
     use_semantic: bool = True,
     w_semantic: float = 6.0,
-    semantic_threshold: float = 0.40,
+    semantic_threshold: float = 0.45,
 ):
     """根据画像 + 订阅 + 屏蔽生成今日推荐事件列表。
 
