@@ -1298,6 +1298,35 @@ def admin_semantic_index_status():
     return get_semantic_index_status()
 
 
+@router.post("/admin/events/incremental")
+def admin_events_incremental(
+    lookback_hours: int = 168,
+    threshold: float = 0.69,
+    max_pending: int = 500,
+):
+    """
+    P1 增量事件聚类：仅处理 clustered_at IS NULL 的最近文章，将其挂到现有
+    Event 的 centroid 上；无法挂载的进入 buffer 内做小规模 Union-Find 形成新事件。
+
+    - 不清空 events 表，相对 /admin/rebuild_events_semantic 全量路径成本极低；
+    - 阈值默认 0.69，与全量 FAISS 链路 L2 ≈ 0.69 对齐；
+    - lookback_hours 默认 168（7 天），max_pending 默认 500，避免冷启动一次扫全库。
+    """
+    from app.services.incremental_cluster import incremental_cluster
+
+    db = SessionLocal()
+    try:
+        result = incremental_cluster(
+            db,
+            lookback_hours=lookback_hours,
+            threshold=threshold,
+            max_pending=max_pending,
+        )
+        return {"ok": True, **result}
+    finally:
+        db.close()
+
+
 @router.get("/admin/semantic_index/neighbors")
 def admin_semantic_index_neighbors(article_id: int, limit: int = 10):
     try:

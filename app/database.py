@@ -67,6 +67,8 @@ class Article(Base):
     ai_summary = Column(Text, nullable=True) 
     ai_sentiment = Column(String(20), nullable=True)
     content = Column(Text, nullable=True) # Jina 抓取的原始 markdown
+    # P1 增量聚类：记录该文章已被聚类落库到 Event 的时间；NULL 表示尚未聚类
+    clustered_at = Column(DateTime, nullable=True, index=True)
 
 class Event(Base):
     __tablename__ = "events"
@@ -84,6 +86,9 @@ class Event(Base):
     primary_source_id = Column(String(50), nullable=True, index=True)
     created_at = Column(DateTime, default=utcnow)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+    # P1 增量聚类：簇均值向量（L2 归一）+ 已合并文章数；用于在线挂载新文章
+    centroid = Column(LargeBinary, nullable=True)
+    centroid_count = Column(Integer, default=0)
 
 
 class EventArticle(Base):
@@ -194,3 +199,24 @@ class UserProfile(Base):
     user_id = Column(String(50), nullable=False, unique=True, index=True, default="local")
     data = Column(Text, nullable=True)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+
+
+# ===== 启动期轻量迁移 =====
+# SQLAlchemy `create_all` 不会修改已存在表结构，对现网增量加列时需要手动 ALTER。
+# 这里只针对 SQLite 做幂等的 ADD COLUMN（缺则加，存在则跳），覆盖 P1 增量聚类引入的
+# 新字段。新增字段都允许 NULL，不影响旧数据。
+def _ensure_column(conn, table: str, column: str, ddl: str) -> None:
+    rows = conn.exec_driver_sql(f"PRAGMA table_info({table})").fetchall()
+    existing = {row[1] for row in rows}
+    if column not in existing:
+        conn.exec_driver_sql(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
+
+
+def ensure_migrations() -> None:
+    """启动期幂等迁移；新增列都设为 NULL 默认，旧数据零影响。"""
+    with engine.begin() as conn:
+        # P1 增量聚类
+        _ensure_column(conn, "articles", "clustered_at", "DATETIME")
+        _ensure_column(conn, "events", "centroid", "BLOB")
+        _ensure_column(conn, "events", "centroid_count", "INTEGER DEFAULT 0")
+

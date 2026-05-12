@@ -53,10 +53,11 @@ def _resolve_project_path(path_value: str, fallback: str) -> str:
 from app.api import agent_routes, proxy, routes  # noqa: E402
 from app.crawler.scheduler import start_scheduler, stop_scheduler  # noqa: E402
 from app.crawler.sources.base import BaseSource  # noqa: E402
-from app.database import Base, engine  # noqa: E402
+from app.database import Base, engine, ensure_migrations  # noqa: E402
 
 
 Base.metadata.create_all(bind=engine)
+ensure_migrations()
 
 
 def _parse_cors_origins():
