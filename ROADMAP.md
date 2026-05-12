@@ -1,10 +1,19 @@
-# 舆境（yujing）升级路线图
+# 舆镜（yujing）升级路线图
 
-> 版本：2026-05-09 · 计算机设计大赛备战阶段
-> 编写原则：每项升级给出现状 / 改造点 / 验收标准 / 工作量 / 依赖 / 风险，避免空泛。
-> 工作量记号：XS≤2h，S≤1d，M≤3d，L≤1w，XL≥1w。
+> 最后更新：2026-05-12
+>
+> **本文定位**：记录未来升级计划与历史升级里程碑，不再包含评测冻结数据、关键决策等静态事实（已分别迁至下列专题文档）。
+>
+> **资料迁移说明**
+> - 评测数据（W3 论文主表 / W4-W5 Agent 冻结指标） → [docs/评测指标文档.md](docs/评测指标文档.md)
+> - 关键决策记录（聚类路径 / 情感双轨 / PDF 字体 / 允例部署等） → [docs/项目说明.md](docs/项目说明.md) §8
+> - 架构与能力总览 → [docs/项目说明.md](docs/项目说明.md)
+>
+> **书写约定**：每项未来升级项给出「现状 / 改造点 / 验收标准 / 工作量 / 依赖 / 风险」。工作量记号：XS≤2h，S≤1d，M≤3d，L≤1w，XL≥1w。
 
 ---
+
+# 一、未来升级规划
 
 ## 一、功能升级
 
@@ -159,12 +168,11 @@
 
 ---
 
-# 附录 A · 历史里程碑（W1-W7 · 已完成项归档）
+# 二、历史升级里程碑（W1-W7）
 
-> 本附录由原《二期规划文档.md》《任务文档.md》《上下文文档.md》三份过期文档浓缩归并。
-> 仅保留可追溯的关键产出与评测数字；细节实现请直接看代码与下方相关专项文档。
+> 下列项均为已落地交付结果，仅保留本路线图追溯所需的「包名 · 交付物 · 状态」三要素；评测冻结数据另见 [评测指标文档](docs/评测指标文档.md)。
 
-## A.1 总目标（不变）
+## A.1 总目标
 
 两条主线并行推进：
 - **答辩线**：2-3 个能在 5 分钟讲清楚的差异化亮点，live demo 稳定不翻车
@@ -182,32 +190,7 @@
 | W6 | Demo 视频 + slide + 论文初稿 | ⏳ 待启 | 3 分钟 Demo、答辩 10 页、论文 8 页 |
 | W7 | 订阅 / ABSA / B 站舆情 | ✅ | A1 权重可调 · A2 已读持久化 · B5 ABSA 雷达 · B6 B 站评论·弹幕情绪 · E15 主区响应式 |
 
-## A.3 W3 冻结成果（论文表）
-
-**Table 1 · 主表（91 pair + 155 闭集 gold · seed-100）**
-
-| System | P | R | F1 | ARI | NMI |
-|:---|:---:|:---:|:---:|:---:|:---:|
-| Persisted | 0.900 | 0.231 | 0.367 | 0.344 | 0.959 |
-| Jaccard | 1.000 | 0.308 | 0.471 | 0.305 | 0.961 |
-| **Semantic (ours)** | **0.861** | **0.795** | **0.827** | **0.691** | **0.977** |
-
-相对 Jaccard：F1 +76%，ARI +127%，Recall 2.58×。
-
-**Table 2 · 消融**：`fixed_threshold=0.62` F1 −0.027；`disable_canonical_merge=True` F1 −0.060；`skip_verification=True` F1 +0.005（Discussion 章诚实讨论）。
-
-## A.4 W4 Agent 冻结指标（20 query · 真 DeepSeek）
-
-| 指标 | W4 | W5 |
-|:---|:---:|:---:|
-| 完成率 | 95% | **100%** |
-| 平均延迟 | 37s | **26s** |
-| 平均步数 | 4.9 | **3.5** |
-| P95 延迟 | 55s | **34s** |
-| 工具召回 | 95% | 80%（高效化跳过部分 expected 工具） |
-
-**首批 9 工具**：`search_events` / `get_event_detail` / `search_articles` / `semantic_search_articles` / `analyze_event_sentiment` / `compare_events` / `get_morning_brief` / `list_hot_platforms` / `rank_events_by_sentiment`。
-**W5 补丁第 10 个工具**：`compare_platforms`（封装 `/api/ai/compare`，前端对话统一走 Agent，`AgentTrace` 后接 `CompareDashboard` 形成"思考→数据→结论"阅读流）。
+> 详细评测数据（W3 主表 + 消融、W4 Agent 20 query、W5 优化后 40 query）请查 [docs/评测指标文档.md](docs/评测指标文档.md)。
 
 ## A.5 W5 已落地清单
 
@@ -273,14 +256,7 @@
 - 一键启动脚本 `scripts/demo.ps1`
 - 回归测试：W3 评测集 P/R/F1 不回退，生产 rebuild 5000+ 事件无崩溃
 
-## A.8 关键决策记录（来自上下文文档）
-
-1. **聚类路径**：`SEMANTIC_CLUSTER=1` 走 FAISS 语义聚类（生产主力）；`=0` fallback 到 Jaccard。两者互斥，非并行。
-2. **情感双轨**：`EmotionEngine`（8 类 Chinese-Emotion，情感条形图） + `SentimentEngine`（3 类 c3-v2，舆情倾向饼图）。两者互不干扰，c3-v2 未就绪时 fallback 到 emotions 聚合。
-3. **BERT 不在请求链路同步**：规则引擎兜底响应 + 后台单线程队列精标。
-4. **PDF 字体**：使用 `msyh.ttc`（微软雅黑）。
-5. **API 配置化**：所有前端 API 调用走 `buildApiUrl()`（`src/config/api.js`），`VITE_API_BASE_URL` 控制域名。
-6. **云部署**：不用 Docker / Nginx / systemd，直接 `python -m app.main` 一条命令全启动。
+> 关键设计决策（聚类路径 / 情感双轨 / BERT 后台精标 / PDF 字体 / API 配置化 / 允例部署）请查 [docs/项目说明.md](docs/项目说明.md) §8。
 
 ## A.9 被砍 / 延后项目
 
