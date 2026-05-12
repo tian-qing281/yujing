@@ -111,7 +111,7 @@
             >
               <div class="article-timeline-caption">
                 <iconify-icon icon="mdi:chart-timeline-variant" />
-                <span>全部 {{ displayedArticles.length }} 篇情报的“时间 × 平台”分布（点击节点查看详情、底部拖动可缩放密集区段）</span>
+                <span>全部 {{ displayedArticles.length }} 篇情报的“时间 × 平台”分布</span>
               </div>
               <div ref="articleTimelineRef" class="article-timeline-viewport"></div>
             </div>
@@ -1055,7 +1055,7 @@ const renderCharts = () => {
         padding: [10, 14],
         textStyle: { color: "#0f172a", fontSize: 12, fontWeight: 600 },
         extraCssText:
-          "box-shadow: 0 12px 28px -10px rgba(15,23,42,0.18); border-radius: 10px; max-width: 360px;",
+          "box-shadow: 0 12px 28px -10px rgba(15,23,42,0.18); border-radius: 10px; max-width: 320px; white-space: normal; word-break: break-word; overflow-wrap: anywhere;",
         formatter: (p) => {
           const a = p.data?._article || {};
           const ts = new Date(p.value[0]);
@@ -1064,9 +1064,10 @@ const renderCharts = () => {
           const senti = getSentimentLabel(a.ai_sentiment);
           const src = getSourceName(a.source_id) || a.source_id || "";
           const preview = (a.ai_summary || a.content || "").toString().slice(0, 60).replace(/\s+/g, " ");
-          return `<div style="font-weight:800;color:#0f172a;line-height:1.4;margin-bottom:6px;">${a.title || "(无标题)"}</div>
-            <div style="color:#64748b;font-size:11px;font-weight:700;margin-bottom:4px;">${src} · ${tStr}${senti ? ` · <span style='color:${getSentimentColor(a.ai_sentiment)};'>${senti}</span>` : ""}</div>
-            ${preview ? `<div style="color:#475569;font-size:11px;line-height:1.5;">${preview}…</div>` : ""}
+          const wrap = "white-space:normal;word-break:break-word;overflow-wrap:anywhere;";
+          return `<div style="font-weight:800;color:#0f172a;line-height:1.4;margin-bottom:6px;${wrap}">${a.title || "(无标题)"}</div>
+            <div style="color:#64748b;font-size:11px;font-weight:700;margin-bottom:4px;${wrap}">${src} · ${tStr}${senti ? ` · <span style='color:${getSentimentColor(a.ai_sentiment)};'>${senti}</span>` : ""}</div>
+            ${preview ? `<div style="color:#475569;font-size:11px;line-height:1.5;${wrap}">${preview}…</div>` : ""}
             <div style="color:#6366f1;font-size:10px;font-weight:800;margin-top:6px;">点击查看详情 →</div>`;
         },
       },
