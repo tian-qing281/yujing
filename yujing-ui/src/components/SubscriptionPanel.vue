@@ -102,13 +102,31 @@
           </div>
         </div>
         <div class="sub-profile-block">
-          <div class="sub-profile-label">兴趣标签 TOP</div>
+          <div class="sub-profile-label">兴趣标签 TOP <span class="sub-profile-hint">（来自文章 category 字段）</span></div>
           <div class="sub-tag-cloud">
             <span v-for="t in profile.top_tags || []" :key="t.tag" class="sub-tag sub-tag--accent">
               {{ t.tag }}
               <strong>{{ t.weight }}</strong>
             </span>
             <span v-if="!profile.top_tags?.length" class="sub-empty-inline">暂无标签数据</span>
+          </div>
+        </div>
+        <div class="sub-profile-block" v-if="(profile.inferred_tags || []).length">
+          <div class="sub-profile-label">
+            <iconify-icon icon="mdi:vector-link" />
+            推断兴趣
+            <span class="sub-profile-hint">（embedding 邻近召回 · 30 min 缓存）</span>
+          </div>
+          <div class="sub-tag-cloud">
+            <span
+              v-for="t in profile.inferred_tags"
+              :key="'inf-' + t.tag"
+              class="sub-tag sub-tag--inferred"
+              :title="`embedding 邻近 cosine 累加分 ${t.score}`"
+            >
+              {{ t.tag }}
+              <strong>{{ t.score }}</strong>
+            </span>
           </div>
         </div>
       </section>
@@ -757,6 +775,27 @@ onMounted(loadAll);
 
 .sub-tag--accent strong {
   color: #f59e0b;
+}
+
+/* V2：embedding 推断 tag，与 literal tag 视觉区分 */
+.sub-tag--inferred {
+  background: linear-gradient(135deg, #cffafe 0%, #a5f3fc 100%);
+  color: #0e7490;
+  border: 1px solid #67e8f9;
+  cursor: help;
+}
+
+.sub-tag--inferred strong {
+  color: #06b6d4;
+}
+
+.sub-profile-hint {
+  font-size: 10px;
+  color: #cbd5e1;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  margin-left: 4px;
 }
 
 .sub-recommend {
