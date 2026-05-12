@@ -11,7 +11,6 @@ from app.crawler.sources.wallstreetcn import WallstreetcnNews
 from app.crawler.sources.weibo import WeiboHotSearch
 from app.crawler.sources.zhihu import ZhihuHotQuestion
 
-
 scheduler = AsyncIOScheduler()
 
 sources = [
@@ -64,6 +63,43 @@ async def _check_and_run_brief_on_startup():
         print(f"[早报定时] 启动补发检查失败: {exc}")
 
 
+def _run_incremental_cluster_job():
+    """P1.1 · 定时增量聚类：仅处理 clustered_at IS NULL 的最近文章。"""
+    from app.database import SessionLocal
+    from app.services.incremental_cluster import incremental_cluster
+
+    db = SessionLocal()
+    try:
+        result = incremental_cluster(db)
+        if result.get("pending"):
+            print(
+                f"[增量聚类] pending={result['pending']} "
+                f"attached={result['attached']} new={result['new_events']}"
+            )
+    except Exception as exc:
+        print(f"[增量聚类] 失败: {exc}")
+    finally:
+        db.close()
+
+
+def _run_centroid_calibrate_job():
+    """P1.1 · 定时 centroid 校准：从原始 article_embeddings 重算，修正在线均值漂移。"""
+    from app.database import SessionLocal
+    from app.services.incremental_cluster import calibrate_event_centroids
+
+    db = SessionLocal()
+    try:
+        result = calibrate_event_centroids(db, only_missing=False)
+        print(
+            f"[centroid 校准] checked={result['checked']} "
+            f"updated={result['updated']} no_vec={result['skipped_no_vec']}"
+        )
+    except Exception as exc:
+        print(f"[centroid 校准] 失败: {exc}")
+    finally:
+        db.close()
+
+
 def start_scheduler():
     if scheduler.running:
         return
@@ -77,6 +113,32 @@ def start_scheduler():
             replace_existing=True,
             misfire_grace_time=3600,
         )
+
+    # P1.1 · 增量事件聚类：每 INCR_CLUSTER_INTERVAL_MIN 分钟（默认 10）
+    incr_interval = int(os.getenv("INCR_CLUSTER_INTERVAL_MIN", "10"))
+    if incr_interval > 0:
+        scheduler.add_job(
+            _run_incremental_cluster_job,
+            "interval",
+            minutes=incr_interval,
+            id="incremental_cluster",
+            replace_existing=True,
+            misfire_grace_time=300,
+        )
+        print(f"[增量聚类] 已注册：每 {incr_interval} 分钟执行一次")
+
+    # P1.1 · centroid 校准：每 CENTROID_CALIBRATE_HOURS 小时（默认 6）
+    calib_hours = int(os.getenv("CENTROID_CALIBRATE_HOURS", "6"))
+    if calib_hours > 0:
+        scheduler.add_job(
+            _run_centroid_calibrate_job,
+            "interval",
+            hours=calib_hours,
+            id="centroid_calibrate",
+            replace_existing=True,
+            misfire_grace_time=1800,
+        )
+        print(f"[centroid 校准] 已注册：每 {calib_hours} 小时执行一次")
 
     # 调试模式: BRIEF_INTERVAL_MINUTES 设为 >0 的值则用 interval 触发（如 2 = 每2分钟）
     brief_interval = int(os.getenv("BRIEF_INTERVAL_MINUTES", "0"))

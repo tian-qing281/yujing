@@ -260,3 +260,52 @@ def incremental_cluster(
     }
     logger.info(f"[incremental_cluster] {result}")
     return result
+
+
+def calibrate_event_centroids(db: Session, only_missing: bool = False) -> Dict[str, int]:
+    """全量校准 events.centroid：直接读 article_embeddings 取均值 + L2 归一。
+
+    与 P1 的在线均值不同，本函数从原始向量重算，作为定时校准修正在线均值漂移。
+
+    only_missing=True 时仅处理 centroid 为空的 event（等价 backfill 脚本）。
+    """
+    from app.database import ArticleEmbedding
+
+    q = db.query(Event)
+    if only_missing:
+        q = q.filter(Event.centroid.is_(None))
+    events = q.all()
+    if not events:
+        return {"checked": 0, "updated": 0, "skipped_no_vec": 0}
+
+    updated = 0
+    skipped_no_vec = 0
+    for ev in events:
+        rows = (
+            db.query(ArticleEmbedding.vector)
+            .join(EventArticle, EventArticle.article_id == ArticleEmbedding.article_id)
+            .filter(EventArticle.event_id == ev.id)
+            .all()
+        )
+        if not rows:
+            skipped_no_vec += 1
+            continue
+        vecs = np.stack(
+            [np.frombuffer(r[0], dtype=np.float32) for r in rows]
+        )
+        new_c = _l2_normalize(vecs.mean(axis=0))
+        new_bytes = new_c.tobytes()
+        new_count = int(vecs.shape[0])
+        # 仅在变化时写库，减少 WAL
+        if ev.centroid != new_bytes or ev.centroid_count != new_count:
+            ev.centroid = new_bytes
+            ev.centroid_count = new_count
+            updated += 1
+    db.commit()
+    result = {
+        "checked": len(events),
+        "updated": updated,
+        "skipped_no_vec": skipped_no_vec,
+    }
+    logger.info(f"[calibrate_event_centroids] {result}")
+    return result
