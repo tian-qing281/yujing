@@ -3709,6 +3709,9 @@ async def get_recommendations(
     w_source: float = 3.0,
     w_profile_source: float = 3.0,
     w_profile_tag: float = 3.0,
+    use_semantic: bool = True,
+    w_semantic: float = 6.0,
+    semantic_threshold: float = 0.40,
 ):
     """根据画像 + 订阅 + 屏蔽生成今日推荐事件列表。
 
@@ -3717,6 +3720,8 @@ async def get_recommendations(
     - 事件 primary_source_id 命中订阅 source：+w_source 分（默认 3）
     - 事件 primary_source_id 命中画像 top_sources：按权重 +0~w_profile_source 分（默认 3）
     - 事件 keywords 命中画像 top_tags：按权重 +0~w_profile_tag 分（默认 3）
+    - S1 语义召回：若开启 `use_semantic`，订阅 keyword/event 词向量 vs 事件 centroid
+      cosine ≥ `semantic_threshold` 时 +`w_semantic * cos * weight`（默认 4 * cos）
     - 标题命中任意 blocklist 词：直接剔除
     最终按分数降序，相同分按 heat_score。
 
@@ -3732,6 +3737,8 @@ async def get_recommendations(
     w_source = max(0.0, min(10.0, w_source))
     w_profile_source = max(0.0, min(10.0, w_profile_source))
     w_profile_tag = max(0.0, min(10.0, w_profile_tag))
+    w_semantic = max(0.0, min(10.0, w_semantic))
+    semantic_threshold = max(0.0, min(1.0, semantic_threshold))
     subs = db.query(Subscription).filter(Subscription.user_id == _PROFILE_USER_ID).all()
     blocks = db.query(Blocklist).filter(Blocklist.user_id == _PROFILE_USER_ID).all()
     block_terms = [b.term for b in blocks if b.term]
@@ -3756,6 +3763,24 @@ async def get_recommendations(
 
     max_source_w = max(source_w.values()) if source_w else 1
     max_tag_w = max(tag_w.values()) if tag_w else 1
+
+    # S1: 订阅语义召回 — 复用 P1 写入的 Event.centroid，订阅词向量进程内缓存
+    semantic_hits: dict = {}
+    semantic_used = False
+    if use_semantic:
+        sub_texts = [v for v, _ in keyword_subs] + [v for v, _ in event_subs]
+        if sub_texts:
+            try:
+                from app.services.subscription_semantic import score_events_for_subscriptions
+                semantic_hits = score_events_for_subscriptions(
+                    candidates, sub_texts, threshold=semantic_threshold
+                )
+                semantic_used = bool(semantic_hits)
+            except Exception:
+                logger.exception("[recommendations] 语义召回失败，降级到字面匹配")
+
+    sub_weight_map = {v: w for v, w in keyword_subs}
+    sub_weight_map.update({v: w for v, w in event_subs})
 
     scored: list = []
     for ev in candidates:
@@ -3790,6 +3815,15 @@ async def get_recommendations(
                 tag_score = sum(tag_w[k] for k in hit_tags) / max_tag_w * w_profile_tag
                 score += tag_score
                 reasons.append(f"画像兴趣 {','.join(hit_tags[:3])}")
+        # S1: 语义召回打分（仅当字面未命中该订阅词时叠加，避免重复）
+        sem = semantic_hits.get(ev.id)
+        if sem is not None:
+            sem_cos, sem_kw = sem
+            sem_w = sub_weight_map.get(sem_kw, 1.0)
+            already_hit_literally = sem_kw in (ev.title or "")
+            if not already_hit_literally:
+                score += w_semantic * sem_cos * sem_w
+                reasons.append(f"语义相似「{sem_kw}」 {sem_cos:.2f}")
         if score <= 0:
             continue
         scored.append((score, ev, reasons))
@@ -3826,12 +3860,16 @@ async def get_recommendations(
         "page_size": limit,
         "offset": offset,
         "fallback_used": fallback_used,
+        "semantic_used": semantic_used,
+        "semantic_hits": len(semantic_hits),
         "weights": {
             "keyword": w_keyword,
             "source": w_source,
             "profile_source": w_profile_source,
             "profile_tag": w_profile_tag,
+            "semantic": w_semantic,
         },
+        "semantic_threshold": semantic_threshold,
     }
 
 
