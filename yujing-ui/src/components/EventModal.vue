@@ -871,6 +871,21 @@ const renderCharts = () => {
         textStyle: { color: "#0f172a", fontSize: 12, fontWeight: 600 },
         extraCssText:
           "box-shadow: 0 10px 24px -10px rgba(15,23,42,0.18); border-radius: 10px;",
+        // P5：tooltip 增加桶粒度说明，让用户理解时间轴是聚合而非原始时间点
+        formatter: (params) => {
+          if (!Array.isArray(params) || !params.length) return ''
+          const bh = trend[0]?.bucket_hours
+          const tag = bh === 1 ? '1 小时桶' : bh === 6 ? '6 小时桶' : bh === 24 ? '1 天桶' : '聚合桶'
+          const head = `<div style="font-weight:800;color:#0f172a;margin-bottom:4px;">${params[0].axisValueLabel} <span style="color:#94a3b8;font-size:10px;font-weight:700;margin-left:4px;">(${tag})</span></div>`
+          const body = params.map(p => {
+            return `<div style="display:flex;align-items:center;gap:6px;line-height:1.7;">
+              <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${p.color};"></span>
+              <span style="color:#475569;font-weight:700;">${p.seriesName}</span>
+              <span style="color:#0f172a;font-weight:900;margin-left:auto;">${p.value} 篇</span>
+            </div>`
+          }).join('')
+          return head + body
+        },
       },
       legend: {
         data: [

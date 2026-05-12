@@ -276,16 +276,29 @@
         </form>
       </div>
     </footer>
+
+    <!-- 早报独立弹窗：与对话流解耦，不再 echo prompt -->
+    <BriefModal
+      :visible="briefModalVisible"
+      :content="briefModalContent"
+      :brief-date="briefModalDate"
+      :loading="briefModalLoading"
+      @close="briefModalVisible = false"
+      @regenerate="regenerateBrief"
+      @ask-followup="askFollowupFromBrief"
+    />
   </section>
 </template>
 
 <script setup>
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { marked } from "marked";
+import { renderMarkdown } from "@/utils/markdown";
 import { buildApiUrl } from "../config/api";
 import html2canvas from "html2canvas";
 import AgentTrace from "./AgentTrace.vue";
 import CompareDashboard from "./CompareDashboard.vue";
+import BriefModal from "./BriefModal.vue";
 
 // 迁移说明：老 key 为 hongsou_mcp_sessions_v1。这里改为 yujing_ 前缀后首次加载
 // 时会出现一次"空会话"列表，属于预期；旧历史如需保留，可手动 localStorage
@@ -337,6 +350,12 @@ const inputQuery = ref("");
 //   'generating' 后端仍在跑生成，banner 显示占位"生成中…"
 // 合并掉了旧 briefDismissed 逻辑：用户要求"显示在上面"本来就意味着常驻。
 const briefStatus = ref("loading");
+
+// 早报独立弹窗状态（替代原来"早报塞进对话流"做法）
+const briefModalVisible = ref(false);
+const briefModalContent = ref("");
+const briefModalDate = ref("");
+const briefModalLoading = ref(false);
 const briefDate = ref("");
 const todayLabel = new Date().toISOString().slice(0, 10);
 
@@ -419,7 +438,13 @@ const clearAlerts = async () => {
 };
 
 const openAlertDetail = (alert) => {
-  sendMessage(`分析此条舆情推送「${alert.title}」的详细情况`);
+  // 推送 alert.id 与 event.id 一一对应（见后端 _scan_alerts 的 ev.id）
+  // 之前会把"分析此条舆情推送…"作为用户消息塞进对话流再走 LLM，造成
+  //   ① prompt 回显观感差 ② 多消耗一次 LLM 额度
+  // 改为直接 emit('open-event')，复用现成的 EventModal 弹窗（带文章/情感/演变图）
+  if (alert?.id) {
+    emit("open-event", { id: alert.id });
+  }
 };
 
 const startAlertPolling = () => {
@@ -475,32 +500,99 @@ const generateBriefViaSSE = async (session) => {
 };
 
 const openBrief = async () => {
-  ensureSession();
-  const session = activeSession.value;
-  if (!session) return;
-
-  // 1) 先读缓存（避免重复 LLM 请求）
+  // 改造：早报不再以"假装的用户消息+助手消息"形式塞进对话流（避免 prompt
+  // 回显观感差），而是直接打开独立的 BriefModal 弹窗（带 PDF 导出 + 追问按钮）
+  briefModalLoading.value = true;
+  briefModalVisible.value = true;
   try {
     const res = await fetch(buildApiUrl("/api/ai/morning_brief/content"));
     const data = await res.json();
     if (data.ok && data.content) {
-      session.messages.push({ role: "user", content: "查看今日舆情早报" });
-      session.messages.push({ role: "assistant", content: data.content });
-      session.title = session.title || `舆情早报 ${data.date}`;
-      saveSessions();
-      await nextTick();
-      scrollToBottom();
-      return;
+      briefModalContent.value = data.content;
+      briefModalDate.value = data.date || new Date().toISOString().slice(0, 10);
+    } else {
+      briefModalContent.value = "";
+      briefModalDate.value = new Date().toISOString().slice(0, 10);
     }
-  } catch {}
-
-  // 2) 缓存为空 → 调用正确的早报生成 SSE 端点
-  session.messages.push({ role: "user", content: "查看今日舆情早报" });
-  await generateBriefViaSSE(session);
+  } catch (err) {
+    console.warn("[早报] 拉取失败:", err);
+    briefModalContent.value = "";
+  } finally {
+    briefModalLoading.value = false;
+  }
 };
 
-const exportBriefPdf = () => {
-  window.open(buildApiUrl("/api/ai/morning_brief/pdf"), "_blank");
+// "立即生成"按钮：调用 SSE 端点重新生成
+const regenerateBrief = async () => {
+  briefModalLoading.value = true;
+  try {
+    // 触发后端生成；完成后刷新 content
+    await fetch(buildApiUrl("/api/ai/morning_brief/trigger"), { method: "POST" });
+    // 简单轮询 status，最多等待 60 秒
+    for (let i = 0; i < 30; i++) {
+      await new Promise((r) => setTimeout(r, 2000));
+      const sres = await fetch(buildApiUrl("/api/ai/morning_brief/status"));
+      const sdata = await sres.json();
+      if (sdata.status === "completed" || sdata.has_content) break;
+    }
+    const cres = await fetch(buildApiUrl("/api/ai/morning_brief/content"));
+    const cdata = await cres.json();
+    if (cdata.ok && cdata.content) {
+      briefModalContent.value = cdata.content;
+      briefModalDate.value = cdata.date || new Date().toISOString().slice(0, 10);
+    }
+  } catch (err) {
+    console.warn("[早报] 重新生成失败:", err);
+  } finally {
+    briefModalLoading.value = false;
+  }
+};
+
+// 在弹窗里点"基于此早报追问"→ 关闭弹窗 + 在对话流里发起追问
+const askFollowupFromBrief = ({ content }) => {
+  briefModalVisible.value = false;
+  ensureSession();
+  // 把早报内容作为上下文系统消息塞入，再发问
+  const session = activeSession.value;
+  if (!session) return;
+  session.messages.push({
+    role: "system",
+    content: `[早报上下文]\n${(content || "").slice(0, 2000)}`,
+  });
+  saveSessions();
+  // 让用户自己输入问题
+  inputQuery.value = "请基于今日早报，为我分析…";
+  nextTick(() => {
+    const ta = document.querySelector(".ai-input textarea");
+    if (ta) ta.focus();
+  });
+};
+
+// P6：不跳页下载——fetch + blob + a.download。
+const downloadBlobAs = async (url, filename) => {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`download failed: ${res.status}`);
+    const blob = await res.blob();
+    const objUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = objUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(objUrl), 4000);
+    return true;
+  } catch (err) {
+    console.warn('[PDF] 下载失败:', err);
+    return false;
+  }
+};
+
+const exportBriefPdf = async () => {
+  // P6：原 window.open 会跳转到新标签页中间页，现改为静默下载
+  const today = new Date().toISOString().slice(0, 10);
+  await downloadBlobAs(buildApiUrl('/api/ai/morning_brief/pdf'), `舆情早报_${today}.pdf`);
 };
 
 // 对含可视化（如对比仪表盘）的消息，用 html2canvas 截取 DOM 并嵌入 PDF
@@ -558,13 +650,41 @@ const isMorningBriefMessage = (msg) => {
   return /早报|日报/.test(sessionTitle) || /早报|日报/.test(userQuery);
 };
 
+// P7：基于"会话 + 当前消息"派生 PDF 报告标题
+// 优先级：用户手改过的 session.title（≠"新会话"等）> 当前消息 user_query 前 24 字 + " · AI 分析报告"
+//   > 会话首条 user 消息前 24 字 > "舆镜对话报告 yyyy-mm-dd"
+// 设计目标：导出文件名 / PDF 内嵌封面标题 看上去像产品输出，而不是默认空标题
+const _DEFAULT_TITLES = new Set(["新会话", "新对话", "AI 舆情分析报告", ""]);
+const _truncate = (s, n) => {
+  const t = (s || "").replace(/\s+/g, " ").trim();
+  return t.length > n ? t.slice(0, n) + "…" : t;
+};
+const getReportTitle = (session, msg) => {
+  const today = new Date().toISOString().slice(0, 10);
+  const sessTitle = (session?.title || "").trim();
+  if (sessTitle && !_DEFAULT_TITLES.has(sessTitle)) {
+    return sessTitle;
+  }
+  const currentQuery = (msg?.user_query || "").trim();
+  if (currentQuery) {
+    return `${_truncate(currentQuery, 24)} · AI 分析报告`;
+  }
+  const firstUser = (session?.messages || []).find((m) => m.role === "user");
+  if (firstUser?.content) {
+    return `${_truncate(firstUser.content, 24)} · AI 分析报告`;
+  }
+  return `舆镜对话报告 ${today}`;
+};
+
 const exportMessagePdf = async (msg, msgIndex) => {
   const textContent = msg.agent_final || msg.content;
   if (!textContent && !msg.compare_metrics) return;
 
   // 早报内容直接复用后端早报 PDF 端点，文件名/标题统一"舆情早报_YYYY-MM-DD.pdf"
   if (isMorningBriefMessage(msg)) {
-    window.open(buildApiUrl("/api/ai/morning_brief/pdf"), "_blank");
+    // P6：静默下载，不再跳页
+    const today = new Date().toISOString().slice(0, 10);
+    await downloadBlobAs(buildApiUrl('/api/ai/morning_brief/pdf'), `舆情早报_${today}.pdf`);
     return;
   }
 
@@ -574,8 +694,11 @@ const exportMessagePdf = async (msg, msgIndex) => {
       const dataUrl = await captureDashboardImage(msgIndex);
       if (dataUrl) images.push(dataUrl);
     }
-    // 标题统一来源：会话标题 → PDF 内嵌标题 + 文件名 全部一致
-    const reportTitle = (activeSession.value?.title || "AI 舆情分析报告").trim() || "AI 舆情分析报告";
+    // P7：标题优先级策略 ——让推送出去的 PDF 看上去像产品输出而不是原始贴回
+    // 1. 用户手改过的会话标题（非"新会话"）优先级最高
+    // 2. 退化到首条用户输入文本前 24 字 + “ · AI 分析报告”
+    // 3. 完全拿不到 → “舆镜对话报告 yyyy-mm-dd”
+    const reportTitle = getReportTitle(activeSession.value, msg);
     const res = await fetch(buildApiUrl("/api/ai/export_pdf"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -762,10 +885,10 @@ const getSourceName = (id) => {
 };
 
 const formatMessage = (text) => {
-  if (!text) return "";
-  return text
-    .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
-    .replace(/\n/g, "<br>");
+  // P8：对话气泡与早报统一走 markdown 渲染（DOMPurify 清洗，防 XSS）
+  // 之前只做 `**` + `\n` 替换，早报中的 【重点事件 TOP5】/表格/列表都裸输出，观感像 prompt
+  // 现在 # / ## / - / 1. / | 表格 都能正确渲染
+  return renderMarkdown(text);
 };
 
 const formatSessionMeta = (session) => {
@@ -1169,6 +1292,32 @@ onUnmounted(() => {
   border-bottom-left-radius: 4px;
 }
 .msg-text { font-size: 15px; line-height: 1.75; text-align: left; }
+/* P8：早报 / 长回复 markdown 渲染样式（与 AnalysisModal 保持视觉一致） */
+.msg-text :deep(h1),
+.msg-text :deep(h2),
+.msg-text :deep(h3),
+.msg-text :deep(h4) { font-weight: 900; color: #0f172a; margin: 14px 0 6px; line-height: 1.4; letter-spacing: -0.01em; }
+.msg-text :deep(h1) { font-size: 19px; }
+.msg-text :deep(h2) { font-size: 17px; padding-bottom: 5px; border-bottom: 2px solid rgba(59, 130, 246, 0.18); }
+.msg-text :deep(h3) { font-size: 15.5px; color: #1d4ed8; }
+.msg-text :deep(h4) { font-size: 14.5px; color: #334155; }
+.msg-text :deep(p) { margin: 6px 0; }
+.msg-text :deep(ul),
+.msg-text :deep(ol) { margin: 6px 0 6px 4px; padding-left: 22px; }
+.msg-text :deep(li) { margin: 3px 0; line-height: 1.7; }
+.msg-text :deep(li::marker) { color: #3b82f6; font-weight: 800; }
+.msg-text :deep(strong) { color: #0f172a; font-weight: 900; }
+.msg-text :deep(em) { color: #475569; font-style: normal; background: linear-gradient(180deg, transparent 60%, rgba(250, 204, 21, 0.45) 60%); padding: 0 2px; }
+.msg-text :deep(blockquote) { margin: 10px 0; padding: 8px 12px; border-left: 4px solid #3b82f6; background: rgba(59, 130, 246, 0.06); border-radius: 0 8px 8px 0; color: #334155; font-size: 14px; }
+.msg-text :deep(code) { background: rgba(15, 23, 42, 0.06); padding: 1px 5px; border-radius: 4px; font-family: 'Fira Code', monospace; font-size: 12.5px; color: #be185d; }
+.msg-text :deep(pre) { background: #0f172a; color: #e2e8f0; padding: 12px 14px; border-radius: 10px; overflow-x: auto; margin: 10px 0; }
+.msg-text :deep(pre code) { background: transparent; color: inherit; padding: 0; }
+.msg-text :deep(hr) { border: none; border-top: 1px dashed rgba(148, 163, 184, 0.4); margin: 12px 0; }
+.msg-text :deep(table) { border-collapse: collapse; width: 100%; margin: 10px 0; font-size: 13.5px; }
+.msg-text :deep(th),
+.msg-text :deep(td) { border: 1px solid rgba(148, 163, 184, 0.28); padding: 6px 9px; }
+.msg-text :deep(th) { background: rgba(59, 130, 246, 0.08); font-weight: 800; color: #1d4ed8; }
+.msg-text :deep(a) { color: #1d4ed8; text-decoration: underline; }
 
 .composer-shell {
   padding: 32px 40px; background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(20px);

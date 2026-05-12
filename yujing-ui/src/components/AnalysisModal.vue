@@ -192,13 +192,15 @@
                     </div>
                   </div>
 
-                  <!-- B6: B 站评论 + 弹幕情绪聚合（仅哔哩哔哩榜文章） -->
+                  <!-- B6: B 站评论 + 弹幕情绪聚合（仅哔哩哔哩榜文章）
+                       拆成两张独立 intel-box，让 .intel-visual-grid (1fr 1fr) 自然左右铺开 -->
                   <div v-if="isBilibiliArticle" class="intel-box bili-sent-box">
                     <div class="intel-label">
-                      <iconify-icon icon="mdi:bilibili" />
-                      <span>B 站评论 · 弹幕情绪</span>
+                      <iconify-icon icon="mdi:comment-text-multiple-outline" />
+                      <span>B 站评论情绪</span>
                       <span v-if="biliSent?.data_source" class="absa-badge">{{ biliSent.data_source === 'local' ? '本地' : '实时' }}</span>
                       <span v-if="biliSentLoading" class="absa-badge absa-badge--loading">加载中</span>
+                      <span v-if="biliSent" class="bili-sent-count">{{ biliSent.total_comments }} 条</span>
                     </div>
                     <div v-if="biliSentLoading" class="bili-sent-loading">
                       <div class="absa-skeleton" v-for="n in 2" :key="n">
@@ -210,33 +212,43 @@
                       <iconify-icon icon="mdi:database-off-outline" />
                       <p class="absa-empty-title">{{ biliSentError }}</p>
                     </div>
-                    <div v-else-if="biliSent" class="bili-sent-grid">
-                      <div class="bili-sent-col">
-                        <div class="bili-sent-col-head">
-                          <iconify-icon icon="mdi:comment-text-multiple-outline" />
-                          <span>评论 · {{ biliSent.total_comments }} 条</span>
-                        </div>
-                        <div ref="biliCommentChartRef" class="bili-sent-pie"></div>
-                        <ul v-if="biliSent.top_comments?.length" class="bili-sent-top">
-                          <li v-for="(c, i) in biliSent.top_comments.slice(0,3)" :key="i">
-                            <span class="bili-sent-likes">♥ {{ c.likes }}</span>
-                            <span class="bili-sent-text">{{ c.content }}</span>
-                          </li>
-                        </ul>
+                    <div v-else-if="biliSent" class="bili-sent-single">
+                      <div ref="biliCommentChartRef" class="bili-sent-pie"></div>
+                      <ul v-if="biliSent.top_comments?.length" class="bili-sent-top">
+                        <li v-for="(c, i) in biliSent.top_comments.slice(0, 6)" :key="i">
+                          <span class="bili-sent-likes">♥ {{ c.likes }}</span>
+                          <span class="bili-sent-text">{{ c.content }}</span>
+                        </li>
+                      </ul>
+                    </div>
+                  </div>
+
+                  <div v-if="isBilibiliArticle" class="intel-box bili-sent-box">
+                    <div class="intel-label">
+                      <iconify-icon icon="mdi:subtitles-outline" />
+                      <span>B 站弹幕情绪</span>
+                      <span v-if="biliSent?.data_source" class="absa-badge">{{ biliSent.data_source === 'local' ? '本地' : '实时' }}</span>
+                      <span v-if="biliSentLoading" class="absa-badge absa-badge--loading">加载中</span>
+                      <span v-if="biliSent" class="bili-sent-count">{{ biliSent.total_danmaku }} 条</span>
+                    </div>
+                    <div v-if="biliSentLoading" class="bili-sent-loading">
+                      <div class="absa-skeleton" v-for="n in 2" :key="n">
+                        <div class="sk-bar sk-bar-aspect"></div>
+                        <div class="sk-bar sk-bar-evi"></div>
                       </div>
-                      <div class="bili-sent-col">
-                        <div class="bili-sent-col-head">
-                          <iconify-icon icon="mdi:subtitles-outline" />
-                          <span>弹幕 · {{ biliSent.total_danmaku }} 条</span>
-                        </div>
-                        <div ref="biliDanmakuChartRef" class="bili-sent-pie"></div>
-                        <ul v-if="biliSent.top_danmaku?.length" class="bili-sent-top">
-                          <li v-for="(d, i) in biliSent.top_danmaku.slice(0,3)" :key="i">
-                            <span class="bili-sent-time">{{ Math.floor((d.progress_ms||0)/1000) }}s</span>
-                            <span class="bili-sent-text">{{ d.content }}</span>
-                          </li>
-                        </ul>
-                      </div>
+                    </div>
+                    <div v-else-if="biliSentError" class="absa-empty">
+                      <iconify-icon icon="mdi:database-off-outline" />
+                      <p class="absa-empty-title">{{ biliSentError }}</p>
+                    </div>
+                    <div v-else-if="biliSent" class="bili-sent-single">
+                      <div ref="biliDanmakuChartRef" class="bili-sent-pie"></div>
+                      <ul v-if="biliSent.top_danmaku?.length" class="bili-sent-top">
+                        <li v-for="(d, i) in biliSent.top_danmaku.slice(0, 6)" :key="i">
+                          <span class="bili-sent-time">{{ Math.floor((d.progress_ms || 0) / 1000) }}s</span>
+                          <span class="bili-sent-text">{{ d.content }}</span>
+                        </li>
+                      </ul>
                     </div>
                   </div>
                 </div>
@@ -254,7 +266,7 @@
                     <iconify-icon icon="mdi:text-box-search-outline" />
                     <span>AI 总结</span>
                   </div>
-                  <div class="report-body">{{ item.ai_summary }}</div>
+                  <div class="report-body markdown-body" v-html="renderedSummary"></div>
               </div>
 
               <!-- 凭据失效专用提示（后端返回以 ❌ 开头的错误信息） -->
@@ -281,6 +293,7 @@
 
 <script setup>
 import { ref, watch, nextTick, onMounted, onUnmounted, computed } from 'vue'
+import { renderMarkdown } from '@/utils/markdown'
 
 const props = defineProps({
   item: Object,
@@ -392,6 +405,13 @@ const isCredentialError = computed(() => {
 const credentialErrorMessage = computed(() => {
   const raw = (props.item?.ai_summary || '').replace(/^❌\s*\[?[^\]]*\]?\s*/, '').trim()
   return raw || '后端尝试抓取正文时被目标站点拦截，常见原因为登录态过期。'
+})
+
+// P3：AI 总结渲染为 markdown HTML（已经过 DOMPurify 清洗）
+const renderedSummary = computed(() => {
+  const raw = props.item?.ai_summary || ''
+  if (!raw || isCredentialError.value) return ''
+  return renderMarkdown(raw)
 })
 
 const hasVisualData = computed(() => {
@@ -864,7 +884,15 @@ watch(() => props.activeTab, (newTab) => {
   flex-direction: column;
   gap: 10px;
   padding: 4px 2px 2px;
+  /* P2：限高内滚，避免方面太多撑高右栏，与左栏极性环高度失衡 */
+  max-height: 460px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.45) transparent;
 }
+.absa-list::-webkit-scrollbar { width: 6px; }
+.absa-list::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, 0.45); border-radius: 3px; }
+.absa-list::-webkit-scrollbar-track { background: transparent; }
 .absa-card {
   position: relative;
   background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
@@ -994,22 +1022,34 @@ watch(() => props.activeTab, (newTab) => {
 .absa-empty-title { font-size: 13px; font-weight: 800; color: #475569; margin: 0 0 4px; }
 .absa-empty-hint { font-size: 11.5px; color: #94a3b8; line-height: 1.55; max-width: 320px; margin: 0; }
 
-/* B6: B 站评论 / 弹幕情绪聚合卡 */
+/* B6: B 站评论 / 弹幕情绪聚合卡（已拆成两个独立 intel-box，左右铺在 .intel-visual-grid 里） */
 .bili-sent-box .intel-label iconify-icon { color: #fb7299; }
 .bili-sent-loading { padding: 8px 0; }
-.bili-sent-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-.bili-sent-col { display: flex; flex-direction: column; gap: 8px; background: rgba(251,114,153,0.04); border: 1px solid rgba(251,114,153,0.12); border-radius: 12px; padding: 10px; }
-.bili-sent-col-head { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 800; color: #475569; }
-.bili-sent-col-head iconify-icon { color: #fb7299; font-size: 16px; }
-.bili-sent-pie { width: 100%; height: 200px; }
-.bili-sent-top { list-style: none; margin: 0; padding: 6px 0 0; display: flex; flex-direction: column; gap: 5px; border-top: 1px dashed rgba(251,114,153,0.18); }
-.bili-sent-top li { display: flex; align-items: flex-start; gap: 6px; font-size: 11px; line-height: 1.45; color: #334155; }
-.bili-sent-likes { flex-shrink: 0; color: #fb7299; font-weight: 800; min-width: 32px; }
-.bili-sent-time { flex-shrink: 0; color: #94a3b8; font-weight: 700; min-width: 32px; font-family: 'Fira Code', monospace; font-size: 10px; }
-.bili-sent-text { flex: 1; word-break: break-word; }
-@media (max-width: 760px) {
-  .bili-sent-grid { grid-template-columns: 1fr; }
+.bili-sent-count { margin-left: auto; font-size: 11px; color: #94a3b8; font-weight: 800; padding: 2px 8px; background: rgba(251,114,153,0.08); border-radius: 999px; letter-spacing: 0.02em; }
+/* 单卡内：饼图在上、Top 列表在下，整张卡气场统一 */
+.bili-sent-single { display: flex; flex-direction: column; gap: 12px; }
+.bili-sent-pie { width: 100%; height: 220px; }
+/* P4：列表使用相同最小/最大高度，让评论卡 vs 弹幕卡视觉上严格对齐 */
+.bili-sent-top {
+  list-style: none;
+  margin: 0;
+  padding: 8px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-top: 1px dashed rgba(251,114,153,0.18);
+  min-height: 200px;
+  max-height: 240px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(251, 114, 153, 0.35) transparent;
 }
+.bili-sent-top::-webkit-scrollbar { width: 5px; }
+.bili-sent-top::-webkit-scrollbar-thumb { background: rgba(251, 114, 153, 0.35); border-radius: 3px; }
+.bili-sent-top li { display: flex; align-items: flex-start; gap: 8px; font-size: 12px; line-height: 1.5; color: #334155; padding: 4px 0; }
+.bili-sent-likes { flex-shrink: 0; color: #fb7299; font-weight: 800; min-width: 38px; }
+.bili-sent-time { flex-shrink: 0; color: #94a3b8; font-weight: 700; min-width: 38px; font-family: 'Fira Code', monospace; font-size: 11px; }
+.bili-sent-text { flex: 1; word-break: break-word; }
 
 .capsule-scroll-body { flex:1; overflow-y: auto; padding: 20px 32px 30px; }
 .article-header-group { margin-bottom: 16px; display: grid; gap: 10px; }
@@ -1146,7 +1186,33 @@ watch(() => props.activeTab, (newTab) => {
   border-radius: 999px; font-size: 11px; font-weight: 900;
   margin-bottom: 24px; text-transform: uppercase; letter-spacing: 0.08em;
 }
-.report-body { font-size: 16px; line-height: 1.9; color: #1e293b; white-space: pre-wrap; font-weight: 500; text-align: left; }
+.report-body { font-size: 16px; line-height: 1.9; color: #1e293b; font-weight: 500; text-align: left; }
+/* P3：AI 总结 markdown 渲染样式——与外部论述类似但专门调纯中文语义 */
+.markdown-body :deep(h1),
+.markdown-body :deep(h2),
+.markdown-body :deep(h3),
+.markdown-body :deep(h4) { font-weight: 900; color: #0f172a; margin: 18px 0 8px; line-height: 1.4; letter-spacing: -0.01em; }
+.markdown-body :deep(h1) { font-size: 22px; }
+.markdown-body :deep(h2) { font-size: 19px; padding-bottom: 6px; border-bottom: 2px solid rgba(59, 130, 246, 0.18); }
+.markdown-body :deep(h3) { font-size: 17px; color: #1d4ed8; }
+.markdown-body :deep(h4) { font-size: 15px; color: #334155; }
+.markdown-body :deep(p) { margin: 8px 0; }
+.markdown-body :deep(ul),
+.markdown-body :deep(ol) { margin: 8px 0 8px 4px; padding-left: 22px; }
+.markdown-body :deep(li) { margin: 4px 0; line-height: 1.75; }
+.markdown-body :deep(li::marker) { color: #3b82f6; font-weight: 800; }
+.markdown-body :deep(strong) { color: #0f172a; font-weight: 900; }
+.markdown-body :deep(em) { color: #475569; font-style: normal; background: linear-gradient(180deg, transparent 60%, rgba(250, 204, 21, 0.45) 60%); padding: 0 2px; }
+.markdown-body :deep(blockquote) { margin: 12px 0; padding: 10px 14px; border-left: 4px solid #3b82f6; background: rgba(59, 130, 246, 0.06); border-radius: 0 10px 10px 0; color: #334155; font-size: 14.5px; }
+.markdown-body :deep(code) { background: rgba(15, 23, 42, 0.06); padding: 2px 6px; border-radius: 4px; font-family: 'Fira Code', monospace; font-size: 13px; color: #be185d; }
+.markdown-body :deep(pre) { background: #0f172a; color: #e2e8f0; padding: 14px 16px; border-radius: 12px; overflow-x: auto; margin: 12px 0; }
+.markdown-body :deep(pre code) { background: transparent; color: inherit; padding: 0; }
+.markdown-body :deep(hr) { border: none; border-top: 1px dashed rgba(148, 163, 184, 0.4); margin: 16px 0; }
+.markdown-body :deep(table) { border-collapse: collapse; width: 100%; margin: 12px 0; font-size: 14px; }
+.markdown-body :deep(th),
+.markdown-body :deep(td) { border: 1px solid rgba(148, 163, 184, 0.28); padding: 8px 10px; }
+.markdown-body :deep(th) { background: rgba(59, 130, 246, 0.08); font-weight: 800; color: #1d4ed8; }
+.markdown-body :deep(a) { color: #1d4ed8; text-decoration: underline; }
 
 .report-empty {
   display: flex; flex-direction: column; align-items: center; justify-content: center;

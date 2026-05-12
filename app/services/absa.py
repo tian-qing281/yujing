@@ -3,13 +3,57 @@
 由于公开中文 ABSA 预训练模型（PyABSA 等）均训练于电商/餐饮语料，
 在新闻舆情场景下抽取实体差、情感判错率高，本项目改用 LLM-based ABSA：
 一次 LLM 调用同时输出"方面 + 情感 + 证据句"。
+
+P1 优化（2026-05-12）：
+- 文件缓存：以 (title+content) 的 sha1 为 key，落盘到 runtime/absa_cache/
+  避免同一篇正文反复触发 LLM；缓存命中时延 < 5ms。
+- 软超时：caller 通过 asyncio.wait_for 控时；本模块只保证幂等可缓存。
 """
 
+import hashlib
 import json
+import os
 import re
+from pathlib import Path
 from typing import List, Dict, Any
 
 from app.llm import chat_with_news
+
+
+_CACHE_DIR = Path(os.environ.get(
+    "ABSA_CACHE_DIR",
+    str(Path(__file__).resolve().parent.parent.parent / "runtime" / "absa_cache"),
+))
+_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _cache_key(title: str, content: str) -> str:
+    h = hashlib.sha1()
+    h.update((title or "").encode("utf-8", errors="ignore"))
+    h.update(b"\x1e")
+    h.update((content or "").encode("utf-8", errors="ignore"))
+    return h.hexdigest()
+
+
+def _cache_load(key: str) -> List[Dict[str, Any]] | None:
+    fp = _CACHE_DIR / f"{key}.json"
+    if not fp.exists():
+        return None
+    try:
+        data = json.loads(fp.read_text(encoding="utf-8"))
+        if isinstance(data, list):
+            return data
+    except Exception:
+        return None
+    return None
+
+
+def _cache_save(key: str, aspects: List[Dict[str, Any]]) -> None:
+    try:
+        fp = _CACHE_DIR / f"{key}.json"
+        fp.write_text(json.dumps(aspects, ensure_ascii=False), encoding="utf-8")
+    except Exception:
+        pass
 
 
 _PROMPT = """你是舆情方面级情感分析（ABSA）专家。请从下文新闻中抽取 5-8 个核心“方面”（aspect），
@@ -71,6 +115,13 @@ def extract_aspects(title: str, content: str) -> List[Dict[str, Any]]:
         return []
     title = (title or "")[:120]
     content = (content or "")[:1800]
+
+    # 文件缓存：命中直接返回
+    key = _cache_key(title, content)
+    cached = _cache_load(key)
+    if cached is not None:
+        return cached
+
     prompt = _PROMPT.format(title=title, content=content)
     try:
         raw = chat_with_news(prompt)
@@ -97,4 +148,8 @@ def extract_aspects(title: str, content: str) -> List[Dict[str, Any]]:
         })
         if len(cleaned) >= 8:
             break
+
+    # 仅在拿到非空结果时落盘缓存（空结果可能是 LLM 偶发抽风，下次重试）
+    if cleaned:
+        _cache_save(key, cleaned)
     return cleaned

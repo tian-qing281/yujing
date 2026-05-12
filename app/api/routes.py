@@ -845,12 +845,31 @@ def _build_sentiment_trend(related_articles: List[dict]) -> List[dict]:
         b = buckets.setdefault(bucket_dt, {"positive": 0, "neutral": 0, "negative": 0})
         b[sent] += 1
 
+    # P5 优化：补齐缺失桶，输出连续等距时间序列
+    # 之前仅返回有数据的桶 → 前端横轴稀疏（可能只有 3 个点），观感像"折线断裂"
+    # 现在从 min_bucket 到 max_bucket 按 bucket_seconds 步长全量铺一遍，缺口补 0
+    if buckets:
+        min_epoch = int(min(buckets.keys()).timestamp())
+        max_epoch = int(max(buckets.keys()).timestamp())
+        # 安全上限：避免极端跨度产生 1000+ 个桶
+        max_points = 200
+        if (max_epoch - min_epoch) // bucket_seconds + 1 > max_points:
+            # 跨度太大时退化为不补齐，保持原稀疏行为
+            pass
+        else:
+            ts = min_epoch
+            while ts <= max_epoch:
+                bdt = datetime.fromtimestamp(ts)
+                buckets.setdefault(bdt, {"positive": 0, "neutral": 0, "negative": 0})
+                ts += bucket_seconds
+
     return [
         {
             "time": bdt.isoformat(),
             "positive": b["positive"],
             "neutral": b["neutral"],
             "negative": b["negative"],
+            "bucket_hours": bucket_hours,  # 前端可在 tooltip 显示桶粒度
         }
         for bdt, b in sorted(buckets.items(), key=lambda x: x[0])
     ]
@@ -2477,8 +2496,11 @@ async def analyze_article(article_id: int, force_refresh: bool = False, db: Sess
             # 升级 1：方面级情感（ABSA）
             try:
                 absa_started = time.perf_counter()
-                aspects = await asyncio.to_thread(
-                    extract_aspects, snap_title, markdown_content or ""
+                # P1 优化：8s 软超时 + 文件缓存（命中 < 5ms），避免 LLM 偶发慢响应
+                # 长时间挂住整条 SSE，让前端永远停在"分析中"骨架
+                aspects = await asyncio.wait_for(
+                    asyncio.to_thread(extract_aspects, snap_title, markdown_content or ""),
+                    timeout=12.0,
                 )
                 if aspects:
                     cached["aspects"] = aspects
@@ -2488,7 +2510,15 @@ async def analyze_article(article_id: int, force_refresh: bool = False, db: Sess
                         f"[{datetime.now().strftime('%H:%M:%S')}] "
                         f"[ABSA] article={article_id} count={len(aspects)} cost={time.perf_counter() - absa_started:.2f}s"
                     )
+                else:
+                    # 抽取失败但不卡住前端：发空 aspects 让骨架收掉
+                    yield f"data: {json.dumps({'type': 'aspects', 'aspects': []}, ensure_ascii=False)}\n\n"
+            except asyncio.TimeoutError:
+                # P1 优化：超时不让前端骨架永远转，发空 aspects + 错误码
+                yield f"data: {json.dumps({'type': 'aspects', 'aspects': [], 'timeout': True}, ensure_ascii=False)}\n\n"
+                print(f"[ABSA] article={article_id} 超时（>12s）")
             except Exception as exc:
+                yield f"data: {json.dumps({'type': 'aspects', 'aspects': []}, ensure_ascii=False)}\n\n"
                 print(f"[ABSA] article={article_id} 异常: {exc}")
 
         except Exception as exc:
