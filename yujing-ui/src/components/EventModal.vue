@@ -107,9 +107,14 @@
             </div>
             <div
               v-if="displayedArticles.length >= 3"
-              ref="articleTimelineRef"
-              class="article-timeline-viewport"
-            ></div>
+              class="article-timeline-wrap"
+            >
+              <div class="article-timeline-caption">
+                <iconify-icon icon="mdi:chart-timeline-variant" />
+                <span>全部 {{ displayedArticles.length }} 篇情报的“时间 × 平台”分布（点击节点查看详情、底部拖动可缩放密集区段）</span>
+              </div>
+              <div ref="articleTimelineRef" class="article-timeline-viewport"></div>
+            </div>
             <div class="timeline-list timeline-list--rail">
               <article
                 v-for="(article, idx) in displayedArticles"
@@ -1027,11 +1032,12 @@ const renderCharts = () => {
         return {
           name: a.title,
           value: [ts, getSourceName(a.source_id) || a.source_id || "未知源"],
-          symbolSize: Math.max(10, Math.min(22, 10 + (Number(a.importance_score) || 0) * 1.2)),
+          symbolSize: Math.max(11, Math.min(26, 11 + (Number(a.importance_score) || 0) * 1.6)),
           itemStyle: {
             color: getSentimentColor(a.ai_sentiment),
             borderColor: "#fff",
             borderWidth: 2,
+            opacity: 0.82,
             shadowBlur: 6,
             shadowColor: "rgba(15,23,42,0.18)",
           },
@@ -1064,13 +1070,14 @@ const renderCharts = () => {
             <div style="color:#6366f1;font-size:10px;font-weight:800;margin-top:6px;">点击查看详情 →</div>`;
         },
       },
-      grid: { top: 18, right: 22, bottom: 36, left: 96, containLabel: false },
+      grid: { top: 18, right: 22, bottom: 56, left: 96, containLabel: false },
       xAxis: {
         type: "time",
         axisLabel: {
           color: "#64748b",
           fontSize: 10,
           fontWeight: 600,
+          hideOverlap: true,
           formatter: (v) => {
             const d = new Date(v);
             const pad = (n) => String(n).padStart(2, "0");
@@ -1089,11 +1096,24 @@ const renderCharts = () => {
         axisTick: { show: false },
         splitLine: { show: false },
       },
+      dataZoom: [
+        { type: "inside", xAxisIndex: 0, filterMode: "filter", zoomOnMouseWheel: true, moveOnMouseMove: true },
+        {
+          type: "slider", xAxisIndex: 0, height: 14, bottom: 6,
+          backgroundColor: "rgba(241,245,249,0.6)",
+          fillerColor: "rgba(99,102,241,0.18)",
+          borderColor: "transparent",
+          handleStyle: { color: "#6366f1", borderColor: "#fff", borderWidth: 2 },
+          moveHandleStyle: { color: "#6366f1" },
+          textStyle: { color: "#94a3b8", fontSize: 10 },
+          showDetail: false,
+        },
+      ],
       series: [
         {
           type: "scatter",
           data: items,
-          emphasis: { scale: 1.25 },
+          emphasis: { scale: 1.3, itemStyle: { opacity: 1 } },
         },
       ],
     });
@@ -1304,17 +1324,35 @@ onUnmounted(() => {
 }
 
 /* F1 文章时间轴：单节点级横向时间轴（区别于桶聚合面积图） */
+.article-timeline-wrap {
+  margin: 6px 0 16px;
+  padding: 10px 12px 12px;
+  background: linear-gradient(180deg, rgba(238, 242, 255, 0.55) 0%, rgba(255, 255, 255, 0) 70%);
+  border: 1px solid rgba(199, 210, 254, 0.55);
+  border-radius: 16px;
+}
+.article-timeline-caption {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 800;
+  color: #4338ca;
+  letter-spacing: 0.02em;
+  margin-bottom: 6px;
+  padding-left: 4px;
+}
+.article-timeline-caption iconify-icon {
+  font-size: 16px;
+  color: #6366f1;
+}
 .article-timeline-viewport {
   width: 100%;
-  height: 180px;
-  margin: 4px 0 14px;
-  padding: 8px 4px 0;
-  background: linear-gradient(180deg, rgba(248, 250, 252, 0.6) 0%, rgba(255, 255, 255, 0.0) 100%);
-  border-radius: 14px;
+  height: 260px;
   cursor: pointer;
 }
 @media (max-width: 768px) {
-  .article-timeline-viewport { height: 220px; }
+  .article-timeline-viewport { height: 320px; }
 }
 
 
