@@ -14,6 +14,9 @@ runtime/db/*.db
 runtime/db/*.db-*
 runtime/meili/data.ms/
 runtime/meili/*.exe
+runtime/absa_cache/
+runtime/embedding_cache/
+runtime/cache/
 
 # Environment
 .env
