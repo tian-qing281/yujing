@@ -3656,6 +3656,13 @@ async def create_subscription(payload: SubscriptionCreate, db: Session = Depends
     db.add(sub)
     db.commit()
     db.refresh(sub)
+    # S1.2：keyword/event 类订阅创建后立即编码并持久化向量，避免后续推荐反复 embed
+    if sub.kind in ("keyword", "event"):
+        try:
+            from app.services.subscription_semantic import encode_and_persist_subscription
+            encode_and_persist_subscription(db, sub)
+        except Exception:
+            logging.getLogger(__name__).exception("[subscription] 编码订阅向量失败 id=%s", sub.id)
     return sub
 
 
@@ -3771,13 +3778,23 @@ async def get_recommendations(
         sub_texts = [v for v, _ in keyword_subs] + [v for v, _ in event_subs]
         if sub_texts:
             try:
-                from app.services.subscription_semantic import score_events_for_subscriptions
+                from app.services.subscription_semantic import (
+                    score_events_for_subscriptions,
+                    prime_cache_from_db,
+                    encode_and_persist_subscription,
+                )
+                # S1.2：先把 DB 里已持久化的订阅向量灌进缓存，避免重复 embed
+                prime_cache_from_db(db, subs)
+                # S1.2：对历史订阅做一次性回填（首次推荐后续就 free，新订阅在 create 时就编码）
+                for s in subs:
+                    if s.kind in ("keyword", "event") and not s.embedding:
+                        encode_and_persist_subscription(db, s)
                 semantic_hits = score_events_for_subscriptions(
                     candidates, sub_texts, threshold=semantic_threshold
                 )
                 semantic_used = bool(semantic_hits)
             except Exception:
-                logger.exception("[recommendations] 语义召回失败，降级到字面匹配")
+                logging.getLogger(__name__).exception("[recommendations] 语义召回失败，降级到字面匹配")
 
     sub_weight_map = {v: w for v, w in keyword_subs}
     sub_weight_map.update({v: w for v, w in event_subs})
@@ -3844,12 +3861,19 @@ async def get_recommendations(
     page_slice = scored[offset : offset + limit]
     items = []
     for score, ev, reasons in page_slice:
-        items.append({
+        sem = semantic_hits.get(ev.id) if semantic_hits else None
+        item = {
             **marshal_event(ev, db=db),
             "_recommend_score": round(score, 2),
             "_recommend_reasons": reasons[:3],
             "_fallback": fallback_used,
-        })
+        }
+        if sem is not None:
+            sem_cos, sem_kw = sem
+            item["_semantic_score"] = round(sem_cos, 3)
+            item["_semantic_kw"] = sem_kw
+            item["_semantic_literal"] = sem_kw in (ev.title or "")
+        items.append(item)
     return {
         "items": items,
         "subscriptions_count": len(subs),

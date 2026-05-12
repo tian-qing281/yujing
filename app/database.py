@@ -171,6 +171,9 @@ class Subscription(Base):
     value = Column(String(200), nullable=False)
     weight = Column(Float, default=1.0)
     created_at = Column(DateTime, default=utcnow)
+    # S1.2：订阅词 BGE 向量持久化（float32 L2 归一，限 keyword/event 两种 kind）
+    embedding = Column(LargeBinary, nullable=True)
+    embedding_model = Column(String(80), nullable=True)
 
 
 class Blocklist(Base):
@@ -219,4 +222,7 @@ def ensure_migrations() -> None:
         _ensure_column(conn, "articles", "clustered_at", "DATETIME")
         _ensure_column(conn, "events", "centroid", "BLOB")
         _ensure_column(conn, "events", "centroid_count", "INTEGER DEFAULT 0")
+        # S1.2 订阅词向量持久化
+        _ensure_column(conn, "subscriptions", "embedding", "BLOB")
+        _ensure_column(conn, "subscriptions", "embedding_model", "VARCHAR(80)")
 

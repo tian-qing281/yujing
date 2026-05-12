@@ -204,6 +204,13 @@
                 <iconify-icon icon="mdi:thermometer" />热度兜底
               </span>
               <span v-for="r in item._recommend_reasons || []" :key="r" class="sub-rec-reason">{{ r }}</span>
+              <span
+                v-if="item._semantic_score && !item._semantic_literal"
+                class="sub-rec-semantic"
+                :title="`订阅词「${item._semantic_kw}」与事件标题向量余弦 ${item._semantic_score}`"
+              >
+                <iconify-icon icon="mdi:vector-link" />语义 {{ item._semantic_score }}
+              </span>
               <span class="sub-rec-platform">{{ SOURCE_LABEL[item.primary_source_id] || item.primary_source_id }} · {{ item.article_count }} 条</span>
             </div>
           </div>
@@ -838,6 +845,24 @@ onMounted(loadAll);
   border-radius: 999px;
   font-size: 11px;
   font-weight: 600;
+}
+
+/* S1.2：语义命中徽章（与字面命中区分，使用青绿色调） */
+.sub-rec-semantic {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 8px;
+  background: linear-gradient(135deg, #cffafe 0%, #a5f3fc 100%);
+  color: #0e7490;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid #67e8f9;
+  cursor: help;
+}
+.sub-rec-semantic > iconify-icon {
+  font-size: 12px;
 }
 
 .sub-rec-platform {

@@ -16,8 +16,12 @@ from typing import Dict, Iterable, List, Optional, Tuple
 
 import numpy as np
 
-from app.database import Event
+from app.database import Event, Subscription
 from app.services.embedding import EMBED_MODEL_NAME, embed_texts
+
+
+# 哪些 kind 需要语义化（source 是站点 ID，没必要 embed）
+SEMANTIC_KINDS = {"keyword", "event"}
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +72,67 @@ def get_subscription_vectors(values: Iterable[str]) -> Dict[str, np.ndarray]:
         except Exception:
             logger.exception("[subscription_semantic] 批量 embed 失败")
     return out
+
+
+def encode_and_persist_subscription(db, sub: Subscription) -> bool:
+    """S1.2：为新创建的订阅条目计算 BGE 向量并落库。
+
+    - 仅对 SEMANTIC_KINDS 生效；source 类订阅不需要语义。
+    - 同步写入 sub.embedding / sub.embedding_model；同时回填进程内缓存。
+    - 返回是否成功落库（embed 失败/非语义类返回 False）。
+    """
+    if sub is None or sub.kind not in SEMANTIC_KINDS:
+        return False
+    val = (sub.value or "").strip()
+    if not val:
+        return False
+    vec = _get_sub_vector(val)
+    if vec is None:
+        return False
+    try:
+        sub.embedding = vec.tobytes()
+        sub.embedding_model = EMBED_MODEL_NAME
+        db.commit()
+        return True
+    except Exception:
+        logger.exception("[subscription_semantic] 持久化订阅向量失败 id=%s", sub.id)
+        db.rollback()
+        return False
+
+
+def prime_cache_from_db(db, subs: Iterable[Subscription]) -> int:
+    """S1.2：把 DB 中已持久化的订阅向量灌进进程内缓存，省去重复 embed。
+
+    - 模型不匹配的旧向量直接跳过（等下次 create 时按当前模型重算）。
+    - 返回命中条数。
+    """
+    hit = 0
+    for sub in subs:
+        if sub.kind not in SEMANTIC_KINDS:
+            continue
+        if not sub.embedding or not sub.embedding_model:
+            continue
+        if sub.embedding_model != EMBED_MODEL_NAME:
+            continue
+        val = (sub.value or "").strip()
+        if not val:
+            continue
+        key = (val, EMBED_MODEL_NAME)
+        if key in _sub_vec_cache:
+            continue
+        try:
+            arr = np.frombuffer(sub.embedding, dtype=np.float32)
+            _sub_vec_cache[key] = arr
+            hit += 1
+        except Exception:
+            continue
+    return hit
+
+
+def _get_sub_vectors_legacy(values: Iterable[str]) -> Dict[str, np.ndarray]:
+    """已废弃：保留空壳避免外部 import 报错；请使用 get_subscription_vectors。"""
+    return get_subscription_vectors(values)
+
 
 
 def score_events_for_subscriptions(
