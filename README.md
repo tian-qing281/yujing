@@ -40,15 +40,15 @@ npm run dev   # http://localhost:5173
 
 ## 文档导航
 
-- [项目总览文档](docs/项目总览文档.md)
-- [系统设计文档](docs/系统设计文档.md)
-- [核心原理文档](docs/核心原理文档.md)
-- [Agent 算法文档](docs/Agent算法文档.md)
-- [情感分析文档](docs/情感分析文档.md)
-- [聚类算法文档](docs/聚类算法文档.md)
+- [项目说明](docs/项目说明.md)（合并版：定位 / 五层架构 / 数据 / 服务 / 算法 / 接口 / 表现 / 决策 / CHANGELOG / 目录依赖）
+- [核心原理文档](docs/核心原理文档.md)（评分体系 + 排序策略 + tiebreaker + 12 分精排）
+- [Agent 算法文档](docs/Agent算法文档.md)（10 工具 · Loop · 评测）
+- [情感分析文档](docs/情感分析文档.md)（粗粒度 8 类 BERT）
+- [ABSA 算法文档](docs/ABSA算法文档.md)（方面级 LLM 抽取 + 文件缓存）
+- [聚类算法文档](docs/聚类算法文档.md)（BGE + FAISS + 双层 Otsu）
 - [评测指标文档](docs/评测指标文档.md)
 - [部署文档](docs/部署文档.md)
-- [升级路线图](docs/升级路线图.md)（含附录 A · W1-W7 历史里程碑）
+- [ROADMAP](ROADMAP.md)（升级路线图 · 含附录 A · W1-W7 历史里程碑）
 - [答辩准备清单](docs/答辩准备清单.md)
 - [手稿（docx）](docs/手稿/)
 
