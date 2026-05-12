@@ -3620,14 +3620,30 @@ async def track_profile_event(payload: TrackEvent, db: Session = Depends(get_db)
 
 @router.get("/profile")
 async def get_profile(db: Session = Depends(get_db)):
-    """返回当前画像（top sources / tags / 最近浏览）。"""
-    _, data = _load_profile_data(db)
+    """返回当前画像（top sources / tags / 最近浏览 / 推断兴趣 tag）。"""
+    profile_obj, data = _load_profile_data(db)
     sources = sorted(data["source_weights"].items(), key=lambda x: -x[1])[:8]
     tags = sorted(data["tag_weights"].items(), key=lambda x: -x[1])[:12]
+    # V2：附带 embedding 推断的兴趣 tag（带 TTL 缓存，过期则重算并写回）
+    inferred_top: list = []
+    inferred_meta: dict = {}
+    try:
+        from app.services.profile_inference import get_or_refresh_inferred_tags
+        before = data.get("inferred_at")
+        inferred = get_or_refresh_inferred_tags(db, data)
+        # 若刷新过则落库
+        if data.get("inferred_at") != before:
+            _save_profile_data(db, profile_obj, data)
+        inferred_top = [{"tag": t, "score": round(s, 3)} for t, s in inferred[:12]]
+        inferred_meta = data.get("inferred_meta", {})
+    except Exception:
+        logging.getLogger(__name__).exception("[profile] 推断 tag 失败")
     return {
         "history_count": len(data["view_history"]),
         "top_sources": [{"source_id": k, "weight": round(v, 2)} for k, v in sources],
         "top_tags": [{"tag": k, "weight": round(v, 2)} for k, v in tags],
+        "inferred_tags": inferred_top,
+        "inferred_meta": inferred_meta,
         "recent_views": data["view_history"][:10],
     }
 
@@ -3750,9 +3766,29 @@ async def get_recommendations(
     blocks = db.query(Blocklist).filter(Blocklist.user_id == _PROFILE_USER_ID).all()
     block_terms = [b.term for b in blocks if b.term]
 
-    _, profile_data = _load_profile_data(db)
+    _profile_obj, profile_data = _load_profile_data(db)
     source_w = profile_data.get("source_weights", {})
-    tag_w = profile_data.get("tag_weights", {})
+    tag_w = dict(profile_data.get("tag_weights", {}))  # 浅拷贝以便融合推断 tag
+
+    # V2：融合「embedding 推断 tag」到 tag_w（取 max，原 literal tag 不被覆盖）
+    try:
+        from app.services.profile_inference import get_or_refresh_inferred_tags
+        inferred = get_or_refresh_inferred_tags(db, profile_data)
+        if inferred:
+            # 推断分数与 literal tag_weights 量纲不同（前者是累加 cosine，后者是行为权重计数）
+            # → 把推断分数线性映射到 [0, max(tag_w) or 5]，再取 max 融合
+            inf_max = max(s for _, s in inferred) or 1.0
+            target_top = max(tag_w.values()) if tag_w else 5.0
+            for kw, raw in inferred:
+                norm_score = (raw / inf_max) * target_top
+                tag_w[kw] = max(tag_w.get(kw, 0.0), norm_score)
+            # 推断 tag 已写入 profile_data（service 内更新），落库供下次复用
+            try:
+                _save_profile_data(db, _profile_obj, profile_data)
+            except Exception:
+                pass
+    except Exception:
+        logging.getLogger(__name__).exception("[recommendations] 推断 tag 融合失败，降级到 literal tag")
 
     keyword_subs = [(s.value, s.weight or 1.0) for s in subs if s.kind == "keyword"]
     source_subs = {s.value: (s.weight or 1.0) for s in subs if s.kind == "source"}
