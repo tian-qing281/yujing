@@ -101,20 +101,10 @@
             <span v-if="!profile.top_sources?.length" class="sub-empty-inline">画像数据为空（点开几篇文章即可生成）</span>
           </div>
         </div>
-        <div class="sub-profile-block">
-          <div class="sub-profile-label">兴趣标签 TOP <span class="sub-profile-hint">（来自文章 category 字段）</span></div>
-          <div class="sub-tag-cloud">
-            <span v-for="t in profile.top_tags || []" :key="t.tag" class="sub-tag sub-tag--accent">
-              {{ t.tag }}
-              <strong>{{ t.weight }}</strong>
-            </span>
-            <span v-if="!profile.top_tags?.length" class="sub-empty-inline">暂无标签数据</span>
-          </div>
-        </div>
         <div class="sub-profile-block" v-if="(profile.inferred_tags || []).length">
           <div class="sub-profile-label">
             <iconify-icon icon="mdi:vector-link" />
-            推断兴趣
+            兴趣标签
             <span class="sub-profile-hint">（embedding 邻近召回 · 30 min 缓存）</span>
           </div>
           <div class="sub-tag-cloud">
@@ -128,6 +118,10 @@
               <strong>{{ t.score }}</strong>
             </span>
           </div>
+        </div>
+        <div class="sub-profile-block" v-else>
+          <div class="sub-profile-label">兴趣标签</div>
+          <span class="sub-empty-inline">浏览满 5 篇即可生成 embedding 推断兴趣</span>
         </div>
       </section>
     </div>
@@ -221,14 +215,26 @@
               <span class="sub-rec-score sub-rec-score--fb" v-else>
                 <iconify-icon icon="mdi:thermometer" />热度兜底
               </span>
-              <span v-for="r in item._recommend_reasons || []" :key="r" class="sub-rec-reason">{{ r }}</span>
-              <span
-                v-if="item._semantic_score && !item._semantic_literal"
-                class="sub-rec-semantic"
-                :title="`订阅词「${item._semantic_kw}」与事件标题向量余弦 ${item._semantic_score}`"
-              >
-                <iconify-icon icon="mdi:vector-link" />语义 {{ item._semantic_score }}
-              </span>
+              <!-- A1: 结构化推荐解释徽章 4 色（订阅词/订阅源/画像源/画像兴趣/语义/兜底） -->
+              <template v-if="(item._recommend_chips || []).length">
+                <span
+                  v-for="(c, ci) in item._recommend_chips"
+                  :key="'chip-' + ci"
+                  class="sub-rec-chip"
+                  :class="`sub-rec-chip--${c.type}`"
+                  :title="chipTooltip(c)"
+                >
+                  <iconify-icon :icon="CHIP_ICON[c.type] || 'mdi:tag'" />
+                  <span class="sub-rec-chip-label">{{ CHIP_LABEL[c.type] || c.type }}</span>
+                  <span class="sub-rec-chip-text">{{ c.text }}</span>
+                  <strong v-if="c.score != null">{{ c.score }}</strong>
+                  <strong v-else-if="c.weight != null">+{{ c.weight }}</strong>
+                </span>
+              </template>
+              <!-- 旧字段兜底（后端没返回 chips 时） -->
+              <template v-else>
+                <span v-for="r in item._recommend_reasons || []" :key="r" class="sub-rec-reason">{{ r }}</span>
+              </template>
               <span class="sub-rec-platform">{{ SOURCE_LABEL[item.primary_source_id] || item.primary_source_id }} · {{ item.article_count }} 条</span>
             </div>
           </div>
@@ -298,6 +304,43 @@ const SOURCE_LABEL = {
   wallstreetcn_news: "华尔街见闻",
   cls_telegraph: "财联社",
 };
+
+/* A1：推荐解释徽章配置 */
+const CHIP_LABEL = {
+  keyword: "订阅词",
+  sub_source: "订阅源",
+  profile_source: "常看",
+  profile_tag: "兴趣",
+  semantic: "语义",
+  fallback: "兜底",
+};
+const CHIP_ICON = {
+  keyword: "mdi:bookmark-check",
+  sub_source: "mdi:rss",
+  profile_source: "mdi:account-eye",
+  profile_tag: "mdi:account-heart",
+  semantic: "mdi:vector-link",
+  fallback: "mdi:thermometer",
+};
+function chipTooltip(c) {
+  const src = SOURCE_LABEL[c.text] || c.text;
+  switch (c.type) {
+    case "keyword":
+      return `订阅关键词「${c.text}」字面命中标题（+${c.weight}）`;
+    case "sub_source":
+      return `订阅数据源「${src}」命中（+${c.weight}）`;
+    case "profile_source":
+      return `你常看「${src}」（+${c.weight}）`;
+    case "profile_tag":
+      return `画像兴趣命中：${c.text}（+${c.weight}）`;
+    case "semantic":
+      return `订阅词「${c.text}」与标题语义余弦 ${c.score}（+${c.weight}）`;
+    case "fallback":
+      return `没有任何命中，按热度兜底返回`;
+    default:
+      return c.text;
+  }
+}
 
 const loading = ref(false);
 const subscriptions = ref([]);
@@ -884,6 +927,52 @@ onMounted(loadAll);
   border-radius: 999px;
   font-size: 11px;
   font-weight: 600;
+}
+
+/* A1: 结构化推荐解释徽章 6 色，统一基础样式 */
+.sub-rec-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 7px 2px 5px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid transparent;
+  cursor: help;
+  line-height: 1.4;
+}
+.sub-rec-chip > iconify-icon { font-size: 12px; }
+.sub-rec-chip-label {
+  font-weight: 700;
+  opacity: 0.85;
+  margin-right: 2px;
+}
+.sub-rec-chip-text { font-weight: 600; }
+.sub-rec-chip strong {
+  margin-left: 4px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+/* 6 色配色：每色对应一种打分维度 */
+.sub-rec-chip--keyword {
+  background: #dbeafe; color: #1d4ed8; border-color: #93c5fd;
+}
+.sub-rec-chip--sub_source {
+  background: #ede9fe; color: #6d28d9; border-color: #c4b5fd;
+}
+.sub-rec-chip--profile_source {
+  background: #fef3c7; color: #92400e; border-color: #fcd34d;
+}
+.sub-rec-chip--profile_tag {
+  background: #fce7f3; color: #be185d; border-color: #f9a8d4;
+}
+.sub-rec-chip--semantic {
+  background: linear-gradient(135deg, #cffafe 0%, #a5f3fc 100%);
+  color: #0e7490; border-color: #67e8f9;
+}
+.sub-rec-chip--fallback {
+  background: #f1f5f9; color: #64748b; border-color: #cbd5e1;
 }
 
 /* S1.2：语义命中徽章（与字面命中区分，使用青绿色调） */

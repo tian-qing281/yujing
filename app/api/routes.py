@@ -3842,22 +3842,32 @@ async def get_recommendations(
         if any(t and t in title for t in block_terms):
             continue
         score = 0.0
-        reasons: list = []
+        reasons: list = []          # 旧：人读字符串数组（保留向后兼容）
+        reason_chips: list = []     # A1 新：结构化 [{type, text, score?, weight?}]
         # 订阅命中
         for kw, w in keyword_subs:
             if kw and kw in title:
-                score += w_keyword * w
+                inc = w_keyword * w
+                score += inc
                 reasons.append(f"订阅词「{kw}」")
+                reason_chips.append({"type": "keyword", "text": kw, "weight": round(inc, 2)})
         for kw, w in event_subs:
             if kw and kw in title:
-                score += w_keyword * w
+                inc = w_keyword * w
+                score += inc
                 reasons.append(f"订阅事件「{kw}」")
+                reason_chips.append({"type": "keyword", "text": kw, "weight": round(inc, 2)})
         if ev.primary_source_id and ev.primary_source_id in source_subs:
-            score += w_source * source_subs[ev.primary_source_id]
+            inc = w_source * source_subs[ev.primary_source_id]
+            score += inc
             reasons.append("订阅源")
+            reason_chips.append({"type": "sub_source", "text": ev.primary_source_id, "weight": round(inc, 2)})
         # 画像加权
         if ev.primary_source_id and ev.primary_source_id in source_w:
-            score += w_profile_source * (source_w[ev.primary_source_id] / max_source_w)
+            inc = w_profile_source * (source_w[ev.primary_source_id] / max_source_w)
+            score += inc
+            if inc >= 0.3:  # 太小不拼进解释
+                reason_chips.append({"type": "profile_source", "text": ev.primary_source_id, "weight": round(inc, 2)})
         try:
             ev_keywords = json.loads(ev.keywords) if ev.keywords else []
         except Exception:
@@ -3868,6 +3878,11 @@ async def get_recommendations(
                 tag_score = sum(tag_w[k] for k in hit_tags) / max_tag_w * w_profile_tag
                 score += tag_score
                 reasons.append(f"画像兴趣 {','.join(hit_tags[:3])}")
+                reason_chips.append({
+                    "type": "profile_tag",
+                    "text": ','.join(hit_tags[:3]),
+                    "weight": round(tag_score, 2),
+                })
         # S1: 语义召回打分（仅当字面未命中该订阅词时叠加，避免重复）
         sem = semantic_hits.get(ev.id)
         if sem is not None:
@@ -3875,11 +3890,18 @@ async def get_recommendations(
             sem_w = sub_weight_map.get(sem_kw, 1.0)
             already_hit_literally = sem_kw in (ev.title or "")
             if not already_hit_literally:
-                score += w_semantic * sem_cos * sem_w
+                inc = w_semantic * sem_cos * sem_w
+                score += inc
                 reasons.append(f"语义相似「{sem_kw}」 {sem_cos:.2f}")
+                reason_chips.append({
+                    "type": "semantic",
+                    "text": sem_kw,
+                    "score": round(sem_cos, 3),
+                    "weight": round(inc, 2),
+                })
         if score <= 0:
             continue
-        scored.append((score, ev, reasons))
+        scored.append((score, ev, reasons, reason_chips))
 
     scored.sort(key=lambda x: (-x[0], -(x[1].heat_score or 0)))
     total_hit = len(scored)
@@ -3891,17 +3913,18 @@ async def get_recommendations(
             title = ev.title or ""
             if any(t and t in title for t in block_terms):
                 continue
-            scored.append((0.0, ev, ["热度兜底"]))
+            scored.append((0.0, ev, ["热度兜底"], [{"type": "fallback", "text": "热度兜底"}]))
         scored.sort(key=lambda x: -(x[1].heat_score or 0))
 
     page_slice = scored[offset : offset + limit]
     items = []
-    for score, ev, reasons in page_slice:
+    for score, ev, reasons, chips in page_slice:
         sem = semantic_hits.get(ev.id) if semantic_hits else None
         item = {
             **marshal_event(ev, db=db),
             "_recommend_score": round(score, 2),
             "_recommend_reasons": reasons[:3],
+            "_recommend_chips": chips[:5],   # A1 结构化徽章
             "_fallback": fallback_used,
         }
         if sem is not None:
