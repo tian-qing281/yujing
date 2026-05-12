@@ -105,6 +105,11 @@
                 </span>
               </span>
             </div>
+            <div
+              v-if="displayedArticles.length >= 3"
+              ref="articleTimelineRef"
+              class="article-timeline-viewport"
+            ></div>
             <div class="timeline-list timeline-list--rail">
               <article
                 v-for="(article, idx) in displayedArticles"
@@ -176,6 +181,7 @@ const platformBarRef = ref(null);
 const keywordBarRef = ref(null);
 const sentimentRingRef = ref(null);
 const sentimentTrendRef = ref(null);
+const articleTimelineRef = ref(null);
 const aiSummaryLoading = ref(false);
 const aiSummaryText = ref("");
 const timelineMode = ref("time"); // 'time' | 'heat'
@@ -186,6 +192,7 @@ let platformChart = null;
 let keywordChart = null;
 let sentimentChart = null;
 let sentimentTrendChart = null;
+let articleTimelineChart = null;
 
 const SOURCE_LABEL_MAP = {
   weibo_hot_search: "微博热搜榜",
@@ -1009,6 +1016,95 @@ const renderCharts = () => {
       ],
     });
   }
+
+  // 6. 文章时间轴（F1：单节点级横向时间轴，区别于 #5 的桶聚合面积图）
+  if (displayedArticles.value.length >= 3 && articleTimelineRef.value) {
+    articleTimelineChart = ensureChart(articleTimelineRef, articleTimelineChart);
+    const items = displayedArticles.value
+      .map((a) => {
+        const ts = _timelineTs(a);
+        if (ts === null) return null;
+        return {
+          name: a.title,
+          value: [ts, getSourceName(a.source_id) || a.source_id || "未知源"],
+          symbolSize: Math.max(10, Math.min(22, 10 + (Number(a.importance_score) || 0) * 1.2)),
+          itemStyle: {
+            color: getSentimentColor(a.ai_sentiment),
+            borderColor: "#fff",
+            borderWidth: 2,
+            shadowBlur: 6,
+            shadowColor: "rgba(15,23,42,0.18)",
+          },
+          _article: a,
+        };
+      })
+      .filter(Boolean);
+    const yCats = Array.from(new Set(items.map((i) => i.value[1])));
+    articleTimelineChart?.setOption({
+      tooltip: {
+        trigger: "item",
+        backgroundColor: "rgba(255,255,255,0.98)",
+        borderColor: "rgba(99,102,241,0.25)",
+        borderWidth: 1,
+        padding: [10, 14],
+        textStyle: { color: "#0f172a", fontSize: 12, fontWeight: 600 },
+        extraCssText:
+          "box-shadow: 0 12px 28px -10px rgba(15,23,42,0.18); border-radius: 10px; max-width: 360px;",
+        formatter: (p) => {
+          const a = p.data?._article || {};
+          const ts = new Date(p.value[0]);
+          const pad = (n) => String(n).padStart(2, "0");
+          const tStr = `${ts.getFullYear()}-${pad(ts.getMonth() + 1)}-${pad(ts.getDate())} ${pad(ts.getHours())}:${pad(ts.getMinutes())}`;
+          const senti = getSentimentLabel(a.ai_sentiment);
+          const src = getSourceName(a.source_id) || a.source_id || "";
+          const preview = (a.ai_summary || a.content || "").toString().slice(0, 60).replace(/\s+/g, " ");
+          return `<div style="font-weight:800;color:#0f172a;line-height:1.4;margin-bottom:6px;">${a.title || "(无标题)"}</div>
+            <div style="color:#64748b;font-size:11px;font-weight:700;margin-bottom:4px;">${src} · ${tStr}${senti ? ` · <span style='color:${getSentimentColor(a.ai_sentiment)};'>${senti}</span>` : ""}</div>
+            ${preview ? `<div style="color:#475569;font-size:11px;line-height:1.5;">${preview}…</div>` : ""}
+            <div style="color:#6366f1;font-size:10px;font-weight:800;margin-top:6px;">点击查看详情 →</div>`;
+        },
+      },
+      grid: { top: 18, right: 22, bottom: 36, left: 96, containLabel: false },
+      xAxis: {
+        type: "time",
+        axisLabel: {
+          color: "#64748b",
+          fontSize: 10,
+          fontWeight: 600,
+          formatter: (v) => {
+            const d = new Date(v);
+            const pad = (n) => String(n).padStart(2, "0");
+            return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+          },
+        },
+        axisLine: { lineStyle: { color: "#cbd5e1" } },
+        axisTick: { show: false },
+        splitLine: { lineStyle: { color: "rgba(148,163,184,0.18)", type: "dashed" } },
+      },
+      yAxis: {
+        type: "category",
+        data: yCats,
+        axisLabel: { color: "#334155", fontSize: 11, fontWeight: 700 },
+        axisLine: { lineStyle: { color: "#e2e8f0" } },
+        axisTick: { show: false },
+        splitLine: { show: false },
+      },
+      series: [
+        {
+          type: "scatter",
+          data: items,
+          emphasis: { scale: 1.25 },
+        },
+      ],
+    });
+    if (articleTimelineChart && !articleTimelineChart.__yj_click_bound) {
+      articleTimelineChart.on("click", (params) => {
+        const a = params?.data?._article;
+        if (a) emit("open-article", a);
+      });
+      articleTimelineChart.__yj_click_bound = true;
+    }
+  }
 };
 
 const resizeCharts = () => {
@@ -1017,6 +1113,7 @@ const resizeCharts = () => {
   keywordChart?.resize();
   sentimentChart?.resize();
   sentimentTrendChart?.resize();
+  articleTimelineChart?.resize();
 };
 
 watch(
@@ -1056,6 +1153,7 @@ onUnmounted(() => {
   keywordChart?.dispose();
   sentimentChart?.dispose();
   sentimentTrendChart?.dispose();
+  articleTimelineChart?.dispose();
 });
 </script>
 
@@ -1203,6 +1301,20 @@ onUnmounted(() => {
 .chart-viewport {
   width: 100%;
   height: 220px;
+}
+
+/* F1 文章时间轴：单节点级横向时间轴（区别于桶聚合面积图） */
+.article-timeline-viewport {
+  width: 100%;
+  height: 180px;
+  margin: 4px 0 14px;
+  padding: 8px 4px 0;
+  background: linear-gradient(180deg, rgba(248, 250, 252, 0.6) 0%, rgba(255, 255, 255, 0.0) 100%);
+  border-radius: 14px;
+  cursor: pointer;
+}
+@media (max-width: 768px) {
+  .article-timeline-viewport { height: 220px; }
 }
 
 
