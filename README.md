@@ -48,7 +48,8 @@ npm run dev   # http://localhost:5173
 - [聚类算法文档](docs/聚类算法文档.md)（BGE + FAISS + 双层 Otsu）
 - [评测指标文档](docs/评测指标文档.md)
 - [部署文档](docs/部署文档.md)
-- [ROADMAP](ROADMAP.md)（升级路线图 · 含附录 A · W1-W7 历史里程碑）
+- [升级路线图](升级路线图.md)（未来升级规划 + W1-W7 历史里程碑）
+- [更新内容](更新内容.md)（全部升级与修复总览 · CHANGELOG）
 - [答辩准备清单](docs/答辩准备清单.md)
 - [手稿（docx）](docs/手稿/)
 

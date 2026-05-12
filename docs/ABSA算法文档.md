@@ -185,4 +185,4 @@ def _safe_parse_json(text: str) -> list[dict]:
 - **跨段聚合**：长正文按段抽取后做 aspect 归并（同义词合并：美国/美方/华盛顿 → 美国）
 - **情感强度**：从三档扩展为五档（very_neg / neg / neu / pos / very_pos），驱动雷达图
 
-详见 [ROADMAP.md](../ROADMAP.md) A 序列。
+详见 [升级路线图](../升级路线图.md) A 序列。
