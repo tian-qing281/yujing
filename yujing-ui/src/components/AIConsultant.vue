@@ -1427,13 +1427,14 @@ onUnmounted(() => {
   padding: 16px; font-size: 15px; resize: none; min-height: 56px; outline: none; border: 1px solid transparent;
   transition: all 0.2s;
 }
-.mcp-input-area:focus { border-color: #3b82f6; background: #fff; box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.05); }
+.mcp-input-area:focus { border-color: var(--color-accent, #B45309); background: #fff; box-shadow: 0 0 0 3px rgba(180, 83, 9, 0.08); }
 
 .btn-send-capsule {
-  background: #2563eb; color: #fff; border: none; border-radius: 12px; height: 56px; padding: 0 24px;
+  /* 发送按钮：近墨石板底 + 暖白文字，与 header"全站同步"主按钮一致 */
+  background: var(--color-brand, #0F172A); color: #fff; border: none; border-radius: 12px; height: 56px; padding: 0 24px;
   display: flex; align-items: center; gap: 10px; font-weight: 800; cursor: pointer; transition: 0.2s;
 }
-.btn-send-capsule:hover { transform: translateY(-2px); box-shadow: 0 10px 20px rgba(37, 99, 235, 0.2); }
+.btn-send-capsule:hover { transform: translateY(-2px); box-shadow: 0 8px 18px rgba(20, 16, 8, 0.12); }
 
 .summon-area { margin-top: 24px; border-top: 1px solid rgba(0,0,0,0.04); padding-top: 16px; }
 .summon-header { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: #64748b; font-weight: 700; margin-bottom: 8px; }
@@ -1516,14 +1517,14 @@ onUnmounted(() => {
   display: flex; align-items: center; transition: 0.2s;
 }
 .brief-banner-close:hover { opacity: 1; }
-/* 生成中态：降饱和色调，避免占"已就绪"的视觉强调 */
+/* 生成中态：去蓝改中性暖灰，不与抖起的 accent 争主 */
 .brief-banner--generating {
-  background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%);
-  border-color: rgba(14, 165, 233, 0.25);
+  background: var(--color-surface-2, #F5F5F2);
+  border-color: var(--color-border, #E5E5DD);
 }
-.brief-banner--generating .brief-banner-icon { color: #0284c7; }
-.brief-banner--generating .brief-banner-text strong { color: #0c4a6e; }
-.brief-banner--generating .brief-banner-text span { color: #075985; }
+.brief-banner--generating .brief-banner-icon { color: var(--color-text-2, #57534E); }
+.brief-banner--generating .brief-banner-text strong { color: var(--color-text, #1C1917); }
+.brief-banner--generating .brief-banner-text span { color: var(--color-text-2, #57534E); }
 .brief-icon-spin { animation: briefSpin 1.1s linear infinite; }
 @keyframes briefSpin {
   to { transform: rotate(360deg); }
@@ -1670,28 +1671,31 @@ onUnmounted(() => {
  * 智能体模式 · 顶部标记 + 预设条 + 消息气泡中的 AgentTrace/final-card
  * ========================================================================= */
 .agent-badge {
+  /* Tool-Calling chip：去紫色渐变，暖白底 + 赤陶红描边/字 */
   display: inline-flex;
   align-items: center;
   gap: 0.3rem;
   padding: 0.2rem 0.6rem 0.2rem 0.5rem;
   border-radius: 999px;
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.12), rgba(168, 85, 247, 0.08));
-  border: 1px solid rgba(99, 102, 241, 0.4);
-  color: #4c1d95;
+  background: var(--color-surface-2, #F5F5F2);
+  border: 1px solid var(--color-border, #E5E5DD);
+  color: var(--color-accent, #B45309);
   font-size: 0.72rem;
   font-weight: 600;
 }
 
 .agent-preset-strip {
+  /* 智能体说明条：去紫渐变，改纸白底 + 暖灰描边 + 赤陶红左 border */
   display: flex;
   flex-direction: column;
   gap: 0.65rem;
   padding: 0.85rem 1rem;
-  background: linear-gradient(135deg, #ede9fe, #e0e7ff);
-  border: 1px solid rgba(99, 102, 241, 0.28);
-  border-radius: 12px;
+  background: var(--color-surface, #FFFFFF);
+  border: 1px solid var(--color-border, #E5E5DD);
+  border-left: 3px solid var(--color-accent, #B45309);
+  border-radius: 8px;
   margin-bottom: 0.5rem;
-  box-shadow: 0 4px 12px -4px rgba(99, 102, 241, 0.28), 0 1px 0 rgba(99, 102, 241, 0.12);
+  box-shadow: var(--shadow-1, 0 1px 0 rgba(0, 0, 0, 0.04));
 }
 /* 有对话历史时：折叠为紧凑状态条 */
 .agent-preset-strip.agent-preset-compact {
@@ -1705,10 +1709,12 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  color: #4c1d95;
+  color: var(--color-text, #1C1917);
+  font-family: var(--font-display, "Noto Serif SC", serif);
   font-size: 0.85rem;
+  font-weight: 600;
 }
-.agent-preset-head iconify-icon { color: #7c3aed; font-size: 1.05rem; }
+.agent-preset-head iconify-icon { color: var(--color-accent, #B45309); font-size: 1.05rem; }
 .agent-preset-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -1720,17 +1726,17 @@ onUnmounted(() => {
   gap: 0.6rem;
   padding: 0.65rem 0.8rem;
   background: #fff;
-  border: 1px solid rgba(99, 102, 241, 0.25);
-  border-radius: 10px;
-  color: #1e293b;
+  border: 1px solid var(--color-border, #E5E5DD);
+  border-radius: 8px;
+  color: var(--color-text, #1C1917);
   text-align: left;
   cursor: pointer;
   transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s;
 }
 .agent-preset-card:hover:not(:disabled) {
   transform: translateY(-1px);
-  border-color: #6366f1;
-  box-shadow: 0 4px 14px -6px rgba(99, 102, 241, 0.4);
+  border-color: var(--color-accent, #B45309);
+  box-shadow: 0 2px 8px rgba(20, 16, 8, 0.06);
 }
 .agent-preset-card:disabled { opacity: 0.55; cursor: not-allowed; }
 .agent-preset-icon {
@@ -1739,33 +1745,34 @@ onUnmounted(() => {
   justify-content: center;
   width: 36px;
   height: 36px;
-  background: rgba(99, 102, 241, 0.1);
-  color: #6366f1;
+  background: var(--color-surface-2, #F5F5F2);
+  color: var(--color-accent, #B45309);
   border-radius: 8px;
   font-size: 1.15rem;
   line-height: 1;
 }
 .agent-preset-body { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; }
-.agent-preset-body strong { font-size: 0.9rem; color: #1e293b; }
-.agent-preset-body span { font-size: 0.72rem; color: #64748b; }
+.agent-preset-body strong { font-size: 0.9rem; color: var(--color-text, #1C1917); }
+.agent-preset-body span { font-size: 0.72rem; color: var(--color-text-2, #57534E); }
 
 .agent-meta-chip {
+  /* 智能体 meta chip：去紫渐变，中性底 + 赤陶红边 */
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
   padding: 0.12rem 0.6rem;
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.14), rgba(168, 85, 247, 0.1));
-  border: 1px solid rgba(99, 102, 241, 0.3);
+  background: var(--color-surface-2, #F5F5F2);
+  border: 1px solid var(--color-border, #E5E5DD);
   border-radius: 999px;
-  color: #4c1d95;
+  color: var(--color-accent, #B45309);
   font-size: 0.72rem;
   align-self: flex-start;
 }
 .agent-meta-elapsed {
-  color: #6366f1;
+  color: var(--color-text-2, #57534E);
   font-size: 0.7rem;
   padding-left: 0.3rem;
-  border-left: 1px solid rgba(99, 102, 241, 0.3);
+  border-left: 1px solid var(--color-border, #E5E5DD);
   margin-left: 0.2rem;
 }
 

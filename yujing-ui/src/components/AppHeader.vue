@@ -60,14 +60,15 @@ defineEmits(['refresh'])
 .header-copy { display: flex; flex-direction: column; gap: 0; min-width: 0; }
 .header-kicker { font-size: 11px; font-weight: 800; letter-spacing: 0.04em; transform: scale(0.9); transform-origin: left; color: #64748b; background: transparent; border: none; margin-bottom: -2px; white-space: nowrap; }
 .breadcrumb { display: flex; align-items: center; gap: 12px; font-size: 22px; font-weight: 900; color: #0f172a; letter-spacing: -0.02em; min-width: 0; overflow: hidden; }
-.breadcrumb-icon { font-size: 24px; color: var(--hs-primary, #1e40af); display: flex; align-items: center; flex-shrink: 0; }
+.breadcrumb-icon { font-size: 24px; color: var(--color-accent, #B45309); display: flex; align-items: center; flex-shrink: 0; }
 .root-node { color: #020617; line-height: 1; display: flex; align-items: center; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .header-right { display: flex; align-items: center; gap: 24px; flex-shrink: 0; }
 .btn-sync-all { 
-  background: var(--hs-primary, #2563eb);
+  /* 主按钮：近墨石板底 + 暖白文字，去蓝阴影 */
+  background: var(--color-brand, #0F172A);
   color: #ffffff;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.06);
   height: 48px;
   padding: 0 24px; 
   border-radius: 999px;
@@ -75,10 +76,10 @@ defineEmits(['refresh'])
   font-weight: 700;
   display: flex; 
   align-items: center; gap: 12px; cursor: pointer; transition: 0.2s;
-  box-shadow: 0 8px 24px rgba(37, 99, 235, 0.2);
+  box-shadow: 0 4px 12px rgba(20, 16, 8, 0.08);
   text-transform: none;
 }
-.btn-sync-all:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 12px 32px rgba(37, 99, 235, 0.3); }
+.btn-sync-all:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 8px 20px rgba(20, 16, 8, 0.12); }
 .btn-sync-all:disabled { opacity: 0.5; cursor: not-allowed; }
 
 @media (max-width: 960px) {

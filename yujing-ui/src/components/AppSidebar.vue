@@ -199,9 +199,10 @@ defineEmits(["switch", "open-cred"]);
 }
 
 .nav-item.active {
-  background: var(--hs-primary, #2563eb);
+  /* 选中态：暖白底色 + 赤陶红文字与左侧 mark，呼应 editorial 主张 */
+  background: rgba(255, 255, 255, 0.08);
   color: #ffffff;
-  box-shadow: 0 8px 20px rgba(37, 99, 235, 0.25);
+  box-shadow: inset 3px 0 0 var(--color-accent, #B45309);
 }
 
 .nav-mark {
@@ -217,7 +218,7 @@ defineEmits(["switch", "open-cred"]);
 }
 
 .nav-item.active .nav-mark {
-  background: #ffffff;
+  background: var(--color-accent, #B45309);
 }
 
 .nav-icon {

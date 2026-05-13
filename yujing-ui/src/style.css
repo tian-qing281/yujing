@@ -97,10 +97,11 @@
   --hs-muted: var(--color-text-2);
   --hs-soft: var(--color-text-3);
   --hs-line: var(--color-border);
-  --hs-primary: #1e40af;
-  --hs-primary-2: #3b82f6;
-  --hs-cyan: #06b6d4;
-  --hs-amber: #f59e0b;
+  /* 旧主色（蓝）→ 新近墨石板，旧次主（亮蓝）→ 新赤陶红强调，旧青/琥珀→ 中性 token，全局自动跟随 */
+  --hs-primary: var(--color-brand);
+  --hs-primary-2: var(--color-accent);
+  --hs-cyan: var(--color-text-2);
+  --hs-amber: var(--color-warning);
   --hs-shadow: var(--shadow-2);
   --hs-glow: var(--shadow-2);
   --hs-radius-xl: var(--radius-xl);
