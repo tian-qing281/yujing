@@ -509,8 +509,19 @@ const getHashColor = (word) => {
 }
 
 const getEmoBarColor = (label) => {
-  const colors = { '愤怒': '#ef4444', '厌恶': '#a855f7', '悲伤': '#94a3b8', '喜悦': '#10b981', '关注': '#3b82f6', '惊讶': '#f59e0b', '质疑': '#ec4899', '中性': '#64748b' }
-  return colors[label] || '#94a3b8'
+  // editorial: 情感色保留语义（正/负/中可辨），但抹去糖果色，统一到 MASTER token 范围
+  // 红=愤怒/厌恶（深浅区分）、暖灰=悲伤/中性、暗绿=喜悦、深蓝=关注、琥珀=惊讶、赤陶红=质疑
+  const colors = {
+    '愤怒': '#B91C1C',   // critical 暗红
+    '厌恶': '#7F1D1D',   // 更深的暗红，区分愤怒
+    '悲伤': '#57534E',   // text-2 石板灰
+    '喜悦': '#15803D',   // success 暗绿
+    '关注': '#1E40AF',   // data 深蓝
+    '惊讶': '#D97706',   // warning 琥珀
+    '质疑': '#B45309',   // accent 赤陶红
+    '中性': '#A8A29E'    // text-3 暖灰
+  }
+  return colors[label] || '#A8A29E'
 }
 
 const formatTime = (d) => {
@@ -869,13 +880,17 @@ watch(() => props.activeTab, (newTab) => {
 }
 .source-tag { font-size: 11px; font-weight: 800; color: #64748b; display: flex; align-items: center; gap: 8px; text-transform: uppercase; letter-spacing: 0.12em; }
 .absa-badge {
-  display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 999px;
-  background: linear-gradient(135deg, #6366f1, #ec4899);
-  color: #fff; font-size: 9px; font-weight: 900; letter-spacing: 0.08em;
+  display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 4px;
+  background: var(--color-surface-2);
+  color: var(--color-accent);
+  border: 1px solid var(--color-border);
+  font-size: 9px; font-weight: 800; letter-spacing: 0.12em;
   margin-left: auto;
 }
 .absa-badge--loading {
-  background: linear-gradient(135deg, #94a3b8, #cbd5e1);
+  background: var(--color-surface-2);
+  color: var(--color-text-3);
+  border-color: var(--color-border);
   animation: absa-pulse 1.4s ease-in-out infinite;
 }
 @keyframes absa-pulse { 0%,100%{opacity:1;} 50%{opacity:0.55;} }
