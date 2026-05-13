@@ -117,27 +117,29 @@ watch(
 <style scoped>
 .visual-widget-container {
   display: block; text-decoration: none; margin: 0;
-  background: #fff; border: 1px solid rgba(0, 0, 0, 0.06);
-  border-radius: 12px; overflow: hidden;
-  cursor: pointer; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
+  background: var(--color-surface); border: 1px solid var(--color-border);
+  border-radius: 6px; overflow: hidden;
+  cursor: pointer;
+  /* Batch H：仅 transform + border + box-shadow 单独过渡，避免 all 触发整盒 */
+  transition: transform 0.18s ease-out, border-color 0.18s ease-out, box-shadow 0.18s ease-out;
+  box-shadow: none;
 }
 .visual-widget-container:hover {
-  transform: translateY(-2px); border-color: #3b82f6;
-  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.1);
+  transform: translateY(-1px); border-color: var(--color-text-3);
+  box-shadow: 0 4px 12px -4px rgba(28, 25, 23, 0.08);
 }
 .widget-header {
-  padding: 10px 14px; background: #fafafa;
+  padding: 10px 14px; background: var(--color-surface-2);
   display: flex; justify-content: space-between; align-items: center;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.04);
+  border-bottom: 1px solid var(--color-border);
 }
-.source-tag { font-size: 10px; font-weight: 900; color: #64748b; letter-spacing: 0.5px; text-transform: uppercase; }
-.source-link { font-size: 10px; color: #3b82f6; text-decoration: none; font-weight: 700; }
+.source-tag { font-size: 10px; font-weight: 600; color: var(--color-text-3); letter-spacing: 0.08em; text-transform: uppercase; }
+.source-link { font-size: 10px; color: var(--color-accent); text-decoration: none; font-weight: 600; }
 
-.widget-canvas-box { width: 100%; height: 160px; background: #fff; position: relative; }
+.widget-canvas-box { width: 100%; height: 160px; background: var(--color-surface); position: relative; }
 .widget-canvas { width: 100%; height: 100%; }
-.widget-preview-box { padding: 14px; min-height: 160px; background: #fff; }
-.summary-text { font-size: 13px; color: #475569; line-height: 1.6; display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden; }
+.widget-preview-box { padding: 14px; min-height: 160px; background: var(--color-surface); }
+.summary-text { font-size: 13px; color: var(--color-text-2); line-height: 1.6; display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden; }
 
 .widget-footer {
   padding: 12px 14px; background: #fff;

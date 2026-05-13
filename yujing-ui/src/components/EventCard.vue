@@ -92,34 +92,29 @@ const prettifySummary = (value) => {
 
 <style scoped>
 .event-card {
-  background: rgba(255, 255, 255, 0.75);
-  backdrop-filter: blur(12px);
-  border-radius: 20px;
-  border: 1px solid rgba(255, 255, 255, 0.5);
-  box-shadow:
-    0 10px 15px -3px rgba(0, 0, 0, 0.05),
-    0 4px 6px -2px rgba(0, 0, 0, 0.02),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.4);
+  background: var(--color-surface);
+  border-radius: 6px;
+  border: 1px solid var(--color-border);
+  box-shadow: none;
   display: flex;
   flex-direction: column;
   cursor: pointer;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  /* Batch H：仅 transform + border-color 平滑过渡，不再 all */
+  transition: transform 0.18s ease-out, border-color 0.18s ease-out, box-shadow 0.18s ease-out;
   min-height: 180px;
   overflow: hidden;
   position: relative;
 }
 
 .event-card:hover {
-  transform: translateY(-4px) scale(1.01);
-  background: rgba(255, 255, 255, 0.9);
-  border-color: rgba(59, 130, 246, 0.3);
-  box-shadow:
-    0 20px 25px -5px rgba(15, 23, 42, 0.08),
-    0 10px 10px -5px rgba(15, 23, 42, 0.04);
+  /* Batch H：克制位移 1px + 暖灰 border 加深，不再 scale */
+  transform: translateY(-1px);
+  border-color: var(--color-text-3);
+  box-shadow: 0 4px 12px -4px rgba(28, 25, 23, 0.08);
 }
 
 .event-card-body {
-  padding: 24px;
+  padding: 22px 24px;
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -132,8 +127,9 @@ const prettifySummary = (value) => {
 
 .event-title {
   font-size: clamp(16px, 1.1vw, 19px);
-  font-weight: 900;
-  color: #0f172a;
+  font-weight: 700;
+  font-family: var(--font-display, "Noto Serif SC", serif);
+  color: var(--color-text);
   line-height: 1.4;
   margin-bottom: 8px;
   display: -webkit-box;
@@ -144,9 +140,9 @@ const prettifySummary = (value) => {
 
 .event-preview {
   font-size: 13px;
-  color: #64748b;
+  color: var(--color-text-2);
   line-height: 1.6;
-  font-weight: 500;
+  font-weight: 400;
 }
 
 .event-footer {
@@ -154,7 +150,7 @@ const prettifySummary = (value) => {
   justify-content: space-between;
   align-items: center;
   padding-top: 16px;
-  border-top: 1px solid rgba(226, 232, 240, 0.5);
+  border-top: 1px solid var(--color-border);
 }
 
 .event-keywords {
@@ -164,9 +160,8 @@ const prettifySummary = (value) => {
 
 .event-tag {
   font-size: 11px;
-  font-weight: 800;
-  color: #3b82f6;
-  opacity: 0.8;
+  font-weight: 600;
+  color: var(--color-text-3);
 }
 
 .event-count-group {
@@ -174,8 +169,9 @@ const prettifySummary = (value) => {
   align-items: center;
   gap: 6px;
   font-size: 11px;
-  font-weight: 800;
-  color: #f97316; /* 切换为富有热度感的橙色 */
+  font-weight: 600;
+  color: var(--color-accent); /* 赤陶红替代糖果橙 */
+  letter-spacing: 0.02em;
 }
 
 .event-fire-icon {
@@ -183,10 +179,10 @@ const prettifySummary = (value) => {
 }
 
 :deep(.event-hit) {
-  background: linear-gradient(120deg, rgba(59, 130, 246, 0.15) 0%, rgba(59, 130, 246, 0.05) 100%);
-  color: #2563eb;
+  background: rgba(180, 83, 9, 0.12);
+  color: var(--color-accent);
   padding: 0 4px;
-  border-radius: 4px;
-  font-weight: 700;
+  border-radius: 2px;
+  font-weight: 600;
 }
 </style>

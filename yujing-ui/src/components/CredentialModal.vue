@@ -226,14 +226,13 @@ const emitSubmit = () => {
 }
 
 .btn-close {
-  color: #94a3b8;
-  transition: color 0.2s ease, transform 0.2s ease, background 0.2s ease;
+  color: var(--color-text-3);
+  transition: color 0.18s ease;
   font-size: 20px;
 }
 
 .btn-close:hover {
-  color: #0f172a;
-  transform: scale(1.04);
+  color: var(--color-text);
 }
 
 .cred-body {
