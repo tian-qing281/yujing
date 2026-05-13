@@ -1879,29 +1879,32 @@ body { font-family: "Fira Sans", "PingFang SC", "Microsoft YaHei", sans-serif; b
 .eh-pill-btn {
   border: none !important;
   background: transparent !important;
-  border-radius: 9px !important;
+  border-radius: 4px !important;
   font-size: 11px !important;
-  font-weight: 800 !important;
+  font-weight: 700 !important;
   height: 28px !important;
   min-height: 28px !important;
   padding-inline: 14px !important;
-  color: #64748b;
-  transition: all 0.2s ease;
+  color: var(--color-text-2);
+  letter-spacing: 0.04em;
+  transition: all 0.18s ease;
 }
 
 .eh-pill-btn.active {
-  background: #3b82f6 !important;
-  color: white !important;
-  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2);
+  /* editorial: \u8d64\u9676\u7ea2\u5b9e\u8272\u592a\u5f3a\uff0c\u6539\u4e3a\u201c\u8df3\u4e3b\u8272\u6587\u5b57 + \u4f4e\u900f\u660e\u80cc\u201d\u7f16\u8f91\u8c03 */
+  background: rgba(180, 83, 9, 0.10) !important;
+  color: var(--color-accent) !important;
+  box-shadow: none;
 }
 
 .eh-pill-btn.active-neutral {
-  background: #0f172a !important;
-  color: white !important;
+  background: var(--color-brand) !important;
+  color: #FAFAF7 !important;
 }
 
 .eh-pill-btn:hover:not(.active):not(.active-neutral) {
-  background: rgba(0, 0, 0, 0.05) !important;
+  background: rgba(28, 25, 23, 0.05) !important;
+  color: var(--color-text);
 }
 
 .eh-facets {

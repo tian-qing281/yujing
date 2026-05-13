@@ -127,20 +127,23 @@ defineEmits(["switch", "open-cred"]);
 
 .brand-kicker {
   display: inline-block;
-  font-size: 20px;
-  font-weight: 800;
-  letter-spacing: 0.18em;
-  color: #7dd3fc;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.32em;
+  /* editorial: 赤陶红 kicker 者，取代亮蓝 */
+  color: var(--color-accent);
+  text-transform: uppercase;
 }
 
 .logo {
-  margin: 6px 0 0;
-  font-size: 42px;
+  margin: 8px 0 0;
+  font-size: 38px;
   line-height: 1;
-  font-weight: 900;
-  letter-spacing: 0.02em;
-  color: #f8fbff;
-  filter: drop-shadow(0 4px 12px rgba(59, 130, 246, 0.12));
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  /* editorial: 使用衰宋作刷头，去揉蓝光晕 */
+  font-family: var(--font-display, "Noto Serif SC", serif);
+  color: #FAFAF7;
 }
 
 .app-sidebar.collapsed .logo {
