@@ -185,6 +185,22 @@ ECharts 全部图表统一使用 5 阶单色梯度：
 - 紧凑行：衰宋体排名 + 单行标题 + 1px hairline 分隔
 - 容器顶部 3px 赤陶红 hairline + **MORE HEADLINES** kicker（如 NYT 文末廄）
 - **单屏信息密度：6 条 → 15+ 条**
+
+### Batch F.1 · 杂志网格 + 头条卡 + 柔化（commit `6d7af45`）
+
+> 用户反馈：「点击会闪、排版好奇怪只显示 5 个有点空、全黑橙没有圆角看着别扭」三连击修订
+
+- **修复闪烁**：移除 `<TransitionGroup>`，改用普通 `<div>`（每次 computed 重渲不再触发整列 leave/enter 动画）
+- **杂志网格**（参考 NYT / Bloomberg 头版）：
+  - `.magazine-grid` 2 列网格 + 第 1 名 `variant="lead"` 跨 2 列（`grid-column: 1 / -1`）
+  - lead 卡：32px×36px padding + 顶部 3px 赤陶红 hairline + 44px 宋体大数字 + 26px 宋体大标题（line-clamp 2）
+  - 02-05 副条 2 列横排，单屏从 5 大卡 → 1 头条 + 4 副条 + 6+ 紧凑行
+  - 修复关键 bug：`@media (max-width: 960px) .article-grid { grid-template-columns: 1fr }` 用 `:not(.magazine-grid)` 排除，否则桌面 913px viewport 被回退单列
+- **柔化全黑+橙刚硬感**：
+  - 卡片圆角 4px → 6px
+  - hover border-color：`accent`（强赤陶红）→ `text-3`（暖灰），`box-shadow` 弱化
+  - `.news-card` padding 28px → 22px×24px、min-height 140px → 0、gap 20 → 14
+- 已走查 8 个榜单全部 ✅（微博/百度/头条/B 站/知乎/澎湃/华尔街见闻/财联社）
 ---
 
 ## 五、走查完成度
@@ -213,13 +229,16 @@ ECharts 全部图表统一使用 5 阶单色梯度：
 
 > 本轮聚焦"视觉语言统一"。下一轮将进入"信息架构与交互细节"。
 
-### Batch F · 榜单页卡片重排（已完成主体 - commit `3ef1c41`）
+### Batch F · 榜单页卡片重排（已完成 - commit `3ef1c41` + Batch F.1 修订 `6d7af45`）
 
-**已交付**：major + row 两档 variant，单屏 6 → 15+ 条
+**已交付**：
+
+- F: major + row 两档 variant，单屏 6 → 15+ 条
+- F.1: 杂志网格 2 列 + lead 头条 variant + 圆角/hover 柔化（参考 NYT 头版排版）
 
 **待优化**（下一轮考虑）：
 
-- 大卡仍偏空（榜单 API 缺摘要 — 需后端补上中转与调用 LLM 才能填）
+- lead 头条卡可加缩略图占位 / 摘要文字 / 时间戳 meta line（榜单 API 缺数据，需后端补摘要 LLM 中转）
 - “今日重点”顶部区：从订阅推荐拉前 3 高分事件并在榜单页顶部增一排
 - 大卡 hover 金文“点击查看详情 →”的赤陶红 affordance
 
