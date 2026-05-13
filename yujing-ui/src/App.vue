@@ -2036,26 +2036,27 @@ body { font-family: "Fira Sans", "PingFang SC", "Microsoft YaHei", sans-serif; b
 .signal-row {
   appearance: none;
   width: 100%;
-  border: 1px solid rgba(226, 232, 240, 0.92);
-  background: rgba(255,255,255,0.88);
-  border-radius: 18px;
-  padding: 16px 18px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  border-radius: 6px;
+  padding: 18px 20px;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 18px;
   align-items: center;
   text-align: left;
   cursor: pointer;
-  transition: all 0.2s ease;
+  /* Batch H：单独 transition 避免 all 触发整盒 */
+  transition: transform 0.18s ease-out, border-color 0.18s ease-out, box-shadow 0.18s ease-out;
   animation: item-rise 0.48s cubic-bezier(0.16, 1, 0.3, 1) both;
   animation-delay: calc(min(var(--item-index, 0), 8) * 38ms);
-  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.05);
+  box-shadow: none;
 }
 
 .signal-row:hover {
-  border-color: rgba(148, 163, 184, 0.38);
-  box-shadow: 0 14px 28px rgba(15, 23, 42, 0.06);
-  transform: translateY(-2px);
+  border-color: var(--color-text-3);
+  box-shadow: 0 4px 12px -4px rgba(28, 25, 23, 0.08);
+  transform: translateY(-1px);
 }
 
 .signal-row-main {
@@ -2074,28 +2075,29 @@ body { font-family: "Fira Sans", "PingFang SC", "Microsoft YaHei", sans-serif; b
 }
 
 .signal-row-kicker {
-  color: #1d4ed8;
+  color: var(--color-accent);
   font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
+  font-weight: 600;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
 }
 
 .signal-row-meta {
-  color: #94a3b8;
+  color: var(--color-text-3);
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 500;
 }
 
 .signal-row-title {
-  color: #0f172a;
+  color: var(--color-text);
   font-size: 17px;
   line-height: 1.35;
-  font-weight: 800;
+  font-weight: 700;
+  font-family: var(--font-display, "Noto Serif SC", serif);
 }
 
 .signal-row-summary {
-  color: #64748b;
+  color: var(--color-text-2);
   font-size: 13px;
   line-height: 1.65;
   display: -webkit-box;
@@ -2112,9 +2114,10 @@ body { font-family: "Fira Sans", "PingFang SC", "Microsoft YaHei", sans-serif; b
 }
 
 .signal-row-count {
-  color: #0f172a;
+  color: var(--color-text);
   font-size: 14px;
-  font-weight: 800;
+  font-weight: 700;
+  font-family: var(--font-display, "Noto Serif SC", serif);
 }
 
 .signal-row-tags {
@@ -2127,12 +2130,13 @@ body { font-family: "Fira Sans", "PingFang SC", "Microsoft YaHei", sans-serif; b
 .signal-row-tag {
   display: inline-flex;
   align-items: center;
-  padding: 6px 10px;
-  border-radius: 999px;
-  background: #f8fafc;
-  color: #475569;
+  padding: 4px 10px;
+  border-radius: 2px;
+  background: var(--color-surface-2);
+  color: var(--color-text-2);
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 500;
+  border: 1px solid var(--color-border);
 }
 
 .section-title {

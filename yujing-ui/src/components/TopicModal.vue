@@ -602,9 +602,9 @@ watch(
 }
 
 .quick-entry-card:hover {
-  border-color: #93c5fd;
-  box-shadow: 0 10px 24px rgba(37, 99, 235, 0.08);
-  transform: translateY(-2px);
+  border-color: var(--color-text-3);
+  box-shadow: 0 4px 12px -4px rgba(28, 25, 23, 0.08);
+  transform: translateY(-1px);
 }
 
 .quick-entry-kicker {
@@ -659,19 +659,20 @@ watch(
 }
 .pipeline-card {
   padding: 24px;
-  border-radius: 18px;
-  border: 1px solid #f1f5f9;
+  border-radius: 6px;
+  border: 1px solid var(--color-border);
   cursor: pointer;
-  transition: all 0.25s;
-  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.04);
+  /* Batch H：单独过渡 + 位移缩小 */
+  transition: transform 0.18s ease-out, border-color 0.18s ease-out, box-shadow 0.18s ease-out;
+  box-shadow: none;
 }
 .pipeline-card:hover {
-  border-color: #3b82f6;
-  box-shadow: 0 12px 30px rgba(37, 99, 235, 0.08);
-  transform: translateX(6px);
+  border-color: var(--color-text-3);
+  box-shadow: 0 4px 12px -4px rgba(28, 25, 23, 0.08);
+  transform: translateX(3px);
 }
 .pipeline-card.single:hover {
-  transform: translateX(4px);
+  transform: translateX(2px);
 }
 .pipeline-meta {
   display: flex;

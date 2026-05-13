@@ -1291,13 +1291,24 @@ watch(() => props.activeTab, (newTab) => {
 .vis-error-banner__body { flex: 1 1 auto; word-break: break-all; line-height: 1.6; }
 .vis-error-banner__retry { flex: 0 0 auto; background: #ef4444; color: #fff; border: 0; }
 .vis-error-banner__retry:hover { background: #dc2626; color: #fff; }
-.empty-vis iconify-icon { font-size: 48px; color: rgba(59, 130, 246, 0.15); margin-bottom: 24px; filter: drop-shadow(0 0 8px rgba(59, 130, 246, 0.1)); }
+.empty-vis iconify-icon { font-size: 48px; color: var(--color-text-3); margin-bottom: 24px; }
 .btn-empty-sync {
-  margin-top: 24px; background: #2563eb; color: #fff; border:none; padding: 10px 24px;
-  border-radius: 12px; font-size: 12px; font-weight: 800; cursor: pointer; transition: 0.3s;
-  min-height: auto; height: auto; text-transform: none;
+  margin-top: 24px;
+  background: var(--color-text);
+  color: var(--color-surface);
+  border: none;
+  padding: 10px 24px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  transition: background 0.18s ease, transform 0.18s ease;
+  min-height: auto;
+  height: auto;
+  text-transform: none;
 }
-.btn-empty-sync:hover { background: #1d4ed8; transform: translateY(-1px); }
+.btn-empty-sync:hover { background: var(--color-accent); transform: translateY(-1px); }
 
 @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 @keyframes modal-panel-rise {
