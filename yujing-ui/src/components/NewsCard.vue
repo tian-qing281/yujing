@@ -1,5 +1,5 @@
 <template>
-  <div class="news-card card bg-base-100" @click="$emit('click')">
+  <div class="news-card card bg-base-100" :class="`news-card--${props.variant}`" @click="$emit('click')">
     <div class="card-body news-card-body">
       <div class="card-kicker">
         <div class="card-rank-box" :style="rankStyle">
@@ -44,6 +44,9 @@ const props = defineProps({
   item: Object,
   index: Number,
   hideSource: { type: Boolean, default: false },
+  // editorial Batch F: 卡片密度变体
+  // major → 大卡（前 5 名）、row → 紧凑行（第 6+ 名）
+  variant: { type: String, default: "major" },
 });
 
 defineEmits(["click"]);
@@ -332,4 +335,88 @@ const searchReasons = computed(() =>
     -webkit-line-clamp: 3;
   }
 }
+
+/* === Batch F: row variant - 紧凑列表行 === */
+/* 第 6+ 名走"杂志条目"密度，单行排版，仅排名 + 标题 + 热度 */
+.news-card--row {
+  padding: 14px 22px;
+  min-height: 0;
+  gap: 0;
+  border-radius: 0;
+  border-left: none;
+  border-right: none;
+  border-top: none;
+  /* 仅留底部 1px hairline，连成报纸条目列表 */
+  border-bottom: 1px solid var(--color-border);
+  background: transparent;
+  box-shadow: none;
+}
+
+.news-card--row:hover {
+  transform: none;
+  box-shadow: none;
+  background: var(--color-surface-2);
+  border-color: var(--color-border);
+  border-bottom-color: var(--color-accent);
+}
+
+.news-card--row:hover::before {
+  opacity: 0;
+}
+
+.news-card--row .news-card-body {
+  padding: 0;
+  gap: 16px;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+}
+
+.news-card--row .card-kicker {
+  flex: 0 0 auto;
+  min-height: 0;
+  width: auto;
+  gap: 12px;
+}
+
+.news-card--row .card-rank-box {
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  font-family: var(--font-display, "Noto Serif SC", serif);
+  min-width: 32px;
+}
+
+.news-card--row .card-badges {
+  display: none;
+}
+
+.news-card--row .card-main {
+  flex: 1;
+  min-width: 0;
+  padding-right: 0;
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+}
+
+.news-card--row .card-title {
+  font-size: 15px;
+  font-weight: 600;
+  -webkit-line-clamp: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  flex: 1;
+  min-width: 0;
+  line-height: 1.4;
+}
+
+.news-card--row .card-excerpt,
+.news-card--row .card-search-meta {
+  display: none;
+}
+
+/* row 行末尾追加热度小字（如果之后想接热度，可在 NewsCard template 内挂 row-meta） */
 </style>

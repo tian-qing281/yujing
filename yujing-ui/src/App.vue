@@ -1537,16 +1537,33 @@ onMounted(() => {
         />
 
         <div class="content-scroll">
+          <!-- editorial Batch F: 榜单页杂志条目布局
+               前 5 名走大卡（默认 major variant），第 6+ 名走紧凑行（row variant + ranking-rows 容器） -->
           <TransitionGroup name="list" tag="div" class="article-grid">
             <NewsCard
-              v-for="(item, idx) in filteredArticles"
+              v-for="(item, idx) in filteredArticles.slice(0, 5)"
               :key="item.id"
               :item="item"
               :index="idx"
+              variant="major"
               :hideSource="true"
               @click="openDetail(item)"
             />
           </TransitionGroup>
+          <div v-if="filteredArticles.length > 5" class="ranking-rows">
+            <div class="ranking-rows-kicker">More headlines</div>
+            <TransitionGroup name="list" tag="div" class="ranking-rows-list">
+              <NewsCard
+                v-for="(item, idx) in filteredArticles.slice(5)"
+                :key="item.id"
+                :item="item"
+                :index="idx + 5"
+                variant="row"
+                :hideSource="true"
+                @click="openDetail(item)"
+              />
+            </TransitionGroup>
+          </div>
         </div>
         </div>
     </main>
@@ -1654,6 +1671,39 @@ body { font-family: "Fira Sans", "PingFang SC", "Microsoft YaHei", sans-serif; b
 
 /* E15: 列宽下探到 320px，让 800px 主区也能两列；最大宽度放宽到 1800 以适配 2K/4K 屏 */
 .article-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 24px; max-width: 1800px; margin: 0 auto; align-content: start; }
+
+/* === Batch F: 榜单页紧凑列表（第 6+ 名）=== */
+.ranking-rows {
+  max-width: 1800px;
+  margin: 32px auto 0;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-top: 3px solid var(--color-accent);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.ranking-rows-kicker {
+  padding: 14px 22px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--color-accent);
+  background: var(--color-surface-2);
+  border-bottom: 1px solid var(--color-border);
+  font-family: var(--font-display, "Noto Serif SC", serif);
+}
+
+.ranking-rows-list {
+  display: flex;
+  flex-direction: column;
+}
+
+/* 最后一行去掉底部 hairline，避免与容器底边重叠 */
+.ranking-rows-list > .news-card--row:last-child {
+  border-bottom: none;
+}
 .event-grid { grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); }
 .signal-grid { grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); }
 
