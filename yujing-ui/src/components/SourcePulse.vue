@@ -120,18 +120,13 @@ const initHeatChart = () => {
       barWidth: '60%',
       data: data,
       itemStyle: {
-        borderRadius: [6, 6, 0, 0],
-        color: new window.echarts.graphic.LinearGradient(0, 0, 0, 1, [
-          { offset: 0, color: '#3b82f6' },
-          { offset: 1, color: '#60a5fa' }
-        ])
+        // editorial 单色：赤陶红实色，不再用蓝色渐变
+        borderRadius: [3, 3, 0, 0],
+        color: '#B45309'
       },
       emphasis: {
         itemStyle: {
-          color: new window.echarts.graphic.LinearGradient(0, 0, 0, 1, [
-            { offset: 0, color: '#2563eb' },
-            { offset: 1, color: '#3b82f6' }
-          ])
+          color: '#92400E'
         }
       }
     }]

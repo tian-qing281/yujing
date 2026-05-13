@@ -112,7 +112,8 @@ const getOption = () => ({
   backgroundColor: "transparent",
   animationDuration: 220,
   animationDurationUpdate: 160,
-  color: ["#2563eb", "#06b6d4"],
+  // editorial: 赤陶红主主，暖灰辅助
+  color: ["#B45309", "#78716C"],
   tooltip: {
     trigger: "axis",
     backgroundColor: "rgba(15, 23, 42, 0.94)",
@@ -159,6 +160,7 @@ const getOption = () => ({
       data: platformRows.value.map((item) => item.value),
       barWidth: 14,
       itemStyle: {
+        // editorial 单色赤陶红梯度条（从浅到深，引导读到右侧数值）
         borderRadius: 999,
         color: {
           type: "linear",
@@ -167,12 +169,12 @@ const getOption = () => ({
           x2: 1,
           y2: 0,
           colorStops: [
-            { offset: 0, color: "#60a5fa" },
-            { offset: 1, color: "#2563eb" },
+            { offset: 0, color: "#E5C9A8" },
+            { offset: 1, color: "#B45309" },
           ],
         },
       },
-      label: { show: true, position: "right", color: "#64748b", fontSize: 11, fontWeight: 800 },
+      label: { show: true, position: "right", color: "#57534E", fontSize: 11, fontWeight: 800 },
     },
     {
       name: "时间脉冲",
@@ -183,9 +185,9 @@ const getOption = () => ({
       smooth: true,
       symbol: "circle",
       symbolSize: 7,
-      lineStyle: { width: 3, color: "#06b6d4" },
-      itemStyle: { color: "#06b6d4", borderWidth: 2, borderColor: "#ffffff" },
-      areaStyle: { color: "rgba(6, 182, 212, 0.12)" },
+      lineStyle: { width: 2, color: "#78716C" },
+      itemStyle: { color: "#78716C", borderWidth: 2, borderColor: "#ffffff" },
+      areaStyle: { color: "rgba(120, 113, 108, 0.08)" },
     },
   ],
 });

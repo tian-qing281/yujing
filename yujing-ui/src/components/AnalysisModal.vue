@@ -616,28 +616,28 @@ const renderCloud = (data) => {
   const maxVal = Math.max(...normalizedWordcloud.value.map(e => e.value))
   
   if (window.WordCloud) {
-    window.WordCloud(wcCanvas.value, {
-      list: entries,
-      gridSize: 6,
-      weightFactor: (size) => {
-        // 动态适配规则：取宽高最小值作为基准，确保在 1:1 布局下纵向也能铺满
-        const baseSize = Math.min(width, height);
-        const factor = (width > 600) ? 2.8 : 3.5;
-        return (size * baseSize) / (maxVal * factor);
-      },
-      minSize: 6,
-      fontFamily: 'Outfit, Inter, system-ui, sans-serif',
-      color: (word) => {
-         const colors = ['#1d4ed8', '#2563eb', '#3b82f6', '#60a5fa', '#0f172a'];
-         let hash = 0;
-         for (let i = 0; i < word.length; i++) hash = word.charCodeAt(i) + ((hash << 5) - hash);
-         return colors[Math.abs(hash) % colors.length];
-      },
-      rotateRatio: 0,
-      backgroundColor: 'transparent',
-      shrinkToFit: true,
-      drawOutOfBound: false
-    })
+      window.WordCloud(wcCanvas.value, {
+        list: entries,
+        gridSize: 6,
+        weightFactor: (size) => {
+          const baseSize = Math.min(width, height);
+          const factor = (width > 600) ? 2.8 : 3.5;
+          return (size * baseSize) / (maxVal * factor);
+        },
+        minSize: 6,
+        fontFamily: 'Outfit, Inter, system-ui, sans-serif',
+        // editorial: 赤陶红 → 近墨石板梯度，应拍主调
+        color: (word) => {
+           const colors = ['#0F172A', '#1C1917', '#57534E', '#92400E', '#B45309'];
+           let hash = 0;
+           for (let i = 0; i < word.length; i++) hash = word.charCodeAt(i) + ((hash << 5) - hash);
+           return colors[Math.abs(hash) % colors.length];
+        },
+        rotateRatio: 0,
+        backgroundColor: 'transparent',
+        shrinkToFit: true,
+        drawOutOfBound: false
+      })
   }
   lastRenderedCloudLength = normalizedWordcloud.value.length;
 
@@ -658,9 +658,9 @@ const renderCloud = (data) => {
           shape: 'polygon',
           splitNumber: 4,
           axisName: { color: '#334155', fontSize: 11, fontWeight: 700 },
-          splitArea: { areaStyle: { color: ['rgba(59,130,246,0.02)', 'rgba(59,130,246,0.05)', 'rgba(59,130,246,0.02)', 'rgba(59,130,246,0.05)'] } },
-          splitLine: { lineStyle: { color: 'rgba(148,163,184,0.15)' } },
-          axisLine: { lineStyle: { color: 'rgba(148,163,184,0.2)' } }
+          splitArea: { areaStyle: { color: ['rgba(180,83,9,0.03)', 'rgba(180,83,9,0.06)', 'rgba(180,83,9,0.03)', 'rgba(180,83,9,0.06)'] } },
+          splitLine: { lineStyle: { color: 'rgba(168,162,158,0.18)' } },
+          axisLine: { lineStyle: { color: 'rgba(168,162,158,0.22)' } }
         },
         series: [{
           type: 'radar',
@@ -668,9 +668,10 @@ const renderCloud = (data) => {
           data: [{
             name: '关键词频', 
             value: topKw.map(k => k.value),
-            areaStyle: { color: 'rgba(59,130,246,0.15)' },
-            lineStyle: { color: '#3b82f6', width: 2 },
-            itemStyle: { color: '#2563eb', borderWidth: 2 },
+            // editorial: 赤陶红单色雷达
+            areaStyle: { color: 'rgba(180,83,9,0.15)' },
+            lineStyle: { color: '#B45309', width: 2 },
+            itemStyle: { color: '#92400E', borderWidth: 2 },
             symbol: 'circle',
             symbolSize: 6
           }]
@@ -716,18 +717,19 @@ function renderAspectRadar() {
           p: { color: '#94a3b8', fontSize: 9, fontWeight: 700 }
         }
       },
-      splitArea: { areaStyle: { color: ['rgba(168,85,247,0.03)', 'rgba(168,85,247,0.07)'] } },
-      splitLine: { lineStyle: { color: 'rgba(148,163,184,0.18)' } },
-      axisLine: { lineStyle: { color: 'rgba(148,163,184,0.22)' } }
+      splitArea: { areaStyle: { color: ['rgba(168,162,158,0.04)', 'rgba(168,162,158,0.08)'] } },
+      splitLine: { lineStyle: { color: 'rgba(168,162,158,0.18)' } },
+      axisLine: { lineStyle: { color: 'rgba(168,162,158,0.22)' } }
     },
     series: [{
       type: 'radar',
       name: 'ABSA 极性',
       data: [{
         value: aspects.map(a => polarityScore(a.sentiment)),
-        areaStyle: { color: 'rgba(168,85,247,0.18)' },
-        lineStyle: { color: '#a855f7', width: 2 },
-        itemStyle: { color: '#9333ea', borderWidth: 2 },
+        // editorial: 赤陶红单色雷达，不再用紫
+        areaStyle: { color: 'rgba(180,83,9,0.15)' },
+        lineStyle: { color: '#B45309', width: 2 },
+        itemStyle: { color: '#92400E', borderWidth: 2 },
         symbol: 'circle',
         symbolSize: 7
       }]
