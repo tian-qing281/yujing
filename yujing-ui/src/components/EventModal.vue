@@ -706,9 +706,9 @@ const renderCharts = () => {
         data: timeline.map((d) => d.count),
         barWidth: timeline.length <= 3 ? 32 : "38%",
         itemStyle: {
-          // 近墨石板实色柱，不再用紫渐变
-          color: "#0F172A",
-          borderRadius: [4, 4, 0, 0],
+          // 柱状采用暖灰，不与赤陶红折线争主，避免全黑压嘴
+          color: "#78716C",
+          borderRadius: [3, 3, 0, 0],
         },
       },
       {
@@ -732,8 +732,18 @@ const renderCharts = () => {
     ],
   });
 
-  // 2. 平台分布 — 水平条形图（editorial 低饱和调色板）
-  const platformColors = ["#0F172A", "#B45309", "#1E40AF", "#15803D", "#57534E", "#A8A29E", "#D97706", "#7F1D1D"];
+  // 2. 平台分布 — 水平条形图（editorial 单色梯度：赤陶红，按中、低、冷三个梯度，极端低调项转暖灰）
+  // 参考 NYT/FT/Bloomberg：单主色 + 透明度表达量级，不用多彩染色
+  const platformColors = [
+    "#B45309",  // 1位：赤陶红满色
+    "#C2864A",  // 2位：赤陶红中深
+    "#D6A87A",  // 3位：赤陶红中浅
+    "#E5C9A8",  // 4位：赤陶红浅
+    "#A8A29E",  // 5位：暖灰
+    "#C7C2BB",  // 6位：暖灰浅
+    "#D4CFC7",  // 7位
+    "#DDD8D0",  // 8位
+  ];
   platformChart?.setOption({
     tooltip: {
       trigger: "axis",
