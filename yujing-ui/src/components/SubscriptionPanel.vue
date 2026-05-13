@@ -519,14 +519,16 @@ onMounted(loadAll);
 /* === Hero 标题 === */
 .sub-hero {
   position: relative;
-  border-radius: 22px;
+  border-radius: 4px;
   overflow: hidden;
-  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 55%, #ec4899 100%);
-  box-shadow: 0 18px 40px -18px rgba(99, 102, 241, 0.55);
-  padding: 22px 26px;
-  color: #fff;
+  /* editorial: 去紫蓝粉糖果渐变，改为近墨石板刯头黑底 */
+  background: var(--color-brand);
+  box-shadow: 0 8px 24px -16px rgba(15, 23, 42, 0.45);
+  padding: 24px 28px;
+  color: #FAFAF7;
   min-height: 132px;
   flex-shrink: 0;
+  border: 1px solid var(--color-border);
 }
 
 .sub-hero-bg {
@@ -534,9 +536,10 @@ onMounted(loadAll);
   inset: 0;
   pointer-events: none;
   z-index: 0;
+  /* 保留轻微纸质质感，但不再是霒虹光 */
   background:
-    radial-gradient(circle at 10% 20%, rgba(255, 255, 255, 0.18), transparent 40%),
-    radial-gradient(circle at 90% 80%, rgba(255, 255, 255, 0.12), transparent 50%);
+    radial-gradient(circle at 12% 18%, rgba(180, 83, 9, 0.10), transparent 45%),
+    radial-gradient(circle at 88% 82%, rgba(255, 255, 255, 0.04), transparent 55%);
 }
 
 .sub-hero-content {
@@ -556,29 +559,33 @@ onMounted(loadAll);
   align-items: center;
   gap: 6px;
   padding: 4px 12px;
-  background: rgba(255, 255, 255, 0.22);
-  color: #fff;
-  font-size: 12px;
+  /* editorial: 赤陶红 kicker，取代亮白玻璃 */
+  background: rgba(180, 83, 9, 0.18);
+  color: var(--color-accent);
+  font-size: 11px;
   font-weight: 700;
-  border-radius: 999px;
-  backdrop-filter: blur(8px);
+  border-radius: 4px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
 }
 
 .sub-title {
   display: block !important;
-  font-size: 26px !important;
-  font-weight: 900 !important;
-  margin: 10px 0 6px !important;
-  letter-spacing: 0.5px;
-  color: #ffffff !important;
-  line-height: 1.3 !important;
-  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  font-size: 28px !important;
+  font-weight: 800 !important;
+  margin: 12px 0 6px !important;
+  letter-spacing: 0.02em;
+  /* editorial: 衰宋体作标题 */
+  font-family: var(--font-display, "Noto Serif SC", serif);
+  color: #FAFAF7 !important;
+  line-height: 1.25 !important;
+  text-shadow: none;
 }
 
 .sub-sub {
   display: block !important;
   font-size: 13px !important;
-  color: rgba(255, 255, 255, 0.92) !important;
+  color: rgba(250, 250, 247, 0.78) !important;
   line-height: 1.6 !important;
   margin: 0 !important;
   max-width: 540px;
@@ -589,15 +596,15 @@ onMounted(loadAll);
   align-items: center;
   gap: 6px;
   padding: 9px 18px;
-  background: rgba(255, 255, 255, 0.95);
-  color: #6366f1;
+  background: rgba(250, 250, 247, 0.92);
+  color: var(--color-brand);
   font-weight: 700;
   border: none;
-  border-radius: 12px;
+  border-radius: 4px;
   cursor: pointer;
   font-size: 13px;
   transition: all 0.18s ease;
-  box-shadow: 0 6px 20px -8px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 4px 14px -8px rgba(0, 0, 0, 0.4);
 }
 
 .sub-refresh-btn:hover:not(:disabled) {
@@ -669,8 +676,8 @@ onMounted(loadAll);
 
 .sub-select:focus,
 .sub-input:focus {
-  border-color: #6366f1;
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.18);
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px rgba(180, 83, 9, 0.10);
 }
 
 .sub-btn {
@@ -680,7 +687,7 @@ onMounted(loadAll);
   height: 36px;
   padding: 0 14px;
   border: none;
-  border-radius: 10px;
+  border-radius: 4px;
   font-size: 13px;
   font-weight: 700;
   color: #fff;
@@ -692,23 +699,25 @@ onMounted(loadAll);
 .sub-btn iconify-icon { font-size: 16px; }
 
 .sub-btn--primary {
-  background: linear-gradient(135deg, #6366f1, #8b5cf6);
-  box-shadow: 0 6px 16px -8px rgba(99, 102, 241, 0.6);
+  /* editorial: 去紫蓝渐变，近墨石板实色 */
+  background: var(--color-brand);
+  box-shadow: none;
 }
 
 .sub-btn--primary:hover:not(:disabled) {
+  background: #1E293B;
   transform: translateY(-1px);
-  box-shadow: 0 10px 22px -10px rgba(99, 102, 241, 0.7);
 }
 
 .sub-btn--danger {
-  background: linear-gradient(135deg, #ef4444, #f97316);
-  box-shadow: 0 6px 16px -8px rgba(239, 68, 68, 0.55);
+  /* editorial: 警示仍需红，一色深红 token critical */
+  background: #B91C1C;
+  box-shadow: none;
 }
 
 .sub-btn--danger:hover:not(:disabled) {
+  background: #991B1B;
   transform: translateY(-1px);
-  box-shadow: 0 10px 22px -10px rgba(239, 68, 68, 0.65);
 }
 
 .sub-btn:disabled {
@@ -733,27 +742,31 @@ onMounted(loadAll);
   align-items: center;
   gap: 8px;
   padding: 6px 10px;
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.08), rgba(139, 92, 246, 0.08));
-  border-radius: 12px;
+  /* editorial: 去紫调渐变，米白底 + 赤陶红 kind chip */
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
   font-size: 13px;
 }
 
 .sub-chip--block {
-  background: linear-gradient(135deg, rgba(239, 68, 68, 0.08), rgba(248, 113, 113, 0.08));
+  background: rgba(185, 28, 28, 0.05);
+  border-color: rgba(185, 28, 28, 0.18);
 }
 
 .sub-chip-kind {
-  font-size: 11px;
-  font-weight: 700;
-  color: #6366f1;
-  background: #eef2ff;
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--color-accent);
+  background: rgba(180, 83, 9, 0.10);
   padding: 2px 6px;
-  border-radius: 6px;
+  border-radius: 3px;
+  letter-spacing: 0.06em;
 }
 
 .sub-chip--block .sub-chip-kind {
-  color: #ef4444;
-  background: #fee2e2;
+  color: #B91C1C;
+  background: rgba(185, 28, 28, 0.10);
 }
 
 .sub-chip-value {
@@ -807,29 +820,31 @@ onMounted(loadAll);
 }
 
 .sub-tag strong {
-  color: #6366f1;
+  /* editorial: 赤陶红重音 */
+  color: var(--color-accent);
   font-weight: 800;
 }
 
 .sub-tag--accent {
-  background: #fef3c7;
-  color: #92400e;
+  background: rgba(217, 119, 6, 0.08);
+  color: #92400E;
 }
 
 .sub-tag--accent strong {
-  color: #f59e0b;
+  color: #D97706;
 }
 
 /* V2：embedding 推断 tag，与 literal tag 视觉区分 */
 .sub-tag--inferred {
-  background: linear-gradient(135deg, #cffafe 0%, #a5f3fc 100%);
-  color: #0e7490;
-  border: 1px solid #67e8f9;
+  /* editorial: 青青渐变 → 衰宋金色虚线边，用文本差异表达“推断而非命中” */
+  background: var(--color-surface-2);
+  color: var(--color-text-2);
+  border: 1px dashed var(--color-accent);
   cursor: help;
 }
 
 .sub-tag--inferred strong {
-  color: #06b6d4;
+  color: var(--color-accent);
 }
 
 .sub-profile-hint {
@@ -876,15 +891,18 @@ onMounted(loadAll);
 }
 
 .sub-rec-item:hover {
-  border-color: #6366f1;
-  box-shadow: 0 8px 24px rgba(99, 102, 241, 0.12);
+  /* editorial: 赤陶红边 + 暑色阳光 shadow */
+  border-color: var(--color-accent);
+  box-shadow: 0 4px 14px rgba(180, 83, 9, 0.10);
   transform: translateY(-1px);
 }
 
 .sub-rec-rank {
   font-size: 18px;
   font-weight: 800;
-  color: #6366f1;
+  /* editorial: 衰宋体赤陶红排名 */
+  font-family: var(--font-display, "Noto Serif SC", serif);
+  color: var(--color-accent);
   min-width: 28px;
 }
 
@@ -913,20 +931,23 @@ onMounted(loadAll);
   align-items: center;
   gap: 3px;
   padding: 2px 8px;
-  background: linear-gradient(135deg, #f97316, #f59e0b);
-  color: #fff;
-  border-radius: 999px;
+  /* editorial: 黑底金色字作评分徽章 */
+  background: var(--color-brand);
+  color: var(--color-accent);
+  border-radius: 3px;
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 800;
+  letter-spacing: 0.04em;
 }
 
 .sub-rec-reason {
   padding: 2px 8px;
-  background: #eef2ff;
-  color: #6366f1;
-  border-radius: 999px;
+  background: var(--color-surface-2);
+  color: var(--color-accent);
+  border: 1px solid var(--color-border);
+  border-radius: 3px;
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 700;
 }
 
 /* A1: 结构化推荐解释徽章 6 色，统一基础样式 */
@@ -954,39 +975,39 @@ onMounted(loadAll);
   font-weight: 800;
   font-variant-numeric: tabular-nums;
 }
-/* 6 色配色：每色对应一种打分维度 */
+/* 6 色配色：每色对应一种打分维度 —— editorial: 统一米白底，仅用文字色 + 左边色区分语义 */
 .sub-rec-chip--keyword {
-  background: #dbeafe; color: #1d4ed8; border-color: #93c5fd;
+  background: var(--color-surface-2); color: #1E40AF; border-color: rgba(30, 64, 175, 0.30);
 }
 .sub-rec-chip--sub_source {
-  background: #ede9fe; color: #6d28d9; border-color: #c4b5fd;
+  background: var(--color-surface-2); color: var(--color-brand); border-color: rgba(15, 23, 42, 0.30);
 }
 .sub-rec-chip--profile_source {
-  background: #fef3c7; color: #92400e; border-color: #fcd34d;
+  background: var(--color-surface-2); color: #92400E; border-color: rgba(180, 83, 9, 0.30);
 }
 .sub-rec-chip--profile_tag {
-  background: #fce7f3; color: #be185d; border-color: #f9a8d4;
+  background: var(--color-surface-2); color: #B91C1C; border-color: rgba(185, 28, 28, 0.25);
 }
 .sub-rec-chip--semantic {
-  background: linear-gradient(135deg, #cffafe 0%, #a5f3fc 100%);
-  color: #0e7490; border-color: #67e8f9;
+  background: var(--color-surface-2);
+  color: #15803D; border-color: rgba(21, 128, 61, 0.30);
 }
 .sub-rec-chip--fallback {
-  background: #f1f5f9; color: #64748b; border-color: #cbd5e1;
+  background: var(--color-surface-2); color: var(--color-text-3); border-color: var(--color-border);
 }
 
-/* S1.2：语义命中徽章（与字面命中区分，使用青绿色调） */
+/* S1.2：语义命中徽章（与字面命中区分，使用暑绿/赤陶红调）*/
 .sub-rec-semantic {
   display: inline-flex;
   align-items: center;
   gap: 2px;
   padding: 2px 8px;
-  background: linear-gradient(135deg, #cffafe 0%, #a5f3fc 100%);
-  color: #0e7490;
-  border-radius: 999px;
+  background: var(--color-surface-2);
+  color: var(--color-accent);
+  border-radius: 3px;
   font-size: 11px;
-  font-weight: 600;
-  border: 1px solid #67e8f9;
+  font-weight: 700;
+  border: 1px solid var(--color-accent);
   cursor: help;
 }
 .sub-rec-semantic > iconify-icon {
@@ -1004,7 +1025,7 @@ onMounted(loadAll);
   font-size: 20px;
   opacity: 0.85;
 }
-.sub-rec-item:hover .sub-rec-arrow { color: #6366f1; opacity: 1; }
+.sub-rec-item:hover .sub-rec-arrow { color: var(--color-accent); opacity: 1; }
 
 /* === 分页器与兜底开关 === */
 .sub-fallback-toggle {
@@ -1017,7 +1038,7 @@ onMounted(loadAll);
   cursor: pointer;
   user-select: none;
 }
-.sub-fallback-toggle input { accent-color: #6366f1; }
+.sub-fallback-toggle input { accent-color: var(--color-accent); }
 
 .sub-pager {
   display: flex;
@@ -1032,19 +1053,19 @@ onMounted(loadAll);
   font-weight: 700;
   font-family: "Fira Code", monospace;
 }
-/* 翻页按钮：原 .sub-btn 默认无 background 在白底几乎隐形，这里显式给一组紫色渐变 */
+/* 翻页按钮：editorial 近墨石板实色 */
 .sub-pager .sub-btn {
-  background: linear-gradient(135deg, #6366f1, #8b5cf6);
-  color: #fff;
-  box-shadow: 0 4px 12px -6px rgba(99, 102, 241, 0.6);
+  background: var(--color-brand);
+  color: #FAFAF7;
+  box-shadow: none;
 }
 .sub-pager .sub-btn:hover:not([disabled]) {
+  background: #1E293B;
   transform: translateY(-1px);
-  box-shadow: 0 8px 18px -8px rgba(99, 102, 241, 0.7);
 }
 .sub-pager .sub-btn[disabled] {
-  background: #e2e8f0;
-  color: #94a3b8;
+  background: var(--color-surface-2);
+  color: var(--color-text-3);
   box-shadow: none;
   opacity: 1;
   cursor: not-allowed;
@@ -1121,36 +1142,38 @@ onMounted(loadAll);
   background: #fed7aa;
 }
 
-/* A1: 权重调节面板 */
+/* A1: 权重调节面板 — editorial 赤陶红 chip */
 .sub-weights-toggle {
   display: inline-flex;
   align-items: center;
   gap: 4px;
   margin-left: 8px;
   padding: 3px 10px;
-  border: 1px solid #c7d2fe;
-  background: #eef2ff;
-  color: #4338ca;
-  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-2);
+  color: var(--color-accent);
+  border-radius: 3px;
   font-size: 11px;
   font-weight: 700;
   cursor: pointer;
   transition: all 0.18s ease;
 }
 .sub-weights-toggle:hover {
-  background: #e0e7ff;
+  background: rgba(180, 83, 9, 0.06);
+  border-color: var(--color-accent);
 }
 .sub-weights-toggle.is-open {
-  background: #4338ca;
-  color: #fff;
-  border-color: #4338ca;
+  background: var(--color-accent);
+  color: #FAFAF7;
+  border-color: var(--color-accent);
 }
 .sub-weights-panel {
   margin: 12px 0 4px;
   padding: 14px 18px;
-  background: linear-gradient(135deg, rgba(238, 242, 255, 0.85), rgba(245, 243, 255, 0.7));
-  border: 1px solid rgba(199, 210, 254, 0.7);
-  border-radius: 14px;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-accent);
+  border-radius: 4px;
 }
 .sub-weights-grid {
   display: grid;
@@ -1171,7 +1194,7 @@ onMounted(loadAll);
 }
 .sub-weight-row input[type="range"] {
   flex: 1;
-  accent-color: #6366f1;
+  accent-color: var(--color-accent);
   cursor: pointer;
 }
 .sub-weight-value {
@@ -1181,7 +1204,7 @@ onMounted(loadAll);
   font-family: "Fira Code", monospace;
   font-size: 12px;
   font-weight: 700;
-  color: #4338ca;
+  color: var(--color-accent);
 }
 .sub-weights-foot {
   margin-top: 10px;
@@ -1197,16 +1220,17 @@ onMounted(loadAll);
 .sub-weights-reset {
   padding: 3px 12px;
   background: transparent;
-  border: 1px solid #c7d2fe;
-  color: #4338ca;
-  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  color: var(--color-accent);
+  border-radius: 3px;
   font-size: 11px;
   font-weight: 700;
   cursor: pointer;
   transition: all 0.18s ease;
 }
 .sub-weights-reset:hover {
-  background: #eef2ff;
+  background: rgba(180, 83, 9, 0.06);
+  border-color: var(--color-accent);
 }
 .slide-fade-enter-active,
 .slide-fade-leave-active {
