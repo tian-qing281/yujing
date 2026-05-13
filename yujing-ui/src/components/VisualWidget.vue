@@ -147,8 +147,8 @@ watch(
   border-top: 1px solid rgba(0,0,0,0.03);
 }
 .rank-badge {
-  background: #3b82f6; color: #fff; border-radius: 4px;
-  padding: 2px 6px; font-size: 9px; font-weight: 900; line-height: 1;
+  background: var(--color-text); color: var(--color-surface); border-radius: 2px;
+  padding: 2px 6px; font-size: 9px; font-weight: 600; line-height: 1;
 }
 .title-preview { font-size: 13px; font-weight: 700; color: #1e293b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 </style>

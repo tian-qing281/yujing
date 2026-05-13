@@ -178,8 +178,8 @@ watch(() => props.articles, () => {
 
 .pulse-icon {
   font-size: 32px;
-  color: #2563eb;
-  background: #eff6ff;
+  color: var(--color-accent);
+  background: var(--color-surface-2);
   padding: 8px;
   border-radius: 12px;
   animation: pulse-beat 2s infinite ease-in-out;
@@ -261,7 +261,7 @@ watch(() => props.articles, () => {
 
 .pulse-keyword:hover {
   background: #e2e8f0;
-  color: #2563eb;
+  color: var(--color-accent);
   transform: translateY(-2px);
 }
 

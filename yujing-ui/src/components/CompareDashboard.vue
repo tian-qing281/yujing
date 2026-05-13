@@ -308,11 +308,11 @@ onBeforeUnmount(() => {
   margin: 0;
   letter-spacing: 0.2px;
 }
-.cmp-head em { font-style: normal; color: #7c3aed; margin: 0 6px; font-weight: 700; }
+.cmp-head em { font-style: normal; color: var(--color-text); margin: 0 6px; font-weight: 700; }
 .cmp-head-icon {
   width: 28px; height: 28px; border-radius: 8px;
   display: inline-flex; align-items: center; justify-content: center;
-  background: linear-gradient(135deg, #3b82f6, #a855f7); color: #fff; font-size: 18px;
+  background: linear-gradient(135deg, var(--color-accent), var(--color-text)); color: #fff; font-size: 18px;
 }
 
 .cmp-grid {
@@ -351,7 +351,7 @@ onBeforeUnmount(() => {
 }
 .cmp-badge {
   font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 999px;
-  background: linear-gradient(135deg, #3b82f6, #a855f7); color: #fff;
+  background: linear-gradient(135deg, var(--color-accent), var(--color-text)); color: #fff;
 }
 
 .cmp-metrics {
@@ -406,9 +406,9 @@ onBeforeUnmount(() => {
   /* li 本身也是 flex 容器，min-width:0 让内部 flex item 能够按 ellipsis 收缩。 */
   min-width: 0;
 }
-.cmp-reps li:hover { background: #eff6ff; }
+.cmp-reps li:hover { background: var(--color-surface-2); }
 .cmp-rep-src {
-  flex-shrink: 0; font-weight: 700; color: #3b82f6; font-size: 11px;
+  flex-shrink: 0; font-weight: 700; color: var(--color-accent); font-size: 11px;
 }
 /* flex:1 + min-width:0 是 ellipsis 在 flex 容器里生效的经典组合缺一不可。 */
 .cmp-rep-title {

@@ -337,3 +337,64 @@ Tailwind 默认调色板（`blue-500`、`emerald-500` 等）是为通用 SaaS �
 
 > 文档版本 v1.0 · 最后更新：2026-05-13
 > 对应 commit 区间：`7e2cc40` → `19b9bd6`（共 12 次提交）
+
+- 滚动加载、虚拟列表（数据量大时再考虑）
+- 移动端卡片布局适配
+
+### Batch G · 暗色模式（已放弃，本轮不做）
+
+**决策**：用户明确取消该批，editorial 单色风格在浅色模式下表达力已足够，且暗色模式与衬线杂志风格在视觉上存在冲突，需要重新设计 token 体系。后续若有强诉求再独立立项。
+
+### Batch H · 详情弹窗 editorial 化（已完成 - 三波清扫）
+
+| commit | 范围 | 说明 |
+|---|---|---|
+| `57b5623` | EventCard / VisualWidget 第一波 | 玻璃糖果卡 → editorial 单色卡，rank-badge 改方块字号 |
+| `ae3a267` | signal-row + TopicModal hover 第二波 | 信号行 token 化、话题悬停态去蓝紫 |
+| `5df5417` | TopicModal/AnalysisModal 残余清理 ~14 处 | "重新分析" 黑底锐角、"数据透视" tab 黑底主按钮、"访问网页原文" 暖灰边 + 赤陶红字 |
+
+### Batch H.1 · 全局糖果色全量清扫（本轮收尾，commit 待 push）
+
+**触发**：交付前用户提出"全局看一下还有没有没有更新的"，全局 grep 8 个常见糖果色码（`#3b82f6` `#2563eb` `#1d4ed8` `#1e40af` `#7c3aed` `#a855f7` `#eff6ff` `#bfdbfe`）发现 9 个文件 65 处残留。
+
+**清扫文件**：
+
+| 文件 | 改动 |
+|---|---|
+| `App.vue` | 11 处 token 化（chip / banner / link） |
+| `components/AIConsultant.vue` | ~14 处（session-create / msg-text / composer-label / alerts-header / ref-article 等） |
+| `components/CompareDashboard.vue` | cmp-head em / avatar 渐变 / cmp-reps hover |
+| `components/TopicCard.vue` | trace-dot 装饰色 + 内部链接色 |
+| `components/AgentTrace.vue` | 全部蓝紫 → token，含 `.thinking-stream` 紫色块 |
+| `components/SourcePulse.vue` | 3 处链接 / hover 背景 |
+| `components/VisualWidget.vue` | rank-badge 方块化（4px → 2px、900 → 600、蓝底 → text 黑） |
+
+**有意保留的语义色**（不可机械替换）：
+
+- `style.css` token 定义本身（`--color-data: #1E40AF` / `--color-info: #2563EB`）
+- `VisualWidget.vue` line 43 `colors[]` 图表数据色数组（8 色梯度，专用于 ECharts 系列色）
+- `EventModal.vue` "关注" `#1E40AF`（语义图例固定色，与红警/绿正/黄惊讶并列）
+- `SubscriptionPanel.vue` "关注" chip `#1E40AF`（同上）
+- `AnalysisModal.vue` `EMO_COLORS` 8 色情感雷达（红怒/紫厌/灰悲/绿喜/蓝注/黄惊/粉疑/灰中）
+
+---
+
+## 七、本轮交付状态
+
+**本轮目标**：editorial 单色 + 衬线宋体 + 6px 圆角的统一视觉语言。
+
+**完成度**：✅ 全部交付
+
+- ✅ Batch A–E：色板、字体、按钮、表单、卡片基础 token 体系
+- ✅ Batch F + F.1：榜单页杂志网格 + lead 头条
+- ✅ Batch H + H.1：详情弹窗 + 全局清扫，无遗漏糖果蓝
+- ✅ 8 榜单页 + 全景事件 + AI 助手 + 我的订阅 + 弹窗 全部 editorial 化
+- ✅ Lint 0 错误，所有页面浏览器走查通过
+
+**下一轮可选方向**（需用户决策）：
+
+1. **数字滚动动画**：NumberFlow 替代静态数字（订阅匹配分、热搜计数等）
+2. **ECharts 入场动画**：图表系列分批 fade-in，提升首屏感知
+3. **Batch I · 主题切换器**：浅色/深色 / 高对比 三档（重新评估暗模式）
+4. **Batch J · 排版微调**：行高 / 字距 / 段距 第二轮精修
+5. **Batch K · 移动端**：响应式布局、触摸优化、卡片栈

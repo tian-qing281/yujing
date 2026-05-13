@@ -126,7 +126,7 @@ const preloadChartsEngine = () => {
       if (!wasReady) {
         const now = new Date().toLocaleTimeString("zh-CN", { hour12: false });
         statusMsg.value = `[${now}] [预热] 核心可视化引擎已就绪`;
-        console.log(`%c [预热] ECharts Engine Preloaded at ${now} `, 'background: #2563eb; color: #fff');
+        console.log(`%c [预热] ECharts Engine Preloaded at ${now} `, 'background: var(--color-accent); color: #fff');
       }
     } catch (e) {
       console.error("Charts preheat failed:", e);
@@ -1615,7 +1615,7 @@ html, body { margin: 0 !important; padding: 0 !important; width: 100% !important
 :root {
   --bg-main: var(--hs-bg, #f5f8fc);
   --bg-sidebar: #09111f;
-  --accent: var(--hs-primary-2, #3b82f6);
+  --accent: var(--hs-primary-2, var(--color-accent));
   --text-main: var(--hs-ink, #07111f);
 }
 
@@ -1648,7 +1648,7 @@ body { font-family: "Fira Sans", "PingFang SC", "Microsoft YaHei", sans-serif; b
   left: 0;
   width: 0%;
   height: 2px;
-  background: linear-gradient(90deg, #3b82f6 0%, #60a5fa 100%);
+  background: linear-gradient(90deg, var(--color-accent) 0%, #60a5fa 100%);
   z-index: 2000;
   transition: width 0.4s cubic-bezier(0.1, 0, 0, 1), opacity 0.3s ease;
   opacity: 0;
@@ -1818,7 +1818,7 @@ body { font-family: "Fira Sans", "PingFang SC", "Microsoft YaHei", sans-serif; b
 }
 
 .eh-search-bar-group:focus-within {
-  border-color: #3b82f6;
+  border-color: var(--color-accent);
   box-shadow: 0 10px 28px rgba(37, 99, 235, 0.12);
 }
 
@@ -2225,8 +2225,8 @@ body { font-family: "Fira Sans", "PingFang SC", "Microsoft YaHei", sans-serif; b
 }
 
 .section-link:not(:disabled):hover {
-  background: #eff6ff;
-  color: #1d4ed8 !important;
+  background: var(--color-surface-2);
+  color: var(--color-accent) !important;
 }
 
 .section-link:disabled {
@@ -2277,7 +2277,7 @@ body { font-family: "Fira Sans", "PingFang SC", "Microsoft YaHei", sans-serif; b
 }
 
 .toolbar-kicker {
-  color: #2563eb;
+  color: var(--color-accent);
   font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.08em;
@@ -2368,13 +2368,13 @@ body { font-family: "Fira Sans", "PingFang SC", "Microsoft YaHei", sans-serif; b
 
 .toolbar-choice--idle:hover {
   border-color: rgba(96, 165, 250, 0.42);
-  background: #eff6ff;
-  color: #1d4ed8;
+  background: var(--color-surface-2);
+  color: var(--color-accent);
 }
 
 .toolbar-choice--active {
-  background: linear-gradient(135deg, #2563eb 0%, #3b82f6 100%);
-  border-color: #2563eb;
+  background: linear-gradient(135deg, var(--color-accent) 0%, var(--color-accent) 100%);
+  border-color: var(--color-accent);
   color: #ffffff;
   box-shadow: 0 12px 26px rgba(37, 99, 235, 0.22);
 }
@@ -2484,12 +2484,12 @@ body { font-family: "Fira Sans", "PingFang SC", "Microsoft YaHei", sans-serif; b
   background: rgba(255, 255, 255, 0.92);
   border: 1px solid rgba(59, 130, 246, 0.12);
   box-shadow: 0 16px 32px rgba(15, 23, 42, 0.06), 0 0 15px rgba(59, 130, 246, 0.05);
-  color: #1e40af;
+  color: var(--color-accent);
   font-size: 13px;
   font-weight: 800;
   animation: panel-rise 0.3s ease-out;
 }
-.event-loading-state .loading { color: #3b82f6; }
+.event-loading-state .loading { color: var(--color-accent); }
 
 .loading-line {
   height: 10px;
@@ -2498,7 +2498,7 @@ body { font-family: "Fira Sans", "PingFang SC", "Microsoft YaHei", sans-serif; b
 }
 
 .event-empty-kicker {
-  color: #2563eb;
+  color: var(--color-accent);
   font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.08em;
@@ -2551,7 +2551,7 @@ body { font-family: "Fira Sans", "PingFang SC", "Microsoft YaHei", sans-serif; b
 .eh-page-btn:hover:not(:disabled) {
   border-color: rgba(59, 130, 246, 0.4);
   background: rgba(239, 246, 255, 0.9);
-  color: #1e40af;
+  color: var(--color-accent);
   box-shadow: 0 2px 8px rgba(59, 130, 246, 0.1);
 }
 
@@ -2561,8 +2561,8 @@ body { font-family: "Fira Sans", "PingFang SC", "Microsoft YaHei", sans-serif; b
 }
 
 .eh-page-btn.eh-page-active {
-  border-color: #1e40af;
-  background: linear-gradient(135deg, #1e40af 0%, #2563eb 100%);
+  border-color: var(--color-accent);
+  background: linear-gradient(135deg, var(--color-accent) 0%, var(--color-accent) 100%);
   color: #fff;
   box-shadow: 0 4px 14px rgba(30, 64, 175, 0.3);
   font-weight: 800;
@@ -2587,7 +2587,7 @@ body { font-family: "Fira Sans", "PingFang SC", "Microsoft YaHei", sans-serif; b
   display: inline-flex;
   align-items: center;
   margin-left: 8px;
-  color: #3b82f6;
+  color: var(--color-accent);
 }
 
 .event-grid.is-paginating {

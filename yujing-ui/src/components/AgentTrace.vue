@@ -456,7 +456,7 @@ watch(
 }
 .empty-icon {
   font-size: 1.4rem;
-  color: #2563eb;
+  color: var(--color-accent);
 }
 
 .trace-timeline {
@@ -516,7 +516,7 @@ watch(
   border-radius: 50%;
   background: #fff;
   border: 2px solid rgba(37, 99, 235, 0.4);
-  color: #2563eb;
+  color: var(--color-accent);
   font-size: 1.1rem;
   flex-shrink: 0;
   z-index: 1;
@@ -533,8 +533,8 @@ watch(
   animation: marker-rotate 1.2s linear infinite !important;
 }
 .trace-step--running .step-marker {
-  border-color: #2563eb;
-  color: #2563eb;
+  border-color: var(--color-accent);
+  color: var(--color-accent);
 }
 .trace-step--done .step-marker {
   border-color: #16a34a;
@@ -587,14 +587,14 @@ watch(
   border-radius: 999px;
 }
 .step-status--running {
-  color: #2563eb;
+  color: var(--color-accent);
   background: rgba(37, 99, 235, 0.12);
 }
 .status-dot {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #2563eb;
+  background: var(--color-accent);
   animation: pulse 1.2s ease-in-out infinite;
 }
 .step-status--done {
@@ -738,8 +738,8 @@ watch(
 
 .thinking-stream {
   font-size: 0.85rem;
-  color: #7c3aed;
-  background: rgba(147, 51, 234, 0.06);
+  color: var(--color-text-2);
+  background: var(--color-surface-2);
   border-radius: 0.4rem;
   padding: 0.5rem 0.65rem;
   line-height: 1.55;

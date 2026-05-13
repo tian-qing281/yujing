@@ -123,7 +123,7 @@ const highlight = (value) => {
 }
 
 .topic-kicker {
-  color: #2563eb;
+  color: var(--color-accent);
   font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.08em;
@@ -153,8 +153,8 @@ const highlight = (value) => {
 }
 
 .topic-confidence.emerging {
-  background: #eff6ff;
-  color: #1d4ed8;
+  background: var(--color-surface-2);
+  color: var(--color-accent);
 }
 
 .topic-confidence.stable {
@@ -207,7 +207,7 @@ const highlight = (value) => {
   width: 8px;
   height: 8px;
   border-radius: 999px;
-  background: #93c5fd;
+  background: var(--color-accent);
 }
 
 .topic-reasons {
@@ -239,8 +239,8 @@ const highlight = (value) => {
   align-items: center;
   padding: 7px 11px;
   border-radius: 999px;
-  background: #eff6ff;
-  color: #1d4ed8;
+  background: var(--color-surface-2);
+  color: var(--color-accent);
   font-size: 12px;
   font-weight: 700;
 }
