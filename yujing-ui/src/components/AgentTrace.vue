@@ -770,58 +770,64 @@ watch(
 }
 
 /* U1: 折叠摘要条（trace 完成后默认展示） */
+/* Batch C: 去原绿+蓝渐变（AI 味），改为中性次级面 + 暖灰描边，符合编辑感主张 */
 .trace-collapsed-bar {
   width: 100%;
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 12px 16px;
-  background: linear-gradient(135deg, rgba(34, 197, 94, 0.06), rgba(59, 130, 246, 0.06));
-  border: 1px solid rgba(34, 197, 94, 0.25);
-  border-radius: 10px;
-  font-size: 13px;
-  color: #1f2937;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  color: var(--color-text);
   cursor: pointer;
-  transition: background 0.2s, border-color 0.2s, transform 0.05s;
+  transition: background var(--duration-base) var(--ease), border-color var(--duration-base) var(--ease);
   text-align: left;
 }
 .trace-collapsed-bar:hover {
-  background: linear-gradient(135deg, rgba(34, 197, 94, 0.12), rgba(59, 130, 246, 0.12));
-  border-color: rgba(34, 197, 94, 0.45);
+  background: var(--color-surface);
+  border-color: var(--color-text-3);
+}
+.trace-collapsed-bar:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
 }
 .trace-collapsed-bar:active {
-  transform: scale(0.998);
+  transform: none;
 }
 .trace-collapsed-icon {
   font-size: 18px;
-  color: #22c55e;
+  color: var(--color-success);
   flex-shrink: 0;
 }
 .trace-collapsed-label {
-  font-weight: 600;
-  color: #15803d;
+  font-weight: 500;
+  color: var(--color-text);
 }
 .trace-collapsed-tools {
-  color: #475569;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 12px;
+  color: var(--color-text-2);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   max-width: 320px;
 }
 .trace-collapsed-time {
-  color: #64748b;
-  font-size: 12px;
+  color: var(--color-text-3);
+  font-size: var(--text-xs);
   flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
 }
 .trace-collapsed-expand {
   margin-left: auto;
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  color: #3b82f6;
-  font-size: 12px;
+  color: var(--color-data);
+  font-size: var(--text-xs);
   font-weight: 500;
   flex-shrink: 0;
 }
@@ -834,27 +840,30 @@ watch(
   margin-top: 12px;
   padding: 6px 12px;
   background: transparent;
-  border: 1px dashed rgba(0, 0, 0, 0.15);
-  border-radius: 6px;
-  font-size: 12px;
-  color: #64748b;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: var(--text-xs);
+  color: var(--color-text-2);
   cursor: pointer;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  transition: background var(--duration-base) var(--ease), color var(--duration-base) var(--ease), border-color var(--duration-base) var(--ease);
 }
 .trace-collapse-action:hover {
-  background: rgba(59, 130, 246, 0.06);
-  color: #3b82f6;
-  border-color: rgba(59, 130, 246, 0.3);
-  border-style: solid;
+  background: var(--color-surface-2);
+  color: var(--color-text);
+  border-color: var(--color-text-3);
+}
+.trace-collapse-action:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
 }
 
 :global([data-theme="dark"]) .trace-collapsed-bar {
-  background: linear-gradient(135deg, rgba(34, 197, 94, 0.12), rgba(59, 130, 246, 0.12));
-  border-color: rgba(34, 197, 94, 0.35);
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.12);
   color: #e5e7eb;
 }
 :global([data-theme="dark"]) .trace-collapsed-label {
-  color: #4ade80;
+  color: #e5e7eb;
 }
 :global([data-theme="dark"]) .trace-collapsed-tools {
   color: #cbd5e1;

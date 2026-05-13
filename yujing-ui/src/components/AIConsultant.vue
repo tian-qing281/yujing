@@ -1769,74 +1769,83 @@ onUnmounted(() => {
   margin-left: 0.2rem;
 }
 
+/* Batch D: 最终回答卡 = AI 助手页的 payoff，按编辑感主张重写：
+   去原绿+蓝渐变与紫色 blockquote → 白底 + 暖灰描边 + 赤陶红 left border + 衬线小标题 */
 .agent-final-card {
-  margin-top: 0.65rem;
-  padding: 0.85rem 1rem;
-  background: linear-gradient(135deg, rgba(34, 197, 94, 0.06), rgba(59, 130, 246, 0.05));
-  border: 1px solid rgba(34, 197, 94, 0.3);
-  border-radius: 10px;
+  margin-top: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-accent);
+  border-radius: var(--radius-lg);
   display: flex;
   flex-direction: column;
-  gap: 0.45rem;
+  gap: var(--space-2);
 }
 .agent-final-head {
   display: flex;
   align-items: center;
-  gap: 0.4rem;
-  color: #15803d;
-  font-size: 0.82rem;
+  gap: var(--space-2);
+  color: var(--color-text);
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: var(--text-md);
+  letter-spacing: 0.01em;
 }
+.agent-final-head iconify-icon { color: var(--color-accent); }
 .agent-final-body {
-  color: #1e293b;
-  font-size: 0.92rem;
-  line-height: 1.65;
+  color: var(--color-text);
+  font-size: var(--text-base);
+  line-height: 1.75;
 }
-.agent-final-body :deep(h3) { margin: 0.55rem 0 0.25rem; font-size: 1.02rem; }
-.agent-final-body :deep(h4) { margin: 0.45rem 0 0.2rem; font-size: 0.94rem; }
+.agent-final-body :deep(h3) { margin: 0.55rem 0 0.25rem; font-size: 1.02rem; font-family: var(--font-display); font-weight: 500; color: var(--color-text); }
+.agent-final-body :deep(h4) { margin: 0.45rem 0 0.2rem; font-size: 0.94rem; font-weight: 600; color: var(--color-text); }
 .agent-final-body :deep(p)  { margin: 0.2rem 0; }
 .agent-final-body :deep(ul) { margin: 0.3rem 0 0.3rem 1.2rem; padding: 0; }
 .agent-final-body :deep(ol) { margin: 0.3rem 0 0.3rem 1.4rem; padding: 0; }
 .agent-final-body :deep(li) { list-style: disc; margin: 0.12rem 0; }
 .agent-final-body :deep(ol li) { list-style: decimal; }
-.agent-final-body :deep(strong) { color: #111827; }
+.agent-final-body :deep(strong) { color: var(--color-text); font-weight: 600; }
 .agent-final-body :deep(code) {
-  background: #f3f4f6; color: #be185d;
-  padding: 1px 6px; border-radius: 4px;
+  background: var(--color-surface-2); color: var(--color-accent);
+  padding: 1px 6px; border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
   font-size: 0.86em;
 }
 .agent-final-body :deep(pre) {
-  background: #0f172a; color: #e5e7eb;
-  padding: 0.6rem 0.8rem; border-radius: 8px;
+  background: var(--color-brand); color: var(--color-text-on-dark);
+  padding: 0.6rem 0.8rem; border-radius: var(--radius-md);
   overflow-x: auto; font-size: 0.85em; margin: 0.4rem 0;
+  font-family: var(--font-mono);
 }
 .agent-final-body :deep(pre code) {
   background: transparent; color: inherit; padding: 0;
 }
 .agent-final-body :deep(blockquote) {
   margin: 0.4rem 0; padding: 0.4rem 0.8rem;
-  border-left: 3px solid #c4b5fd;
-  background: #faf5ff; color: #4c1d95;
-  border-radius: 0 6px 6px 0;
+  border-left: 3px solid var(--color-border);
+  background: var(--color-surface-2); color: var(--color-text-2);
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
 }
 .agent-final-body :deep(hr) {
-  border: 0; border-top: 1px dashed #e5e7eb; margin: 0.6rem 0;
+  border: 0; border-top: 1px dashed var(--color-border); margin: 0.6rem 0;
 }
 /* GFM 表格：保持视觉一致的紧凑卡片样式 */
 .agent-final-body :deep(table) {
   border-collapse: collapse;
   margin: 0.5rem 0; width: 100%;
   font-size: 0.88rem;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px; overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md); overflow: hidden;
 }
-.agent-final-body :deep(thead) { background: #f3f4f6; }
+.agent-final-body :deep(thead) { background: var(--color-surface-2); }
 .agent-final-body :deep(th),
 .agent-final-body :deep(td) {
   padding: 0.4rem 0.7rem;
-  border-bottom: 1px solid #f1f5f9;
+  border-bottom: 1px solid var(--color-border-soft);
   text-align: left; vertical-align: top;
 }
-.agent-final-body :deep(th) { color: #111827; font-weight: 600; }
+.agent-final-body :deep(th) { color: var(--color-text); font-weight: 600; }
 .agent-final-body :deep(tbody tr:last-child td) { border-bottom: 0; }
 .agent-final-body :deep(tbody tr:hover) { background: #fafafa; }
 .agent-final-body :deep(.agent-ref) {
