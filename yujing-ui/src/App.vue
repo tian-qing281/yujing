@@ -1537,22 +1537,25 @@ onMounted(() => {
         />
 
         <div class="content-scroll">
-          <!-- editorial Batch F: 榜单页杂志条目布局
-               前 5 名走大卡（默认 major variant），第 6+ 名走紧凑行（row variant + ranking-rows 容器） -->
-          <TransitionGroup name="list" tag="div" class="article-grid">
+          <!-- editorial Batch F.1: 杂志网格布局
+               - 第 1 名：通栏头条卡（占 2 列）
+               - 第 2-5 名：副条卡（每张 1 列）
+               - 第 6+ 名：紧凑列表条目
+               - 移除 TransitionGroup 避免点击触发整列重渲染闪烁 -->
+          <div class="article-grid magazine-grid">
             <NewsCard
               v-for="(item, idx) in filteredArticles.slice(0, 5)"
               :key="item.id"
               :item="item"
               :index="idx"
-              variant="major"
+              :variant="idx === 0 ? 'lead' : 'major'"
               :hideSource="true"
               @click="openDetail(item)"
             />
-          </TransitionGroup>
+          </div>
           <div v-if="filteredArticles.length > 5" class="ranking-rows">
             <div class="ranking-rows-kicker">More headlines</div>
-            <TransitionGroup name="list" tag="div" class="ranking-rows-list">
+            <div class="ranking-rows-list">
               <NewsCard
                 v-for="(item, idx) in filteredArticles.slice(5)"
                 :key="item.id"
@@ -1562,7 +1565,7 @@ onMounted(() => {
                 :hideSource="true"
                 @click="openDetail(item)"
               />
-            </TransitionGroup>
+            </div>
           </div>
         </div>
         </div>
@@ -1672,6 +1675,26 @@ body { font-family: "Fira Sans", "PingFang SC", "Microsoft YaHei", sans-serif; b
 /* E15: 列宽下探到 320px，让 800px 主区也能两列；最大宽度放宽到 1800 以适配 2K/4K 屏 */
 .article-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 24px; max-width: 1800px; margin: 0 auto; align-content: start; }
 
+/* === Batch F.1: 杂志网格 - 头条 + 副条 === */
+/* 仅榜单页用 magazine-grid 类，前 5 名走 1 通栏 + 4 副条的 NYT 头版网格 */
+.magazine-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+
+/* 头条占 2 列 */
+.magazine-grid > .news-card--lead {
+  grid-column: 1 / -1;
+}
+
+/* 单列窄屏：移动设备才回退单列 */
+@media (max-width: 520px) {
+  .magazine-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* === Batch F: 榜单页紧凑列表（第 6+ 名）=== */
 .ranking-rows {
   max-width: 1800px;
@@ -1679,7 +1702,7 @@ body { font-family: "Fira Sans", "PingFang SC", "Microsoft YaHei", sans-serif; b
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-top: 3px solid var(--color-accent);
-  border-radius: 4px;
+  border-radius: 6px;
   overflow: hidden;
 }
 
@@ -2584,9 +2607,14 @@ body { font-family: "Fira Sans", "PingFang SC", "Microsoft YaHei", sans-serif; b
   }
 
   /* 单列断点：取消居中 max-width，让卡片占满主区，避免左右大块空白 */
-  .article-grid {
+  /* magazine-grid 不应用此规则：榜单页杂志网格保持 2 列 */
+  .article-grid:not(.magazine-grid) {
     grid-template-columns: 1fr;
     gap: 18px;
+    max-width: 100%;
+  }
+  .magazine-grid {
+    /* 中等屏（913px 这种侧栏占用后剩 600px）保持 2 列，让副条横排 */
     max-width: 100%;
   }
 

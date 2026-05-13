@@ -143,19 +143,19 @@ const searchReasons = computed(() =>
 
 <style scoped>
 .news-card {
-  /* editorial: 去右上蓝光晕，纯纸白底 + 1px hairline + 软 shadow */
+  /* editorial Batch F.1: 6px 圆角更柔，padding 略缩 */
   background: var(--color-surface);
-  border-radius: 4px;
-  padding: 28px;
+  border-radius: 6px;
+  padding: 22px 24px;
   display: flex;
   flex-direction: column;
   align-items: stretch;
   cursor: pointer;
   transition: 0.22s cubic-bezier(0.16, 1, 0.3, 1);
   border: 1px solid var(--color-border);
-  gap: 20px;
+  gap: 14px;
   position: relative;
-  min-height: 140px;
+  min-height: 0;
   min-width: 0;
   overflow: hidden;
   box-shadow: 0 1px 2px rgba(28, 25, 23, 0.04);
@@ -164,8 +164,8 @@ const searchReasons = computed(() =>
 }
 
 .news-card-body {
-  gap: 24px;
-  padding: 28px;
+  gap: 14px;
+  padding: 0;
 }
 
 .news-card::before {
@@ -181,9 +181,10 @@ const searchReasons = computed(() =>
 }
 
 .news-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(28, 25, 23, 0.08);
-  border-color: var(--color-accent);
+  /* editorial Batch F.1: hover 仅微抬升 + 边色加深，不再切换为强赤陶红 */
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(28, 25, 23, 0.06);
+  border-color: var(--color-text-3);
 }
 
 .news-card:hover::before {
@@ -334,6 +335,31 @@ const searchReasons = computed(() =>
     max-width: 100%;
     -webkit-line-clamp: 3;
   }
+}
+
+/* === Batch F.1: lead variant - 通栏头条 === */
+/* 第 1 名跨 2 列，更厚 padding + 更大字号 + 衬线标题 */
+.news-card--lead {
+  padding: 32px 36px;
+  gap: 18px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  /* 顶部一条赤陶红规格条，强化"今日头条"仪式感 */
+  border-top: 3px solid var(--color-accent);
+}
+
+.news-card--lead .card-rank-box {
+  font-size: 44px;
+  font-family: var(--font-display, "Noto Serif SC", serif);
+}
+
+.news-card--lead .card-title {
+  font-size: 26px;
+  font-weight: 800;
+  line-height: 1.32;
+  font-family: var(--font-display, "Noto Serif SC", serif);
+  letter-spacing: -0.005em;
+  -webkit-line-clamp: 2;
 }
 
 /* === Batch F: row variant - 紧凑列表行 === */
