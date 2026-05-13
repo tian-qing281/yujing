@@ -117,6 +117,8 @@ defineEmits(["switch", "open-cred"]);
 
 .brand-box {
   padding: 4px 2px;
+  /* editorial: kicker + 主名整体居中，呈刊头规整感 */
+  text-align: center;
 }
 
 .app-sidebar.collapsed .brand-box {
