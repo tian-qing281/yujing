@@ -1795,9 +1795,10 @@ body { font-family: "Fira Sans", "PingFang SC", "Microsoft YaHei", sans-serif; b
 }
 
 .eh-metric-card {
-  background: rgba(248, 250, 252, 0.8);
-  border: 1px solid rgba(148, 163, 184, 0.15);
-  border-radius: 16px;
+  /* editorial: 去变色玻璃 + 渐变 hover，走 token 纸质面 */
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
   padding: 12px 14px;
   display: flex;
   align-items: center;
@@ -1806,8 +1807,8 @@ body { font-family: "Fira Sans", "PingFang SC", "Microsoft YaHei", sans-serif; b
 }
 
 .eh-metric-card:hover {
-  background: white;
-  border-color: #3b82f6;
+  background: var(--color-surface);
+  border-color: var(--color-accent);
 }
 
 .eh-metric-info {
@@ -1832,9 +1833,10 @@ body { font-family: "Fira Sans", "PingFang SC", "Microsoft YaHei", sans-serif; b
 }
 
 .eh-metric-icon-sw {
+  /* editorial: 糖果蓝 → 赤陶红 */
   font-size: 20px;
-  color: #3b82f6;
-  opacity: 0.8;
+  color: var(--color-accent);
+  opacity: 0.7;
 }
 
 .eh-command-bar {

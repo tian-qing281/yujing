@@ -57,8 +57,10 @@ const prettifySourceIds = (value) => {
   return normalized;
 };
 
+// editorial：榜单前3排序色 - 赤陶红主调，第1重(粗赤陶红)、第2中(深赤陶红)、第3轻(墨石板)，
+// 第4起统一用浅暖灰（如报纸榜单逐渐"退入背景"）
 const rankStyle = computed(() => ({
-  color: ["#ef4444", "#f59e0b", "#10b981"][props.index] || "#94a3b8",
+  color: ["#B45309", "#92400E", "#1C1917"][props.index] || "#A8A29E",
 }));
 
 const parseExtraInfo = (value) => {
@@ -118,8 +120,9 @@ const heatLabel = computed(() => {
   return `${formatted} ${selected.label}`;
 });
 
+// editorial：前3名火焰用赤陶红（保留"热"语义但走 token），其余暖灰
 const heatStyle = computed(() => ({
-  color: props.index < 3 ? "#ef4444" : "#64748b",
+  color: props.index < 3 ? "var(--color-accent)" : "var(--color-text-3)",
 }));
 
 const sourceLabel = computed(() => SOURCE_LABEL_MAP[props.item?.source_id] || props.item?.source_id || "");

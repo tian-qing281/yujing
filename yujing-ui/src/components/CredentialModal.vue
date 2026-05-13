@@ -155,12 +155,14 @@ const emitSubmit = () => {
 
 .credential-box {
   width: min(720px, 100%);
-  border-radius: 24px;
+  /* editorial: 去渐变 + 大圆角，走报纸严谨面 */
+  border-radius: 6px;
   overflow: hidden;
-  background: linear-gradient(180deg, #ffffff 0%, #f7fafc 100%);
-  border: 1px solid rgba(203, 213, 225, 0.8);
-  box-shadow: 0 28px 90px rgba(15, 23, 42, 0.18);
-  color: #0f172a;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-top: 3px solid var(--color-accent);
+  box-shadow: 0 18px 50px rgba(15, 23, 42, 0.14);
+  color: var(--color-text);
   text-align: left;
   font-family: "PingFang SC", "Microsoft YaHei", sans-serif;
   color-scheme: light;
@@ -193,10 +195,12 @@ const emitSubmit = () => {
   place-items: center;
   width: 44px;
   height: 44px;
-  border-radius: 14px;
-  background: #eef4ff;
-  color: #2563eb;
+  /* editorial: 糖果蓝 → 米白 + 赤陶红 */
+  border-radius: 4px;
+  background: var(--color-surface-2);
+  color: var(--color-accent);
   font-size: 22px;
+  border: 1px solid var(--color-border);
 }
 
 .title-icon :deep(span) {
@@ -272,31 +276,38 @@ const emitSubmit = () => {
 .cred-select {
   display: block;
   min-height: 54px;
-  color: #0f172a;
+  color: var(--color-text);
   font-size: 15px;
   font-weight: 700;
-  border-radius: 16px;
+  /* editorial: 去圆额 */
+  border-radius: 4px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
   box-shadow: none;
 }
 
 .cred-select:focus,
 .credential-textarea:focus {
   outline: none;
-  border-color: rgba(59, 130, 246, 0.56);
-  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.14);
+  /* editorial: 蓝 focus ring → 赤陶红 */
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px rgba(180, 83, 9, 0.16);
 }
 
 .status-card {
   min-height: 54px;
   padding: 14px 16px;
-  border-radius: 18px;
-  background: #f8fafc;
+  /* editorial: 去圆额 + 走 token */
+  border-radius: 4px;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
   box-shadow: none;
 }
 
 .status-card.active {
-  border-color: rgba(34, 197, 94, 0.26);
-  background: #f0fdf4;
+  /* 保留绿作为 success 语义，但去糖果渐变 */
+  border-color: rgba(21, 128, 61, 0.25);
+  background: rgba(21, 128, 61, 0.04);
 }
 
 .status-row {
@@ -313,8 +324,9 @@ const emitSubmit = () => {
 }
 
 .status-card.active .status-dot {
-  background: #22c55e;
-  box-shadow: 0 0 0 6px rgba(34, 197, 94, 0.12);
+  /* editorial: 保留信号绿但用 token success */
+  background: var(--color-success, #15803D);
+  box-shadow: 0 0 0 4px rgba(21, 128, 61, 0.10);
 }
 
 .status-card p {
@@ -327,13 +339,14 @@ const emitSubmit = () => {
 .credential-textarea {
   min-height: 210px;
   resize: vertical;
-  border-radius: 20px;
+  /* editorial: 去圆额 */
+  border-radius: 4px;
   padding: 16px 18px;
   font-size: 14px;
   line-height: 1.65;
-  background: #ffffff;
-  color: #0f172a;
-  caret-color: #2563eb;
+  background: var(--color-surface);
+  color: var(--color-text);
+  caret-color: var(--color-accent);
 }
 
 .credential-textarea::placeholder {
@@ -344,7 +357,8 @@ const emitSubmit = () => {
 .feedback {
   margin-bottom: 16px;
   padding: 12px 14px;
-  border-radius: 14px;
+  /* editorial: 去圆额 */
+  border-radius: 4px;
   font-size: 14px;
   line-height: 1.5;
   border-width: 1px;
@@ -352,21 +366,23 @@ const emitSubmit = () => {
 }
 
 .feedback.success {
-  color: #166534;
-  background: #f0fdf4;
-  border: 1px solid rgba(34, 197, 94, 0.2);
+  color: var(--color-success, #15803D);
+  background: rgba(21, 128, 61, 0.06);
+  border: 1px solid rgba(21, 128, 61, 0.20);
 }
 
 .feedback.error {
-  color: #b91c1c;
-  background: #fef2f2;
-  border: 1px solid rgba(239, 68, 68, 0.18);
+  color: var(--color-critical, #B91C1C);
+  background: rgba(185, 28, 28, 0.05);
+  border: 1px solid rgba(185, 28, 28, 0.18);
 }
 
 .feedback.info {
-  color: #1e3a8a;
-  background: #eff6ff;
-  border: 1px solid rgba(96, 165, 250, 0.2);
+  /* editorial: 糖果蓝 → 赤陶红中性 info */
+  color: var(--color-text-2);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-accent);
 }
 
 .modal-actions {
@@ -377,30 +393,34 @@ const emitSubmit = () => {
 
 .btn-secondary,
 .btn-primary {
-  border-radius: 16px;
-  height: 50px;
-  padding: 0 18px;
+  /* editorial: 去圆额 */
+  border-radius: 4px;
+  height: 46px;
+  padding: 0 20px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 10px;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 700;
   cursor: pointer;
   transition: transform 0.2s ease, background 0.2s ease, opacity 0.2s ease;
 }
 
 .btn-secondary {
-  color: #334155;
+  color: var(--color-text-2);
+  background: transparent;
+  border: 1px solid var(--color-border);
   text-transform: none;
 }
 
 .btn-primary {
-  background: #2563eb;
-  color: #eff6ff;
+  /* editorial: 糖果蓝 → 近墨石板主动作 */
+  background: var(--color-brand);
+  color: #FAFAF7;
   min-width: 148px;
   text-transform: none;
-  border-color: transparent;
+  border: none;
 }
 
 .btn-primary:disabled {
