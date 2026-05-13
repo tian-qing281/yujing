@@ -1483,53 +1483,55 @@ onUnmounted(() => {
 }
 .quick-action-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .quick-action-compare {
-  border-color: rgba(168, 85, 247, 0.15);
-  background: linear-gradient(135deg, #faf5ff 0%, #f8fbff 100%);
-  color: #7c3aed;
+  /* editorial: \u53bb\u7d2b\u3001\u8d70 token \u8d64\u9676\u7ea2 */
+  border-color: var(--color-border);
+  background: var(--color-surface-2);
+  color: var(--color-accent);
 }
 .quick-action-compare:hover:not(:disabled) {
-  background: #7c3aed; color: #fff;
-  box-shadow: 0 8px 20px rgba(124, 58, 237, 0.2);
+  background: var(--color-accent); color: #FAFAF7;
+  border-color: var(--color-accent);
 }
 
 .brief-banner {
   display: flex; align-items: center; gap: 12px;
-  padding: 14px 20px; border-radius: 14px;
-  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
-  border: 1.5px solid rgba(245, 158, 11, 0.2);
+  padding: 14px 20px; border-radius: 4px;
+  /* editorial: 去糖果黄渐变，改纯白 + 3px 赤陶红左条 + 1px hairline */
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-accent);
   animation: briefSlideIn 0.3s ease-out;
 }
 .brief-banner-icon {
-  font-size: 22px; color: #f59e0b;
+  font-size: 22px; color: var(--color-accent);
   display: flex; align-items: center;
 }
 .brief-banner-text {
   flex: 1; display: flex; flex-direction: column; gap: 2px;
 }
-.brief-banner-text strong { font-size: 14px; font-weight: 800; color: #92400e; }
-.brief-banner-text span { font-size: 12px; color: #b45309; }
+.brief-banner-text strong { font-size: 14px; font-weight: 800; color: var(--color-text); font-family: var(--font-display, "Noto Serif SC", serif); }
+.brief-banner-text span { font-size: 12px; color: var(--color-text-2); }
 .brief-banner-btn {
-  padding: 8px 20px; border-radius: 10px; border: none;
-  background: #f59e0b; color: #fff; font-weight: 800; font-size: 13px;
-  cursor: pointer; transition: 0.2s; white-space: nowrap;
+  padding: 8px 20px; border-radius: 4px; border: none;
+  background: var(--color-brand); color: #FAFAF7; font-weight: 700; font-size: 13px;
+  cursor: pointer; transition: 0.18s; white-space: nowrap;
 }
 .brief-banner-btn:hover:not(:disabled) {
-  background: #d97706; transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(217, 119, 6, 0.3);
+  background: #1E293B; transform: translateY(-1px);
 }
 .brief-banner-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .brief-banner-pdf {
-  width: 36px; height: 36px; border-radius: 8px; border: 1.5px solid rgba(220, 38, 38, 0.2);
-  background: rgba(255,255,255,0.7); color: #dc2626; font-size: 16px;
-  display: flex; align-items: center; justify-content: center; cursor: pointer; transition: 0.2s;
+  width: 36px; height: 36px; border-radius: 4px; border: 1px solid var(--color-border);
+  background: var(--color-surface-2); color: var(--color-accent); font-size: 16px;
+  display: flex; align-items: center; justify-content: center; cursor: pointer; transition: 0.18s;
 }
-.brief-banner-pdf:hover { background: #dc2626; color: #fff; border-color: #dc2626; }
+.brief-banner-pdf:hover { background: var(--color-accent); color: #fff; border-color: var(--color-accent); }
 .brief-banner-close {
   background: none; border: none; cursor: pointer;
-  color: #92400e; opacity: 0.5; font-size: 16px;
-  display: flex; align-items: center; transition: 0.2s;
+  color: var(--color-text-3); opacity: 0.7; font-size: 16px;
+  display: flex; align-items: center; transition: 0.18s;
 }
-.brief-banner-close:hover { opacity: 1; }
+.brief-banner-close:hover { opacity: 1; color: var(--color-text); }
 /* 生成中态：去蓝改中性暖灰，不与抖起的 accent 争主 */
 .brief-banner--generating {
   background: var(--color-surface-2, #F5F5F2);

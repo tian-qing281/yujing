@@ -137,23 +137,22 @@ const searchReasons = computed(() =>
 
 <style scoped>
 .news-card {
-  background:
-    linear-gradient(180deg, rgba(255,255,255,0.96) 0%, rgba(248,250,252,0.88) 100%),
-    radial-gradient(circle at 96% 8%, rgba(59,130,246,0.12), transparent 15rem);
-  border-radius: var(--hs-radius-xl, 24px);
+  /* editorial: 去右上蓝光晕，纯纸白底 + 1px hairline + 软 shadow */
+  background: var(--color-surface);
+  border-radius: 4px;
   padding: 28px;
   display: flex;
   flex-direction: column;
   align-items: stretch;
   cursor: pointer;
-  transition: 0.28s cubic-bezier(0.16, 1, 0.3, 1);
-  border: 1px solid rgba(148, 163, 184, 0.2);
+  transition: 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  border: 1px solid var(--color-border);
   gap: 20px;
   position: relative;
   min-height: 140px;
   min-width: 0;
   overflow: hidden;
-  box-shadow: 0 18px 55px rgba(15, 23, 42, 0.07);
+  box-shadow: 0 1px 2px rgba(28, 25, 23, 0.04);
   isolation: isolate;
   will-change: transform, box-shadow;
 }
@@ -169,15 +168,16 @@ const searchReasons = computed(() =>
   inset: 0;
   z-index: -1;
   border-radius: inherit;
-  background: linear-gradient(135deg, rgba(59,130,246,0.16), transparent 28%, rgba(6,182,212,0.12));
+  /* editorial: hover overlay 改为暑色阳光 */
+  background: radial-gradient(circle at 96% 8%, rgba(180, 83, 9, 0.06), transparent 60%);
   opacity: 0;
-  transition: opacity 0.28s ease;
+  transition: opacity 0.22s ease;
 }
 
 .news-card:hover {
-  transform: translateY(-5px);
-  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.12);
-  border-color: rgba(59, 130, 246, 0.32);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(28, 25, 23, 0.08);
+  border-color: var(--color-accent);
 }
 
 .news-card:hover::before {
@@ -255,10 +255,12 @@ const searchReasons = computed(() =>
 }
 
 :deep(mark) {
-  background: linear-gradient(180deg, rgba(254, 240, 138, 0.18) 0%, rgba(253, 224, 71, 0.36) 100%);
-  color: #92400e;
-  border-radius: 6px;
+  /* editorial: 黄底 → 赤陶红下划线，如报刊重点圈存 */
+  background: linear-gradient(180deg, transparent 60%, rgba(180, 83, 9, 0.22) 60%);
+  color: var(--color-text);
+  border-radius: 0;
   padding: 0 2px;
+  font-weight: 700;
 }
 
 .card-badges {
@@ -292,17 +294,18 @@ const searchReasons = computed(() =>
 }
 
 .badge.source {
-  background: rgba(239, 246, 255, 0.9);
-  color: #2563eb;
+  background: var(--color-surface-2);
+  color: var(--color-text-2);
+  border: 1px solid var(--color-border);
 }
 
 .badge.cached {
-  background: rgba(59, 130, 246, 0.12);
-  color: #60a5fa;
-  border: 1px solid rgba(59, 130, 246, 0.25);
-  backdrop-filter: blur(4px);
+  /* editorial: 已采集 = 已入库的中性状态提示，用暑色阳光不争主 */
+  background: rgba(180, 83, 9, 0.08);
+  color: var(--color-accent);
+  border: 1px solid rgba(180, 83, 9, 0.20);
   font-weight: 800;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.04em;
 }
 
 @media (max-width: 960px) {
