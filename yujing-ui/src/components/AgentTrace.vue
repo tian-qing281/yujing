@@ -5,6 +5,24 @@
       <span>智能体尚未开始工作。提交一个问题或点击预设 query。</span>
     </div>
 
+    <!-- U1: 顶层折叠摘要条（已完成且 collapsed=true 时显示） -->
+    <button
+      v-else-if="collapsed && !isRunning && steps.length"
+      class="trace-collapsed-bar"
+      type="button"
+      @click="$emit('toggle-collapse')"
+      :title="collapsedTooltip"
+    >
+      <iconify-icon icon="ri:check-double-line" class="trace-collapsed-icon" />
+      <span class="trace-collapsed-label">已完成 {{ steps.length }} 步调用</span>
+      <span class="trace-collapsed-tools">{{ collapsedToolsLabel }}</span>
+      <span class="trace-collapsed-time">· 总耗时 {{ formatLatency(totalDuration) }}</span>
+      <span class="trace-collapsed-expand">
+        <iconify-icon icon="ri:arrow-down-s-line" />
+        展开思考过程
+      </span>
+    </button>
+
     <ol v-else class="trace-timeline">
       <li
         v-for="(step, idx) in steps"
@@ -88,6 +106,18 @@
       <iconify-icon icon="ri:alert-line" />
       <span>{{ terminatedMessage }}</span>
     </div>
+
+    <!-- U1: 展开态时底部加「收起」操作（仅完成且步骤多于 1 时显示，避免单步骤反而多此一举） -->
+    <button
+      v-if="!collapsed && !isRunning && steps.length > 1"
+      class="trace-collapse-action"
+      type="button"
+      @click="$emit('toggle-collapse')"
+      title="收起思考过程，专注阅读最终结论"
+    >
+      <iconify-icon icon="ri:arrow-up-s-line" />
+      <span>收起思考过程</span>
+    </button>
   </div>
 </template>
 
@@ -118,7 +148,14 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  // U1: 顶层折叠开关 (由父组件 AIConsultant 持有 state，完成后默认折叠)
+  collapsed: {
+    type: Boolean,
+    default: false,
+  },
 });
+
+defineEmits(["toggle-collapse"]);
 
 // 维护每个 step 的 expanded 状态（索引级别），避免 computed 重建丢失
 const expandedMap = ref(new Map());
@@ -277,6 +314,34 @@ function toggleLlm(idx) {
 function formatLatency(ms) {
   return ms >= 1000 ? (ms / 1000).toFixed(1) + "s" : ms + "ms";
 }
+
+// U1: 折叠态摘要计算
+const totalDuration = computed(() => {
+  return steps.value.reduce(
+    (sum, s) => sum + (s.llmLatencyMs || 0) + (s.latencyMs || 0),
+    0,
+  );
+});
+
+const collapsedToolsLabel = computed(() => {
+  // 去重保留首次出现顺序，最多 3 个，超出加省略号
+  const seen = new Set();
+  const ordered = [];
+  for (const s of steps.value) {
+    if (!seen.has(s.toolName)) {
+      seen.add(s.toolName);
+      ordered.push(s.toolName);
+    }
+  }
+  if (ordered.length <= 3) return ordered.join(" → ");
+  return ordered.slice(0, 3).join(" → ") + ` +${ordered.length - 3}`;
+});
+
+const collapsedTooltip = computed(() => {
+  return steps.value
+    .map((s, i) => `步骤 ${i + 1}: ${s.toolName}`)
+    .join("\n");
+});
 
 function stepIcon(step) {
   if (step.status === "running") return "ri:loader-4-line";
@@ -702,6 +767,104 @@ watch(
 :global([data-theme="dark"]) .output-json {
   background: rgba(0, 0, 0, 0.3);
   border-color: rgba(255, 255, 255, 0.1);
+}
+
+/* U1: 折叠摘要条（trace 完成后默认展示） */
+.trace-collapsed-bar {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.06), rgba(59, 130, 246, 0.06));
+  border: 1px solid rgba(34, 197, 94, 0.25);
+  border-radius: 10px;
+  font-size: 13px;
+  color: #1f2937;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s, transform 0.05s;
+  text-align: left;
+}
+.trace-collapsed-bar:hover {
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.12), rgba(59, 130, 246, 0.12));
+  border-color: rgba(34, 197, 94, 0.45);
+}
+.trace-collapsed-bar:active {
+  transform: scale(0.998);
+}
+.trace-collapsed-icon {
+  font-size: 18px;
+  color: #22c55e;
+  flex-shrink: 0;
+}
+.trace-collapsed-label {
+  font-weight: 600;
+  color: #15803d;
+}
+.trace-collapsed-tools {
+  color: #475569;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 320px;
+}
+.trace-collapsed-time {
+  color: #64748b;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+.trace-collapsed-expand {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #3b82f6;
+  font-size: 12px;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+/* U1: 展开态底部「收起」按钮 */
+.trace-collapse-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 12px;
+  padding: 6px 12px;
+  background: transparent;
+  border: 1px dashed rgba(0, 0, 0, 0.15);
+  border-radius: 6px;
+  font-size: 12px;
+  color: #64748b;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.trace-collapse-action:hover {
+  background: rgba(59, 130, 246, 0.06);
+  color: #3b82f6;
+  border-color: rgba(59, 130, 246, 0.3);
+  border-style: solid;
+}
+
+:global([data-theme="dark"]) .trace-collapsed-bar {
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.12), rgba(59, 130, 246, 0.12));
+  border-color: rgba(34, 197, 94, 0.35);
+  color: #e5e7eb;
+}
+:global([data-theme="dark"]) .trace-collapsed-label {
+  color: #4ade80;
+}
+:global([data-theme="dark"]) .trace-collapsed-tools {
+  color: #cbd5e1;
+}
+:global([data-theme="dark"]) .trace-collapsed-time {
+  color: #94a3b8;
+}
+:global([data-theme="dark"]) .trace-collapse-action {
+  border-color: rgba(255, 255, 255, 0.15);
+  color: #94a3b8;
 }
 </style>
 

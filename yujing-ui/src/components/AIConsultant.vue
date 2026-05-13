@@ -108,21 +108,26 @@
         </div>
 
         <div v-if="alerts.length" class="alerts-panel">
-          <div class="alerts-header">
-            <iconify-icon icon="ri:notification-3-line" />
+          <div class="alerts-header" :class="`alerts-header-${alertsTopLevel}`">
+            <iconify-icon :icon="alertLevelIcon(alertsTopLevel)" />
             <span>舆情推送中心</span>
             <span class="alerts-count">{{ alerts.length }}</span>
             <button class="alerts-clear" type="button" @click="clearAlerts">全部忽略</button>
           </div>
           <div
-            v-for="alert in alerts"
+            v-for="alert in sortedAlerts"
             :key="alert.id"
             :class="['alert-card', `alert-${alert.level}`]"
           >
-            <div class="alert-indicator"></div>
+            <div class="alert-icon">
+              <iconify-icon :icon="alertLevelIcon(alert.level)" />
+            </div>
             <div class="alert-body">
               <strong>{{ alert.title }}</strong>
-              <span class="alert-meta">{{ alert.article_count }} 篇报道 · {{ alert.platform_count }} 个平台 · {{ alert.time }}</span>
+              <span class="alert-meta">
+                {{ alert.article_count }} 篇报道 · {{ alert.platform_count }} 个平台 ·
+                <span class="alert-time" :title="alert.time">{{ formatRelativeTime(alert.time) }}</span>
+              </span>
             </div>
             <button class="alert-action" type="button" @click="openAlertDetail(alert)">查看</button>
             <button class="alert-dismiss" type="button" @click="dismissAlert(alert.id)">
@@ -172,13 +177,22 @@
                  之前把 CompareDashboard 放最前会让用户感到"结果突然弹出、下方 trace 像断层"，
                  现在改为 trace 后、final 前，形成"思考 → 数据 → 结论"的自然阅读流。 -->
             <template v-if="msg.role === 'assistant' && msg.agent_events">
-              <AgentTrace :events="msg.agent_events" :isRunning="!!msg.agent_running" />
+              <AgentTrace
+                :events="msg.agent_events"
+                :isRunning="!!msg.agent_running"
+                :collapsed="!!msg.trace_collapsed"
+                @toggle-collapse="toggleTraceCollapse(index)"
+              />
               <CompareDashboard
                 v-if="msg.compare_metrics"
                 :metrics="msg.compare_metrics"
                 @open-article="$emit('open-item', $event)"
               />
-              <div v-if="msg.agent_final" class="agent-final-card">
+              <div
+                v-if="msg.agent_final"
+                class="agent-final-card"
+                :ref="el => bindFinalRef(el, index)"
+              >
                 <div class="agent-final-head">
                   <iconify-icon icon="ri:sparkling-2-fill"></iconify-icon>
                   <strong>最终研判</strong>
@@ -435,6 +449,53 @@ const dismissAlert = async (id) => {
 const clearAlerts = async () => {
   alerts.value = [];
   try { await fetch(buildApiUrl("/api/ai/alerts/clear"), { method: "POST" }); } catch {}
+};
+
+// U2: 告警分级 icon + 排序（critical → warning → info, 同级按 article_count desc）
+const ALERT_LEVEL_ORDER = { critical: 0, warning: 1, info: 2 };
+const ALERT_LEVEL_ICON = {
+  critical: "ri:alarm-warning-fill",
+  warning: "ri:flashlight-fill",
+  info: "ri:notification-3-line",
+};
+const alertLevelIcon = (level) => ALERT_LEVEL_ICON[level] || ALERT_LEVEL_ICON.info;
+const sortedAlerts = computed(() => {
+  const arr = [...alerts.value];
+  arr.sort((a, b) => {
+    const la = ALERT_LEVEL_ORDER[a.level] ?? 9;
+    const lb = ALERT_LEVEL_ORDER[b.level] ?? 9;
+    if (la !== lb) return la - lb;
+    return (b.article_count || 0) - (a.article_count || 0);
+  });
+  return arr;
+});
+// 头部颜色取列表中最严重的等级
+const alertsTopLevel = computed(() => {
+  for (const lvl of ["critical", "warning", "info"]) {
+    if (alerts.value.some((a) => a.level === lvl)) return lvl;
+  }
+  return "info";
+});
+
+// U3: 后端返回 "YYYY-MM-DD HH:MM"（北京时区无 TZ 标记，直接 new Date 在 Chrome 视为本地时区）
+//   < 60s → 刚刚 / < 60min → N 分钟前 / < 24h → N 小时前 / < 7d → N 天前 / 否则 MM-DD HH:MM
+const formatRelativeTime = (timeStr) => {
+  if (!timeStr) return "";
+  // 兼容 "YYYY-MM-DD HH:MM" 与 ISO 字符串
+  const normalized = typeof timeStr === "string" ? timeStr.replace(" ", "T") : timeStr;
+  const t = new Date(normalized).getTime();
+  if (!Number.isFinite(t)) return timeStr;
+  const diff = Date.now() - t;
+  if (diff < 0) return timeStr; // 未来时间（如 mock 数据）回退绝对值
+  const sec = Math.floor(diff / 1000);
+  if (sec < 60) return "刚刚";
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min} 分钟前`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr} 小时前`;
+  const day = Math.floor(hr / 24);
+  if (day < 7) return `${day} 天前`;
+  return timeStr;
 };
 
 const openAlertDetail = (alert) => {
@@ -827,6 +888,21 @@ const patchMessage = (sessionId, index, patch) => {
   });
 };
 
+// U1: trace 折叠 state 由消息持有；用户可手动展开/收起
+const toggleTraceCollapse = (index) => {
+  const session = activeSession.value;
+  if (!session?.messages?.[index]) return;
+  const cur = !!session.messages[index].trace_collapsed;
+  patchMessage(session.id, index, { trace_collapsed: !cur });
+};
+
+// U1: 收集每条 assistant 消息的 final-card DOM ref，agent done 后自动滚入视野
+const finalRefMap = new Map();
+const bindFinalRef = (el, index) => {
+  if (el) finalRefMap.set(index, el);
+  else finalRefMap.delete(index);
+};
+
 const getSessionTitleFromQuery = (query) => {
   const compact = query.replace(/\s+/g, " ").trim();
   if (!compact) return "新会话";
@@ -1052,8 +1128,21 @@ const sendAgentMessage = async (sessionId, outgoing) => {
             if (!finalBuffer && ev.terminated_reason && ev.terminated_reason !== "final") {
               patch.agent_error = "智能体未能给出结论，请尝试换个问法。";
             }
+            // U1: 完成时默认折叠 trace，让最终回答抢占视野
+            if (finalBuffer) {
+              patch.trace_collapsed = true;
+            }
           }
           patchMessage(sessionId, assistantIndex, patch);
+          // U1: done 后等 DOM 更新完，把最终回答卡片滚入视野顶部
+          if (ev.type === "done" && finalBuffer) {
+            nextTick(() => {
+              const finalEl = finalRefMap.get(assistantIndex);
+              if (finalEl?.scrollIntoView) {
+                finalEl.scrollIntoView({ behavior: "smooth", block: "start" });
+              }
+            });
+          }
         } catch (err) {
           console.error("[agent] SSE parse error", err, chunk);
         }
@@ -1485,7 +1574,18 @@ onUnmounted(() => {
 .alerts-header {
   display: flex; align-items: center; gap: 8px;
   font-size: 13px; font-weight: 800; color: #dc2626; margin-bottom: 8px;
+  transition: color 0.2s;
 }
+/* U2: 头部颜色随最高 level 联动 */
+.alerts-header-critical { color: #dc2626; }
+.alerts-header-warning  { color: #d97706; }
+.alerts-header-info     { color: #2563eb; }
+.alerts-header-warning .alerts-count { background: #d97706; }
+.alerts-header-info .alerts-count    { background: #2563eb; }
+.alerts-header-warning .alerts-clear { border-color: rgba(217,119,6,0.25); color: #d97706; }
+.alerts-header-warning .alerts-clear:hover { background: #d97706; color: #fff; }
+.alerts-header-info .alerts-clear { border-color: rgba(37,99,235,0.25); color: #2563eb; }
+.alerts-header-info .alerts-clear:hover { background: #2563eb; color: #fff; }
 .alerts-count {
   background: #dc2626; color: #fff; font-size: 11px; font-weight: 800;
   padding: 1px 8px; border-radius: 99px; min-width: 20px; text-align: center;
@@ -1497,25 +1597,55 @@ onUnmounted(() => {
 }
 .alerts-clear:hover { background: #dc2626; color: #fff; }
 .alert-card {
-  display: flex; align-items: center; gap: 10px;
-  padding: 10px 14px; border-radius: 12px; margin-bottom: 6px;
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 14px; border-radius: 12px; margin-bottom: 6px;
   background: #fff; border: 1px solid rgba(0,0,0,0.06);
   transition: 0.2s; animation: briefSlideIn 0.25s ease;
+  border-left: 4px solid transparent;
 }
-.alert-card:hover { box-shadow: 0 4px 14px rgba(0,0,0,0.06); }
-.alert-indicator { width: 4px; height: 28px; border-radius: 4px; flex-shrink: 0; }
-.alert-critical .alert-indicator { background: #dc2626; }
-.alert-warning .alert-indicator { background: #f59e0b; }
-.alert-info .alert-indicator { background: #3b82f6; }
+.alert-card:hover { box-shadow: 0 4px 14px rgba(0,0,0,0.08); transform: translateX(2px); }
+/* U2: 三级色块（背景 + 左描边 + icon 颜色）*/
+.alert-icon {
+  width: 32px; height: 32px; border-radius: 8px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px;
+}
+.alert-critical {
+  background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
+  border-color: rgba(220,38,38,0.18);
+  border-left-color: #dc2626;
+}
+.alert-critical .alert-icon { background: rgba(220,38,38,0.15); color: #dc2626; }
+.alert-critical .alert-body strong { color: #7f1d1d; }
+.alert-warning {
+  background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+  border-color: rgba(217,119,6,0.18);
+  border-left-color: #d97706;
+}
+.alert-warning .alert-icon { background: rgba(217,119,6,0.15); color: #d97706; }
+.alert-warning .alert-body strong { color: #78350f; }
+.alert-info {
+  background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+  border-color: rgba(37,99,235,0.18);
+  border-left-color: #2563eb;
+}
+.alert-info .alert-icon { background: rgba(37,99,235,0.15); color: #2563eb; }
+.alert-info .alert-body strong { color: #1e3a8a; }
 .alert-body { flex: 1; min-width: 0; }
 .alert-body strong { display: block; font-size: 13px; font-weight: 700; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.alert-meta { font-size: 11px; color: #94a3b8; }
+.alert-meta { font-size: 11px; color: #64748b; }
+.alert-time { font-weight: 600; color: #475569; cursor: help; }
 .alert-action {
-  padding: 5px 14px; border-radius: 8px; border: 1px solid rgba(59,130,246,0.2);
-  background: transparent; color: #3b82f6; font-size: 12px; font-weight: 700;
+  padding: 5px 14px; border-radius: 8px; border: 1px solid rgba(0,0,0,0.08);
+  background: rgba(255,255,255,0.6); color: #475569; font-size: 12px; font-weight: 700;
   cursor: pointer; transition: 0.2s; white-space: nowrap;
 }
-.alert-action:hover { background: #3b82f6; color: #fff; border-color: #3b82f6; }
+.alert-critical .alert-action { color: #dc2626; border-color: rgba(220,38,38,0.25); }
+.alert-critical .alert-action:hover { background: #dc2626; color: #fff; border-color: #dc2626; }
+.alert-warning .alert-action { color: #d97706; border-color: rgba(217,119,6,0.25); }
+.alert-warning .alert-action:hover { background: #d97706; color: #fff; border-color: #d97706; }
+.alert-info .alert-action { color: #2563eb; border-color: rgba(37,99,235,0.25); }
+.alert-info .alert-action:hover { background: #2563eb; color: #fff; border-color: #2563eb; }
 .alert-dismiss {
   background: none; border: none; color: #94a3b8; cursor: pointer;
   font-size: 14px; display: flex; align-items: center; transition: 0.2s;
