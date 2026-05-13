@@ -242,18 +242,43 @@ ECharts 全部图表统一使用 5 阶单色梯度：
 - “今日重点”顶部区：从订阅推荐拉前 3 高分事件并在榜单页顶部增一排
 - 大卡 hover 金文“点击查看详情 →”的赤陶红 affordance
 
+### Batch H · 微动效（已完成 - commit `57b5623` + `ae3a267` + `5df5417`）
+
+> 用户反馈"全黑+橙没有圆角看着别扭"延伸需求：把所有 hover/动效从糖果时代的张扬位移收敛为编辑感的 1px 微抬升
+
+**已交付（3 波 commit，6 个组件）**：
+
+| 组件/区块 | 改动 |
+|---|---|
+| `EventCard.vue` | 玻璃糖果（rgba blur + 20px 圆角）→ 纯 surface + 6px + 暖灰 hairline；蓝色 hover #3b82f6 → text-3；蓝色高亮 mark → 赤陶红；hover `translateY(-4px) scale(1.01)` → `translateY(-1px)` |
+| `VisualWidget.vue` | 12px 圆角 + 蓝色 hover → 6px + 暖灰 + 赤陶红文字；source-tag/source-link token 化 |
+| `CredentialModal.vue` | close-btn `scale(1.04)` → 仅 color 渐变（去 scale）|
+| `signal-row` 群体（App.vue 死代码但保留可复用）| 圆角 18px → 6px、border 半透明 → token；糖蓝 kicker #1d4ed8 → accent；粉糖 chip → 暖灰 chip + 1px hairline；hover -2px → -1px |
+| `TopicModal.vue` | 9 处糖果蓝清扫：meta-pill / platform-name / pipeline-action / loading-spin border / status-tip / ref-article 标签 / load-more / sub-art-link hover / pipeline-card hover translateX 6 → 3 |
+| `AnalysisModal.vue` | 7 处清扫：premium-source-btn 圆角 999 → 4 + 糖蓝 → editorial；cap-tab.active 白底糖蓝 → 黑底白字主按钮风格；intel-label / blockquote 蓝边 / li::marker / table th / aura-spin border 全部 token 化 |
+
+**核心原则统一**：
+- `transition: all` → 单独属性枚举（`transform`、`border-color`、`box-shadow`），避免 daisyUI 默认值串扰整盒
+- 所有 hover 位移：`-2px / -4px` → `-1px`（参考 NYT/Economist 网站 hover 几乎不动）
+- 不再使用 `scale()` 做 hover（除入场动画的 0.985 → 1）
+- 圆角：12 / 18 / 999px → 4 / 6 / 2px（chip）
+- 阴影：`0 14px 28px rgba(15,23,42,0.06)` → `0 4px 12px -4px rgba(28,25,23,0.08)`（更近暖色 + 更短）
+
+**保留的语义色**（按 AGENTS.md 不机械去除）：
+- 红警示：`vis-error-banner`、采集失败标题（错误语义不可替换）
+- 绿成功：success / "已采集"标签（操作正反馈）
+- `EMO_COLORS` 8 色：愤怒红 / 悲伤灰 / 喜悦绿 / 惊讶橙 / 关注蓝 / 质疑粉 / 厌恶紫 / 中性灰（情感雷达图固定语义）
+
+**待续**（可选，下一轮）：
+- 数字滚动 `<NumberFlow>`（需新增依赖 vue-number-flow）
+- 图表入场单条曲线 200ms ease-out 描出（ECharts series animation 配置）
+
 ### Batch G · 暗模式（Dark Editorial）
 
 - 在 `:root` 旁补 `[data-theme="dark"]`
 - 底色：`#1C1917`（warm dark）而非纯黑
 - accent 不变，data 调亮一档
 - 所有 hairline 改为 `#2C2826`
-
-### Batch H · 微动效
-
-- 卡 hover：`translateY(-1px)` + border 加深，不要 scale 放大
-- 数字滚动：`<NumberFlow>`，类似 Stripe Dashboard
-- 图表入场：单条曲线 200ms ease-out 描出，不要群体颤抖
 
 ### Batch I · 主题切换器
 
