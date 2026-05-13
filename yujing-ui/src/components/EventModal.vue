@@ -360,23 +360,24 @@ const SOURCE_ICON_MAP = {
 
 const getSourceIcon = (id) => SOURCE_ICON_MAP[id] || "mdi:web";
 
+// Batch E：情绪色晷集与 MASTER 调色板对齐，退出原蓝/紫/黄鲜亮色，采用 editorial 低饱和调
 const SENTIMENT_COLOR_MAP = {
-  neutral: "#64748b",
-  中性: "#64748b",
-  concern: "#3b82f6",
-  关注: "#3b82f6",
-  joy: "#10b981",
-  喜悦: "#10b981",
-  anger: "#ef4444",
-  愤怒: "#ef4444",
-  sadness: "#8b5cf6",
-  悲伤: "#8b5cf6",
-  doubt: "#f59e0b",
-  质疑: "#f59e0b",
-  surprise: "#eab308",
-  惊讶: "#eab308",
-  disgust: "#991b1b",
-  厌恶: "#991b1b",
+  neutral:  "#A8A29E",
+  中性:  "#A8A29E",
+  concern:  "#1E40AF",
+  关注:  "#1E40AF",
+  joy:      "#15803D",
+  喜悦:  "#15803D",
+  anger:    "#B91C1C",
+  愤怒:  "#B91C1C",
+  sadness:  "#57534E",
+  悲伤:  "#57534E",
+  doubt:    "#B45309",
+  质疑:  "#B45309",
+  surprise: "#D97706",
+  惊讶:  "#D97706",
+  disgust:  "#7F1D1D",
+  厌恶:  "#7F1D1D",
 };
 
 const getSentimentColor = (sentiment) =>
@@ -623,10 +624,10 @@ const sentimentSummary = computed(() => {
     else totals.neutral += item.value;
   }
   return [
-    { label: "正面", value: totals.positive, color: "#10b981" },
-    { label: "中性", value: totals.neutral, color: "#64748b" },
-    { label: "负面", value: totals.negative, color: "#ef4444" },
-    { label: "关注", value: totals.concern, color: "#3b82f6" },
+    { label: "正面", value: totals.positive, color: "#15803D" },
+    { label: "中性", value: totals.neutral, color: "#A8A29E" },
+    { label: "负面", value: totals.negative, color: "#B91C1C" },
+    { label: "关注", value: totals.concern, color: "#1E40AF" },
   ].filter((item) => item.value > 0);
 });
 
@@ -705,11 +706,9 @@ const renderCharts = () => {
         data: timeline.map((d) => d.count),
         barWidth: timeline.length <= 3 ? 32 : "38%",
         itemStyle: {
-          color: new window.echarts.graphic.LinearGradient(0, 0, 0, 1, [
-            { offset: 0, color: "#818cf8" },
-            { offset: 1, color: "#6366f1" },
-          ]),
-          borderRadius: [6, 6, 0, 0],
+          // 近墨石板实色柱，不再用紫渐变
+          color: "#0F172A",
+          borderRadius: [4, 4, 0, 0],
         },
       },
       {
@@ -720,20 +719,21 @@ const renderCharts = () => {
         smooth: true,
         symbol: "circle",
         symbolSize: 7,
-        lineStyle: { color: "#f97316", width: 2.5 },
-        itemStyle: { color: "#f97316", borderColor: "#fff", borderWidth: 2 },
+        lineStyle: { color: "#B45309", width: 2 },
+        itemStyle: { color: "#B45309", borderColor: "#fff", borderWidth: 2 },
         areaStyle: {
+          // 赤陶红轻面积，不再用橙色高饱和渐变
           color: new window.echarts.graphic.LinearGradient(0, 0, 0, 1, [
-            { offset: 0, color: "rgba(249,115,22,0.18)" },
-            { offset: 1, color: "rgba(249,115,22,0)" },
+            { offset: 0, color: "rgba(180,83,9,0.18)" },
+            { offset: 1, color: "rgba(180,83,9,0)" },
           ]),
         },
       },
     ],
   });
 
-  // 2. 平台分布 — 水平条形图
-  const platformColors = ["#6366f1", "#3b82f6", "#0ea5e9", "#14b8a6", "#10b981", "#84cc16", "#eab308", "#f97316"];
+  // 2. 平台分布 — 水平条形图（editorial 低饱和调色板）
+  const platformColors = ["#0F172A", "#B45309", "#1E40AF", "#15803D", "#57534E", "#A8A29E", "#D97706", "#7F1D1D"];
   platformChart?.setOption({
     tooltip: {
       trigger: "axis",
@@ -874,7 +874,7 @@ const renderCharts = () => {
         trigger: "axis",
         axisPointer: {
           type: "line",
-          lineStyle: { color: "#6366f1", type: "dashed", width: 1.2 },
+          lineStyle: { color: "#A8A29E", type: "dashed", width: 1.2 },
         },
         backgroundColor: "rgba(255,255,255,0.98)",
         borderColor: "rgba(99,102,241,0.25)",
@@ -968,8 +968,8 @@ const renderCharts = () => {
               ],
             },
           },
-          lineStyle: { color: "#10b981", width: 2 },
-          itemStyle: { color: "#10b981", borderColor: "#fff", borderWidth: 2 },
+          lineStyle: { color: "#15803D", width: 2 },
+          itemStyle: { color: "#15803D", borderColor: "#fff", borderWidth: 2 },
           data: trend.map((d) => d.positive || 0),
         },
         {
@@ -986,13 +986,13 @@ const renderCharts = () => {
               type: "linear",
               x: 0, y: 0, x2: 0, y2: 1,
               colorStops: [
-                { offset: 0, color: "rgba(148,163,184,0.55)" },
-                { offset: 1, color: "rgba(148,163,184,0.08)" },
+                { offset: 0, color: "rgba(168,162,158,0.5)" },
+                { offset: 1, color: "rgba(168,162,158,0.06)" },
               ],
             },
           },
-          lineStyle: { color: "#94a3b8", width: 2 },
-          itemStyle: { color: "#94a3b8", borderColor: "#fff", borderWidth: 2 },
+          lineStyle: { color: "#A8A29E", width: 2 },
+          itemStyle: { color: "#A8A29E", borderColor: "#fff", borderWidth: 2 },
           data: trend.map((d) => d.neutral || 0),
         },
         {
@@ -1009,13 +1009,13 @@ const renderCharts = () => {
               type: "linear",
               x: 0, y: 0, x2: 0, y2: 1,
               colorStops: [
-                { offset: 0, color: "rgba(239,68,68,0.6)" },
-                { offset: 1, color: "rgba(239,68,68,0.08)" },
+                { offset: 0, color: "rgba(185,28,28,0.55)" },
+                { offset: 1, color: "rgba(185,28,28,0.06)" },
               ],
             },
           },
-          lineStyle: { color: "#ef4444", width: 2 },
-          itemStyle: { color: "#ef4444", borderColor: "#fff", borderWidth: 2 },
+          lineStyle: { color: "#B91C1C", width: 2 },
+          itemStyle: { color: "#B91C1C", borderColor: "#fff", borderWidth: 2 },
           data: trend.map((d) => d.negative || 0),
         },
       ],
@@ -1068,7 +1068,7 @@ const renderCharts = () => {
           return `<div style="font-weight:800;color:#0f172a;line-height:1.4;margin-bottom:6px;${wrap}">${a.title || "(无标题)"}</div>
             <div style="color:#64748b;font-size:11px;font-weight:700;margin-bottom:4px;${wrap}">${src} · ${tStr}${senti ? ` · <span style='color:${getSentimentColor(a.ai_sentiment)};'>${senti}</span>` : ""}</div>
             ${preview ? `<div style="color:#475569;font-size:11px;line-height:1.5;${wrap}">${preview}…</div>` : ""}
-            <div style="color:#6366f1;font-size:10px;font-weight:800;margin-top:6px;">点击查看详情 →</div>`;
+            <div style="color:#B45309;font-size:10px;font-weight:800;margin-top:6px;">点击查看详情 →</div>`;
         },
       },
       grid: { top: 18, right: 22, bottom: 56, left: 96, containLabel: false },
@@ -1101,12 +1101,12 @@ const renderCharts = () => {
         { type: "inside", xAxisIndex: 0, filterMode: "filter", zoomOnMouseWheel: true, moveOnMouseMove: true },
         {
           type: "slider", xAxisIndex: 0, height: 14, bottom: 6,
-          backgroundColor: "rgba(241,245,249,0.6)",
-          fillerColor: "rgba(99,102,241,0.18)",
+          backgroundColor: "rgba(245,245,242,0.6)",
+          fillerColor: "rgba(180,83,9,0.18)",
           borderColor: "transparent",
-          handleStyle: { color: "#6366f1", borderColor: "#fff", borderWidth: 2 },
-          moveHandleStyle: { color: "#6366f1" },
-          textStyle: { color: "#94a3b8", fontSize: 10 },
+          handleStyle: { color: "#B45309", borderColor: "#fff", borderWidth: 2 },
+          moveHandleStyle: { color: "#B45309" },
+          textStyle: { color: "#A8A29E", fontSize: 10 },
           showDetail: false,
         },
       ],
@@ -1299,10 +1299,11 @@ onUnmounted(() => {
 }
 
 .intel-badge {
+  /* AI 生成徽标：去紫渐变，改赤陶红平色 */
   margin-left: auto;
   padding: 2px 10px;
   border-radius: 999px;
-  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  background: var(--color-accent, #B45309);
   color: #fff;
   font-size: 10px;
   font-weight: 700;
@@ -1328,24 +1329,26 @@ onUnmounted(() => {
 .article-timeline-wrap {
   margin: 6px 0 16px;
   padding: 10px 12px 12px;
-  background: linear-gradient(180deg, rgba(238, 242, 255, 0.55) 0%, rgba(255, 255, 255, 0) 70%);
-  border: 1px solid rgba(199, 210, 254, 0.55);
-  border-radius: 16px;
+  background: var(--color-surface, #fff);
+  border: 1px solid var(--color-border, #E5E5DD);
+  border-left: 3px solid var(--color-accent, #B45309);
+  border-radius: 8px;
 }
 .article-timeline-caption {
   display: flex;
   align-items: center;
   gap: 6px;
   font-size: 12px;
-  font-weight: 800;
-  color: #4338ca;
+  font-weight: 700;
+  color: var(--color-text, #1C1917);
   letter-spacing: 0.02em;
   margin-bottom: 6px;
   padding-left: 4px;
+  font-family: var(--font-display, "Noto Serif SC", serif);
 }
 .article-timeline-caption iconify-icon {
   font-size: 16px;
-  color: #6366f1;
+  color: var(--color-accent, #B45309);
 }
 .article-timeline-viewport {
   width: 100%;
@@ -1409,8 +1412,8 @@ onUnmounted(() => {
   background: rgba(100, 116, 139, 0.06);
 }
 .eh-sort-btn.active {
-  background: rgba(59, 130, 246, 0.12);
-  color: #3b82f6;
+  background: rgba(180, 83, 9, 0.10);
+  color: var(--color-accent, #B45309);
   font-weight: 600;
 }
 
@@ -1436,8 +1439,8 @@ onUnmounted(() => {
 
 .lead-article-card:hover {
   transform: translateY(-2px);
-  border-color: #93c5fd;
-  box-shadow: 0 10px 24px rgba(37, 99, 235, 0.08);
+  border-color: var(--color-accent, #B45309);
+  box-shadow: 0 6px 14px -8px rgba(20, 16, 8, 0.10);
 }
 
 .lead-article-top {
@@ -1477,8 +1480,8 @@ onUnmounted(() => {
   align-items: center;
   padding: 6px 10px;
   border-radius: 999px;
-  background: #eff6ff;
-  color: #1d4ed8;
+  background: var(--color-surface-2, #F5F5F2);
+  color: var(--color-accent, #B45309);
   font-size: 11px;
   font-weight: 800;
 }
@@ -1494,7 +1497,7 @@ onUnmounted(() => {
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
-  color: #3b82f6;
+  color: var(--color-text-2, #57534E);
   font-style: italic;
 }
 
@@ -1514,9 +1517,9 @@ onUnmounted(() => {
   top: 30px;
   bottom: 30px;
   left: 96px;
-  width: 2px;
-  background: linear-gradient(to bottom, #c7d2fe 0%, #a5b4fc 50%, #c7d2fe 100%);
-  border-radius: 2px;
+  width: 1px;
+  background: var(--color-border, #E5E5DD);
+  border-radius: 1px;
   pointer-events: none;
 }
 
@@ -1598,8 +1601,8 @@ onUnmounted(() => {
 }
 
 .timeline-row.tl-card:hover .tl-card-body {
-  box-shadow: 0 12px 26px -12px rgba(59, 130, 246, 0.32);
-  border-color: rgba(59, 130, 246, 0.35);
+  box-shadow: 0 8px 18px -10px rgba(20, 16, 8, 0.12);
+  border-color: var(--color-accent, #B45309);
 }
 
 .timeline-row {
@@ -1621,7 +1624,7 @@ onUnmounted(() => {
   width: 12px;
   height: 12px;
   border-radius: 999px;
-  background: #3b82f6;
+  background: var(--color-accent, #B45309);
   margin-top: 8px;
   margin-left: 2px;
   position: relative;
