@@ -521,14 +521,16 @@ onMounted(loadAll);
   position: relative;
   border-radius: 4px;
   overflow: hidden;
-  /* editorial: 去紫蓝粉糖果渐变，改为近墨石板刯头黑底 */
-  background: var(--color-brand);
-  box-shadow: 0 8px 24px -16px rgba(15, 23, 42, 0.45);
-  padding: 24px 28px;
-  color: #FAFAF7;
+  /* editorial: 去黑，改为报纸头版”纸白 + 顽赤陶红 kicker + 衰宋体标题“
+     仅保留上下 1px hairline 作为“版面划颗” */
+  background: var(--color-surface);
+  box-shadow: none;
+  padding: 28px 28px 26px;
+  color: var(--color-text);
   min-height: 132px;
   flex-shrink: 0;
   border: 1px solid var(--color-border);
+  border-top: 3px solid var(--color-accent);
 }
 
 .sub-hero-bg {
@@ -536,10 +538,9 @@ onMounted(loadAll);
   inset: 0;
   pointer-events: none;
   z-index: 0;
-  /* 保留轻微纸质质感，但不再是霒虹光 */
+  /* 右上软赤陶红阳光，作为暑调点缀 */
   background:
-    radial-gradient(circle at 12% 18%, rgba(180, 83, 9, 0.10), transparent 45%),
-    radial-gradient(circle at 88% 82%, rgba(255, 255, 255, 0.04), transparent 55%);
+    radial-gradient(circle at 92% 12%, rgba(180, 83, 9, 0.06), transparent 55%);
 }
 
 .sub-hero-content {
@@ -558,34 +559,34 @@ onMounted(loadAll);
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 12px;
-  /* editorial: 赤陶红 kicker，取代亮白玻璃 */
-  background: rgba(180, 83, 9, 0.18);
+  padding: 3px 10px;
+  /* editorial: 赤陶红 chip走报纸 kicker */
+  background: rgba(180, 83, 9, 0.10);
   color: var(--color-accent);
   font-size: 11px;
-  font-weight: 700;
-  border-radius: 4px;
-  letter-spacing: 0.16em;
+  font-weight: 800;
+  border-radius: 3px;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
 }
 
 .sub-title {
   display: block !important;
-  font-size: 28px !important;
+  font-size: 30px !important;
   font-weight: 800 !important;
-  margin: 12px 0 6px !important;
+  margin: 14px 0 6px !important;
   letter-spacing: 0.02em;
-  /* editorial: 衰宋体作标题 */
+  /* editorial: 衰宋体作报纸头版标题 */
   font-family: var(--font-display, "Noto Serif SC", serif);
-  color: #FAFAF7 !important;
-  line-height: 1.25 !important;
+  color: var(--color-text) !important;
+  line-height: 1.2 !important;
   text-shadow: none;
 }
 
 .sub-sub {
   display: block !important;
   font-size: 13px !important;
-  color: rgba(250, 250, 247, 0.78) !important;
+  color: var(--color-text-2) !important;
   line-height: 1.6 !important;
   margin: 0 !important;
   max-width: 540px;
@@ -596,15 +597,16 @@ onMounted(loadAll);
   align-items: center;
   gap: 6px;
   padding: 9px 18px;
-  background: rgba(250, 250, 247, 0.92);
-  color: var(--color-brand);
+  /* editorial: 近墨石板实色作“主动作”，仅此一黑 */
+  background: var(--color-brand);
+  color: #FAFAF7;
   font-weight: 700;
   border: none;
   border-radius: 4px;
   cursor: pointer;
   font-size: 13px;
   transition: all 0.18s ease;
-  box-shadow: 0 4px 14px -8px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 1px 2px rgba(28, 25, 23, 0.08);
 }
 
 .sub-refresh-btn:hover:not(:disabled) {
@@ -930,13 +932,15 @@ onMounted(loadAll);
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  padding: 2px 8px;
-  /* editorial: 黑底金色字作评分徽章 */
-  background: var(--color-brand);
+  padding: 2px 9px;
+  /* editorial: 去全黑坍，改为“米白底 + 赤陶红 hairline + 衰宋体赤陶红打分”的分数戳记感 */
+  background: var(--color-surface);
   color: var(--color-accent);
+  border: 1px solid var(--color-accent);
   border-radius: 3px;
   font-size: 11px;
   font-weight: 800;
+  font-family: var(--font-display, "Noto Serif SC", serif);
   letter-spacing: 0.04em;
 }
 
