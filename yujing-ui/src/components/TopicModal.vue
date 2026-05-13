@@ -542,7 +542,7 @@ watch(
   text-transform: none;
 }
 .meta-pill.sentiment {
-  color: #1d4ed8;
+  color: var(--color-accent);
 }
 .meta-pill.sentiment.negative {
   color: #dc2626;
@@ -680,9 +680,10 @@ watch(
   margin-bottom: 10px;
 }
 .platform-name {
-  color: #3b82f6;
+  color: var(--color-accent);
   font-size: 11px;
-  font-weight: 900;
+  font-weight: 600;
+  letter-spacing: 0.05em;
 }
 .time-stamp {
   color: #94a3b8;
@@ -699,7 +700,8 @@ watch(
 }
 .pipeline-title:hover {
   text-decoration: underline;
-  color: #2563eb;
+  text-decoration-color: var(--color-accent);
+  text-underline-offset: 4px;
 }
 
 .pipeline-summary {
@@ -725,10 +727,11 @@ watch(
 }
 
 .pipeline-action {
-  color: #1d4ed8;
+  color: var(--color-accent);
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 600;
   text-transform: none;
+  letter-spacing: 0.04em;
 }
 
 .pipeline-action.primary {
@@ -791,8 +794,8 @@ watch(
 .loading-spin {
   width: 16px;
   height: 16px;
-  border: 2px solid rgba(59, 130, 246, 0.15);
-  border-top-color: #3b82f6;
+  border: 2px solid var(--color-border);
+  border-top-color: var(--color-accent);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
@@ -804,9 +807,9 @@ watch(
   color: #334155;
 }
 .status-tip {
-  color: #3b82f6;
+  color: var(--color-accent);
   font-style: italic;
-  font-weight: 700;
+  font-weight: 500;
 }
 .empty-hint {
   color: #94a3b8;
@@ -826,7 +829,7 @@ watch(
 }
 .markdown-view :deep(.ref-badge:hover) { opacity: 0.75; }
 .markdown-view :deep(.ref-article) {
-  background: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe;
+  background: var(--color-surface-2); color: var(--color-accent); border: 1px solid var(--color-border);
 }
 .markdown-view :deep(.ref-event) {
   background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0;
@@ -850,9 +853,9 @@ watch(
   margin: 16px 0;
 }
 .load-more-box:hover {
-  background: #f1f5f9;
-  color: #3b82f6;
-  border-color: #3b82f6;
+  background: var(--color-surface);
+  color: var(--color-accent);
+  border-color: var(--color-text-3);
 }
 
 .expand-detail {
@@ -886,9 +889,9 @@ watch(
   transition: all 0.2s;
 }
 .sub-art-link:hover {
-  background: #eff6ff;
-  transform: translateX(4px);
-  color: #2563eb;
+  background: var(--color-surface-2);
+  transform: translateX(2px);
+  color: var(--color-accent);
 }
 .art-source {
   font-weight: 900;
