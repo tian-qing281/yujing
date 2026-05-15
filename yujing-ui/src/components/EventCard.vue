@@ -101,7 +101,7 @@ const prettifySummary = (value) => {
   flex-direction: column;
   cursor: pointer;
   /* Batch H：仅 transform + border-color 平滑过渡，不再 all */
-  transition: transform 0.18s ease-out, border-color 0.18s ease-out, box-shadow 0.18s ease-out;
+  transition: transform 200ms ease-out, border-color 200ms ease-out, box-shadow 200ms ease-out;
   min-height: 180px;
   overflow: hidden;
   position: relative;

@@ -97,7 +97,8 @@ const highlight = (value) => {
   flex-direction: column;
   gap: 18px;
   cursor: pointer;
-  transition: transform 0.24s ease, box-shadow 0.24s ease, border-color 0.24s ease;
+  /* Batch VII：统一 200ms ease-out（原 240ms ease） */
+  transition: transform 200ms ease-out, box-shadow 200ms ease-out, border-color 200ms ease-out;
   min-height: 228px;
 }
 

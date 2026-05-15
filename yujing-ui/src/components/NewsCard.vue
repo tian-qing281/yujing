@@ -22,6 +22,9 @@
           <span v-for="reason in searchReasons" :key="reason" class="search-chip badge badge-soft badge-primary">{{ reason }}</span>
         </div>
       </div>
+
+      <!-- Batch VIII：row 变体在右侧显示影响指数小数字，与序号/标题同 baseline -->
+      <span v-if="variant === 'row' && item?.impactScore" class="row-impact">{{ item.impactScore }}</span>
     </div>
   </div>
 </template>
@@ -151,7 +154,8 @@ const searchReasons = computed(() =>
   flex-direction: column;
   align-items: stretch;
   cursor: pointer;
-  transition: 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  /* Batch VII：与 EventCard / TopicCard 统一 200ms ease-out，起伏一致 */
+  transition: transform 200ms ease-out, box-shadow 200ms ease-out, border-color 200ms ease-out;
   border: 1px solid var(--color-border);
   gap: 14px;
   position: relative;
@@ -444,6 +448,18 @@ const searchReasons = computed(() =>
 .news-card--row .card-excerpt,
 .news-card--row .card-search-meta {
   display: none;
+}
+
+/* Batch VIII：row 右侧影响指数小数字，与序号、标题同 baseline。
+   使用 tabular-nums 保证三位数宽度一致，避免 91/9 宽度抽动。 */
+.news-card--row .row-impact {
+  flex: 0 0 auto;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-muted, #94a3b8);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  margin-left: 12px;
 }
 
 /* row 行末尾追加热度小字（如果之后想接热度，可在 NewsCard template 内挂 row-meta） */
