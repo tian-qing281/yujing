@@ -173,6 +173,7 @@
 <script setup>
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { buildApiUrl } from "../config/api";
+import { ANIM } from "../utils/chartAnimation";
 
 const props = defineProps({
   item: { type: Object, default: null },
@@ -656,6 +657,7 @@ const renderCharts = () => {
 
   // 1. 时间趋势 — 柱状(数量) + 折线(热度) 双轴
   timeTrendChart?.setOption({
+    ...ANIM.bar,
     tooltip: {
       trigger: "axis",
       backgroundColor: "rgba(255,255,255,0.96)",
@@ -745,6 +747,7 @@ const renderCharts = () => {
     "#DDD8D0",  // 8位
   ];
   platformChart?.setOption({
+    ...ANIM.bar,
     tooltip: {
       trigger: "axis",
       axisPointer: { type: "shadow" },
@@ -788,6 +791,7 @@ const renderCharts = () => {
   // 3. 关键词热度 — 水平条形图 暖色渐变
   const kwReversed = [...keywords].reverse();
   keywordChart?.setOption({
+    ...ANIM.bar,
     tooltip: {
       trigger: "axis",
       axisPointer: { type: "shadow" },
@@ -831,6 +835,7 @@ const renderCharts = () => {
 
   // 4. 舆情倾向 — 环形图
   sentimentChart?.setOption({
+    ...ANIM.pie,
     tooltip: {
       trigger: "item",
       backgroundColor: "rgba(255,255,255,0.96)",
@@ -880,6 +885,7 @@ const renderCharts = () => {
       } catch (e) { return iso; }
     };
     sentimentTrendChart?.setOption({
+      ...ANIM.line,
       tooltip: {
         trigger: "axis",
         axisPointer: {
@@ -1057,6 +1063,7 @@ const renderCharts = () => {
       .filter(Boolean);
     const yCats = Array.from(new Set(items.map((i) => i.value[1])));
     articleTimelineChart?.setOption({
+      ...ANIM.line,
       tooltip: {
         trigger: "item",
         backgroundColor: "rgba(255,255,255,0.98)",

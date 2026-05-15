@@ -294,6 +294,7 @@
 <script setup>
 import { ref, watch, nextTick, onMounted, onUnmounted, computed } from 'vue'
 import { renderMarkdown } from '@/utils/markdown'
+import { ANIM } from '@/utils/chartAnimation'
 
 const props = defineProps({
   item: Object,
@@ -366,6 +367,7 @@ function renderEmoPie(domRef, instRef, data) {
     return inst
   }
   inst.setOption({
+    ...ANIM.pie,
     tooltip: { trigger: 'item', formatter: '{b}: {d}%' },
     legend: {
       orient: 'horizontal',
@@ -559,6 +561,7 @@ const renderSentimentChart = () => {
   if (!groups.length) return
   const dominant = groups.reduce((a, b) => a.value > b.value ? a : b)
   sentimentChart.setOption({
+    ...ANIM.pie,
     tooltip: { trigger: 'item', formatter: '{b}: {d}%' },
     legend: { show: false },
     series: [{
@@ -592,6 +595,7 @@ const renderCloud = (data) => {
     emotionChart = window.echarts.init(emotionChartRef.value)
     const emoData = (props.item.emotions || []).filter(e => e.value > 0).reverse();
     emotionChart.setOption({
+      ...ANIM.bar,
       grid: { top: 10, right: 45, bottom: 10, left: 45 },
       xAxis: { type: 'value', show: false },
       yAxis: { 
@@ -663,6 +667,7 @@ const renderCloud = (data) => {
     if (topKw.length >= 3) {
       const kwMax = Math.max(...topKw.map(k => k.value))
       radarChart.setOption({
+        ...ANIM.radar,
         tooltip: {},
         radar: {
           indicator: topKw.map(k => ({ name: k.word, max: kwMax * 1.15 })),
@@ -708,6 +713,7 @@ function renderAspectRadar() {
   const polarityLabel = (s) => (s === 'positive' ? '正面' : s === 'negative' ? '负面' : '中性')
   const axisColor = (s) => (s === 'positive' ? '#16a34a' : s === 'negative' ? '#dc2626' : '#64748b')
   aspectRadarChart.setOption({
+    ...ANIM.radar,
     tooltip: {
       formatter: (p) => {
         const items = aspects.map((a, i) => `<div style="display:flex;justify-content:space-between;gap:12px"><span>${a.aspect}</span><strong style="color:${axisColor(a.sentiment)}">${polarityLabel(a.sentiment)}</strong></div>`).join('')

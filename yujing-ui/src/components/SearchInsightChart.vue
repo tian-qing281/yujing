@@ -110,8 +110,12 @@ const leadText = computed(() => {
 
 const getOption = () => ({
   backgroundColor: "transparent",
-  animationDuration: 220,
-  animationDurationUpdate: 160,
+  animation: true,
+  animationDuration: 700,
+  animationEasing: "cubicOut",
+  animationDelay: (idx) => idx * 60,
+  animationDurationUpdate: 300,
+  animationEasingUpdate: "cubicOut",
   // editorial: 赤陶红主主，暖灰辅助
   color: ["#B45309", "#78716C"],
   tooltip: {

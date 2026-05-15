@@ -51,6 +51,7 @@
 
 <script setup>
 import { ref, onMounted, watch, computed, onUnmounted } from 'vue'
+import { ANIM } from '@/utils/chartAnimation'
 
 const props = defineProps({
   articles: {
@@ -99,6 +100,7 @@ const initHeatChart = () => {
   })
   
   const option = {
+    ...ANIM.bar,
     backgroundColor: 'transparent',
     tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
     grid: { left: '3%', right: '4%', bottom: '3%', top: '10%', containLabel: true },
