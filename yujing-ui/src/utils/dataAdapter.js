@@ -72,8 +72,9 @@ function parseExtraInfo(info) {
 }
 
 /**
- * 归一化热度值计算（Batch IV / F1）
- * - rank 兜底：rawItem.rank 缺失时用列表 index+1（百度/头条/B站/知乎爬虫未带 rank）
+ * 归一化热度值计算（Batch IV / F1 / J-K）
+ * - rank 优先级：listIndex（前端分组下标）> rawItem.rank（后端落库值，J/K 后已全平台真实）
+ *   仅在两者都缺时才回退 99 占位（实际不会发生，base.py setdefault 已兜底）。
  * - 平台差异化 bonus：
  *   微博 hot_score / 200_000        头条 hot_value / 200_000_000
  *   百度 hot_score / 1_000_000      知乎 view_count / 1_000_000
@@ -82,11 +83,11 @@ function parseExtraInfo(info) {
  */
 function calculateImpactScore(sourceId, item, extra, listIndex) {
   // listIndex 来自前端 *按平台分组后的* 0-based 下标（榜单内排名 - 1）；
-  // 仅当未传 listIndex 时回退用 rawItem.rank（部分爬虫给定）；99 是后端默认占位，不能信。
+  // 未传 listIndex 时回退用 rawItem.rank（J/K 后端修复后此路径已是真实排名）。
   const rawRank = Number(item.rank);
   const rank = Number.isInteger(listIndex)
     ? listIndex + 1
-    : (rawRank && rawRank !== 99 ? rawRank : 99);
+    : (rawRank && rawRank !== 99 && rawRank !== 999 ? rawRank : 99);
   // 1-30 名 → 91-50 分；30-50 名 → 50-25 分；为 bonus 留 8 分顶部空间，避免被 clamp 抹平
   const baseScore = Math.max(25, Math.round(92 - rank * 1.4));
 
@@ -131,6 +132,54 @@ export function recomputeImpactByGroup(list) {
     it.impactScore = calculateImpactScore(sid, it, extra, idx);
   }
   return list;
+}
+
+/**
+ * F7：影响指数可解释拆解
+ * 给定 item 反推 baseScore + bonus + 平台权重维度的人话说明，供 NewsCard tooltip 使用。
+ * 不修改 item，纯只读计算。
+ */
+const SOURCE_NAME_MAP = {
+  weibo_hot_search: '微博', baidu_hot: '百度', toutiao_hot: '头条',
+  bilibili_hot_video: 'B 站', zhihu_hot_question: '知乎',
+  thepaper_hot: '澎湃', wallstreetcn_news: '华尔街见闻', cls_telegraph: '财联社',
+};
+const BONUS_FIELD_MAP = {
+  weibo_hot_search: { field: 'hot_score', divisor: 500000, label: '微博热度值' },
+  zhihu_hot_question: { field: 'view_count', divisor: 3000000, label: '知乎浏览量' },
+  bilibili_hot_video: { field: 'view', divisor: 1500000, label: 'B 站播放量' },
+  baidu_hot: { field: 'hot_score', divisor: 5000000, label: '百度热度值' },
+  toutiao_hot: { field: 'hot_value', divisor: 800000000, label: '头条热度值' },
+};
+
+export function explainImpact(item, listIndex) {
+  if (!item) return '';
+  const sid = item.source_id || item.source?.id || 'unknown';
+  const extra = item.extra || parseExtraInfo(item.extra_info);
+  const rawRank = Number(item.rank);
+  const rank = Number.isInteger(listIndex)
+    ? listIndex + 1
+    : (rawRank && rawRank !== 99 && rawRank !== 999 ? rawRank : 99);
+  const baseScore = Math.max(25, Math.round(92 - rank * 1.4));
+
+  const bonusCfg = BONUS_FIELD_MAP[sid];
+  const bonusRaw = bonusCfg ? (Number(extra[bonusCfg.field]) || 0) / bonusCfg.divisor : 0;
+  const bonus = Math.min(8, bonusRaw);
+  const total = Math.min(99, Math.round(baseScore + bonus));
+
+  const sourceName = SOURCE_NAME_MAP[sid] || sid;
+  const lines = [
+    `${sourceName} · 第 ${rank} 名`,
+    `基础分 ${baseScore}（按榜内排名）`,
+  ];
+  if (bonusCfg) {
+    const rawValue = Number(extra[bonusCfg.field]) || 0;
+    lines.push(`${bonusCfg.label} ${rawValue.toLocaleString()} → 加权 +${bonus.toFixed(1)}（上限 +8）`);
+  } else {
+    lines.push('该平台仅按排名计分，无热度加权');
+  }
+  lines.push(`合计影响指数 ${total} / 99`);
+  return lines.join('\n');
 }
 
 /**

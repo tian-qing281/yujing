@@ -7,7 +7,7 @@
         </div>
         <div class="card-badges">
           <span v-if="sourceLabel && !hideSource" class="badge badge-outline source">{{ sourceLabel }}</span>
-          <span v-if="heatLabel" class="badge badge-outline heat" :style="heatStyle">
+          <span v-if="heatLabel" class="badge badge-outline heat" :style="heatStyle" :title="impactExplain">
             <iconify-icon icon="mdi:fire"></iconify-icon>
             {{ heatLabel }}
           </span>
@@ -24,13 +24,14 @@
       </div>
 
       <!-- Batch VIII：row 变体在右侧显示影响指数小数字，与序号/标题同 baseline -->
-      <span v-if="variant === 'row' && item?.impactScore" class="row-impact">{{ item.impactScore }}</span>
+      <span v-if="variant === 'row' && item?.impactScore" class="row-impact" :title="impactExplain">{{ item.impactScore }}</span>
     </div>
   </div>
 </template>
 
 <script setup>
 import { computed } from "vue";
+import { explainImpact } from "../utils/dataAdapter";
 
 const SOURCE_LABEL_MAP = {
   weibo_hot_search: "微博热搜榜",
@@ -132,6 +133,12 @@ const heatStyle = computed(() => ({
 }));
 
 const sourceLabel = computed(() => SOURCE_LABEL_MAP[props.item?.source_id] || props.item?.source_id || "");
+
+// F7：影响指数可解释 tooltip — hover heat badge / row 数字时显示拆解
+const impactExplain = computed(() => {
+  if (!props.item?.impactScore) return "";
+  return explainImpact(props.item, props.index);
+});
 
 const displayTitle = computed(() =>
   prettifySourceIds(props.item.search_highlight_title || props.item.title || ""),

@@ -186,6 +186,12 @@ class BaseSource:
     def _save_to_db(self, items):
         if not items:
             return
+        # J/K 修复：兜底注入 rank（按抓取顺序），覆盖 baidu/bilibili/toutiao/zhihu 等
+        # 未在 source 实现里显式塞 "rank" 的情况，避免落库 fallback 99 占位污染前端打分。
+        # 已显式塞 rank 的 source（weibo / thepaper / wallstreetcn / cls）走 setdefault 不被覆盖。
+        for idx, item in enumerate(items, start=1):
+            item.setdefault("rank", idx)
+
         db = SessionLocal()
         try:
             now = datetime.now()
