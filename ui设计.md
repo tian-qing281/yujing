@@ -269,9 +269,27 @@ ECharts 全部图表统一使用 5 阶单色梯度：
 - 绿成功：success / "已采集"标签（操作正反馈）
 - `EMO_COLORS` 8 色：愤怒红 / 悲伤灰 / 喜悦绿 / 惊讶橙 / 关注蓝 / 质疑粉 / 厌恶紫 / 中性灰（情感雷达图固定语义）
 
-**待续**（可选，下一轮）：
-- 数字滚动 `<NumberFlow>`（需新增依赖 vue-number-flow）
-- 图表入场单条曲线 200ms ease-out 描出（ECharts series animation 配置）
+### Batch I · NumberFlow 数字滚动（已完成 - commit `fc75362`）
+
+**已交付（6 文件 14 处）**：
+- 依赖：`@number-flow/vue@0.5.0`，组件局部 `import NumberFlow from "@number-flow/vue"`
+- 自动 tabular-nums + 千位分隔符（5,492 / 11,072）
+- 覆盖：App 全景指标 / EventCard 文章数 / TopicCard 平台与事件数 / CompareDashboard 对比指标 / AIConsultant（会话/告警/平台/被召唤项）/ SubscriptionPanel（订阅/拉黑/历史/匹配/分数）
+
+### Batch II · ECharts 入场动画统一预设（已完成 - commit `6b0fc8e`）
+
+**已交付（5 文件 13 处图表 + 1 个工具）**：
+- 新增 `utils/chartAnimation.js`：导出 `ANIM = { bar | pie | radar | line }`
+- 默认 700ms `cubicOut` + 更新 300ms；柱/线带 `idx*80` / `idx*30` 错峰
+- 注入：AnalysisModal 5 处 / EventModal 6 处 / SourcePulse 1 处 / SearchInsightChart 1 处（替换原 220ms）
+
+### Batch III · 全局排版 baseline（已完成 - commit `d5d8889`）
+
+**已交付（2 文件）**：
+- `style.css`：body 行高 1.7、h1-h6 letter-spacing -0.01em、p 段距 1em
+- meta / *-count / *-stat / .tabular-nums 启用 `font-variant-numeric: tabular-nums` + `tnum`
+- 次按钮（btn-ghost / btn-outline / btn-secondary）letter-spacing 收紧到 0
+- NewsCard `.card-main` gap `12px → 0.4em`（标题/摘要/meta 三段紧凑化）
 
 ### Batch G · 暗模式（Dark Editorial）
 
@@ -280,15 +298,14 @@ ECharts 全部图表统一使用 5 阶单色梯度：
 - accent 不变，data 调亮一档
 - 所有 hairline 改为 `#2C2826`
 
-### Batch I · 主题切换器
+### Batch J · 主题切换器
 
 - 提供"刊物风"切换：`Economist 红` / `NYT 黑` / `Monocle 卡其`
 - 三套预设全部基于现有 token，仅需替换 5 个值
 
-### Batch J · 排版微调
+### Batch L · 排版进一步细化（待续）
 
 - 主标题字号梯度：`30 → 24 → 18 → 14`（当前部分组件还在用 28/26）
-- 行高统一：标题 `1.2`、正文 `1.7`
 - 中文断词：全站加 `word-break: keep-all` 避免标题被切
 
 ### Batch K · 移动端
