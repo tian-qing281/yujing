@@ -2,7 +2,7 @@
 import { computed, defineAsyncComponent, nextTick, onMounted, ref, watch } from "vue";
 import NumberFlow from "@number-flow/vue";
 import { buildApiUrl } from "./config/api";
-import { transformToHDS } from "./utils/dataAdapter";
+import { transformToHDS, recomputeImpactByGroup } from "./utils/dataAdapter";
 import AIConsultant from "./components/AIConsultant.vue";
 import AnalysisModal from "./components/AnalysisModal.vue";
 import AppHeader from "./components/AppHeader.vue";
@@ -194,9 +194,12 @@ const fetchArticles = async (force = false) => {
         if (fetchId !== currentFetchId) return;
 
         const chunk = rawRows.slice(currentIndex, currentIndex + CHUNK_SIZE);
-        const transformed = chunk.map(item => transformToHDS(item));
-        
+        // Batch IV / F1：传入全局 listIndex，让 dataAdapter 在 rank 缺失时按列表顺序兜底
+        const transformed = chunk.map((item, i) => transformToHDS(item, '', currentIndex + i));
+
         articles.value = [...articles.value, ...transformed];
+        // F1·后续重算：采用 per-source rank 重算 impactScore，与榜单内顺序对齐
+        recomputeImpactByGroup(articles.value);
         
         currentIndex += CHUNK_SIZE;
         
@@ -322,7 +325,8 @@ const fetchArticleSearch = async (query = eventQuery.value, page = articlePage.v
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     const rawItems = Array.isArray(data?.items) ? data.items : [];
-    const nextItems = rawItems.map(item => transformToHDS(item));
+    const nextItems = rawItems.map((item, i) => transformToHDS(item, '', i));
+    recomputeImpactByGroup(nextItems);
     const nextTotal = Number(data?.total || nextItems.length || 0);
     if (!nextItems.length && nextTotal > 0 && safePage > 1 && allowEmptyPageRetry) {
       searchedArticleTotal.value = Math.min(nextTotal, (safePage - 1) * pageSize);
@@ -442,7 +446,8 @@ const fetchUnifiedSearch = async (query = eventQuery.value, timeOverride = undef
     const freshEvents = Array.isArray(data?.events) ? data.events : [];
     const freshTopics = Array.isArray(data?.topics) ? data.topics : [];
     const rawArticles = Array.isArray(data?.articles) ? data.articles : [];
-    const freshArticles = rawArticles.map(item => transformToHDS(item));
+    const freshArticles = rawArticles.map((item, i) => transformToHDS(item, '', i));
+    recomputeImpactByGroup(freshArticles);
     const freshSummary = data?.summary || { events: 0, topics: 0, articles: 0 };
     const freshAxes = Array.isArray(data?.axes) ? data.axes : [];
     const freshPlatforms = Array.isArray(data?.platforms) ? data.platforms : [];

@@ -17,8 +17,11 @@ const SOURCE_CONFIG = {
 
 /**
  * 核心转换函数
+ * @param {object} rawItem 原始数据
+ * @param {string} sourceId 平台 id（可选，缺省时从 rawItem.source_id 取）
+ * @param {number} listIndex 该条在当前平台列表中的 0-based 下标，作为 rank 兜底
  */
-export function transformToHDS(rawItem, sourceId = '') {
+export function transformToHDS(rawItem, sourceId = '', listIndex) {
   const sid = sourceId || rawItem.source_id;
   const config = SOURCE_CONFIG[sid] || { name: '未知来源', icon: 'ri:link-m' };
   
@@ -42,7 +45,7 @@ export function transformToHDS(rawItem, sourceId = '') {
     },
 
     // 影响力归一化 (0-100)
-    impactScore: calculateImpactScore(sid, rawItem, extra),
+    impactScore: calculateImpactScore(sid, rawItem, extra, listIndex),
     
     // 情报深度指标 (0-100)
     intelDepth: calculateIntelDepth(rawItem),
@@ -69,28 +72,57 @@ function parseExtraInfo(info) {
 }
 
 /**
- * 归一化热度值计算
+ * 归一化热度值计算（Batch IV / F1）
+ * - rank 兜底：rawItem.rank 缺失时用列表 index+1（百度/头条/B站/知乎爬虫未带 rank）
+ * - 平台差异化 bonus：
+ *   微博 hot_score / 200_000        头条 hot_value / 200_000_000
+ *   百度 hot_score / 1_000_000      知乎 view_count / 1_000_000
+ *   B 站 view / 500_000             澎湃/华见/财联社 已自带 rank，无 bonus
+ * - 基础分梯度放宽到 25-100，让 50 名后也有梯度（原 max(40, ...) 把 41 名后全压到 40）
  */
-function calculateImpactScore(sourceId, item, extra) {
-  const rank = Number(item.rank) || 99;
-  
-  // 基础分数由排名决定（1-50名 -> 95-60分）
-  let baseScore = Math.max(40, 100 - (rank * 1.5));
-  
-  // 附件加成逻辑
+function calculateImpactScore(sourceId, item, extra, listIndex) {
+  // listIndex 来自前端 *按平台分组后的* 0-based 下标（榜单内排名 - 1）；
+  // 仅当未传 listIndex 时回退用 rawItem.rank（部分爬虫给定）；99 是后端默认占位，不能信。
+  const rawRank = Number(item.rank);
+  const rank = Number.isInteger(listIndex)
+    ? listIndex + 1
+    : (rawRank && rawRank !== 99 ? rawRank : 99);
+  // 1-30 名 → 91-50 分；30-50 名 → 50-25 分；为 bonus 留 8 分顶部空间，避免被 clamp 抹平
+  const baseScore = Math.max(25, Math.round(92 - rank * 1.4));
+
   let bonus = 0;
   if (sourceId === 'weibo_hot_search') {
-    const hotValue = Number(extra.hot_score || 0);
-    bonus = Math.min(10, hotValue / 200000); 
+    bonus = Math.min(8, (Number(extra.hot_score) || 0) / 500000);
   } else if (sourceId === 'zhihu_hot_question') {
-    const heatValue = parseFloat(extra.hot_score || 0); // 知乎通常是 "xxxx 万"
-    bonus = Math.min(10, heatValue / 100);
+    bonus = Math.min(8, (Number(extra.view_count) || 0) / 3000000);
   } else if (sourceId === 'bilibili_hot_video') {
-    const views = Number(extra.view) || 0;
-    bonus = Math.min(10, views / 500000);
+    bonus = Math.min(8, (Number(extra.view) || 0) / 1500000);
+  } else if (sourceId === 'baidu_hot') {
+    bonus = Math.min(8, (Number(extra.hot_score) || 0) / 5000000);
+  } else if (sourceId === 'toutiao_hot') {
+    bonus = Math.min(8, (Number(extra.hot_value) || 0) / 800000000);
   }
-  
+
   return Math.min(100, Math.round(baseScore + bonus));
+}
+
+/**
+ * 按 source_id 分组，对同源条目按 0-based 序号重算 impactScore。
+ * 用于榜单页（filteredArticles 单源展示）—— 第一名永远 ≈99，与该源整体在
+ * 全局 articles 中的位置无关。
+ * @param {Array} list 已 transformToHDS 过的数组（会就地修改 impactScore）
+ * @returns {Array} 同一 list（链式方便）
+ */
+export function recomputeImpactByGroup(list) {
+  const counters = {};
+  for (const it of list) {
+    const sid = it.source_id || it.source?.id || 'unknown';
+    const idx = counters[sid] || 0;
+    counters[sid] = idx + 1;
+    const extra = it.extra || parseExtraInfo(it.extra_info);
+    it.impactScore = calculateImpactScore(sid, it, extra, idx);
+  }
+  return list;
 }
 
 /**

@@ -337,11 +337,13 @@ const searchReasons = computed(() =>
   }
 }
 
-/* === Batch F.1: lead variant - 通栏头条 === */
-/* 第 1 名跨 2 列，更厚 padding + 更大字号 + 衬线标题 */
+/* === Batch F.1 / V: lead variant - 通栏头条 === */
+/* 第 1 名跨 2 列，更厚 padding + 更大字号 + 衬线标题。
+   Batch V 微调：用户反馈 01 太大与 02-05 落差太突兀，
+   padding/字号/序号都缩一档，整体更接近 NYT 头版的克制比例。 */
 .news-card--lead {
-  padding: 32px 36px;
-  gap: 18px;
+  padding: 22px 28px;
+  gap: 14px;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   /* 顶部一条赤陶红规格条，强化"今日头条"仪式感 */
@@ -349,12 +351,12 @@ const searchReasons = computed(() =>
 }
 
 .news-card--lead .card-rank-box {
-  font-size: 44px;
+  font-size: 34px;
   font-family: var(--font-display, "Noto Serif SC", serif);
 }
 
 .news-card--lead .card-title {
-  font-size: 26px;
+  font-size: 22px;
   font-weight: 800;
   line-height: 1.32;
   font-family: var(--font-display, "Noto Serif SC", serif);

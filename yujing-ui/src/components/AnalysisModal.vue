@@ -709,23 +709,27 @@ function renderAspectRadar() {
   }
   if (aspectRadarChart) aspectRadarChart.dispose()
   aspectRadarChart = window.echarts.init(aspectRadarRef.value)
-  const polarityScore = (s) => (s === 'positive' ? 2 : s === 'negative' ? 0 : 1)
+  // Batch IV · ABSA 雷达修复
+  // 旧映射 negative=0 会让"负面"轴塌到原点，多个负面 aspect 同时存在时连线会"穿心"。
+  // 新映射 negative=1 / neutral=2 / positive=3，所有顶点都至少占 1/3 半径，杜绝塌陷。
+  // 同时按情感色染顶点，单看点位也能读出情感分布。
+  const polarityScore = (s) => (s === 'positive' ? 3 : s === 'negative' ? 1 : 2)
   const polarityLabel = (s) => (s === 'positive' ? '正面' : s === 'negative' ? '负面' : '中性')
-  const axisColor = (s) => (s === 'positive' ? '#16a34a' : s === 'negative' ? '#dc2626' : '#64748b')
+  const axisColor = (s) => (s === 'positive' ? '#16a34a' : s === 'negative' ? '#dc2626' : '#94a3b8')
   aspectRadarChart.setOption({
     ...ANIM.radar,
     tooltip: {
-      formatter: (p) => {
-        const items = aspects.map((a, i) => `<div style="display:flex;justify-content:space-between;gap:12px"><span>${a.aspect}</span><strong style="color:${axisColor(a.sentiment)}">${polarityLabel(a.sentiment)}</strong></div>`).join('')
+      formatter: () => {
+        const items = aspects.map((a) => `<div style="display:flex;justify-content:space-between;gap:12px"><span>${a.aspect}</span><strong style="color:${axisColor(a.sentiment)}">${polarityLabel(a.sentiment)}</strong></div>`).join('')
         return `<div style="font-weight:700;margin-bottom:6px">方面情感极性</div>${items}`
       }
     },
     radar: {
-      indicator: aspects.map(a => ({ name: a.aspect, max: 2 })),
+      indicator: aspects.map(a => ({ name: a.aspect, max: 3 })),
       shape: 'polygon',
-      splitNumber: 2,
+      splitNumber: 3,
       axisName: {
-        formatter: (name, ind) => {
+        formatter: (name) => {
           const a = aspects.find(x => x.aspect === name)
           return `{c|${name}}\n{p|${polarityLabel(a?.sentiment)}}`
         },
@@ -743,12 +747,20 @@ function renderAspectRadar() {
       name: 'ABSA 极性',
       data: [{
         value: aspects.map(a => polarityScore(a.sentiment)),
-        // editorial: 赤陶红单色雷达，不再用紫
+        // editorial: 赤陶红单色面 + 情感色顶点
         areaStyle: { color: 'rgba(180,83,9,0.15)' },
         lineStyle: { color: '#B45309', width: 2 },
-        itemStyle: { color: '#92400E', borderWidth: 2 },
         symbol: 'circle',
-        symbolSize: 7
+        symbolSize: 9,
+        // 顶点按情感染色（红=负 / 灰=中 / 绿=正）
+        itemStyle: {
+          borderWidth: 2,
+          borderColor: '#fff',
+          color: (params) => {
+            const idx = params?.dataIndex ?? 0
+            return axisColor(aspects[idx]?.sentiment)
+          }
+        }
       }]
     }]
   })
