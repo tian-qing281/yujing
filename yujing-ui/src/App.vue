@@ -197,9 +197,12 @@ const fetchArticles = async (force = false) => {
         // Batch IV / F1：传入全局 listIndex，让 dataAdapter 在 rank 缺失时按列表顺序兜底
         const transformed = chunk.map((item, i) => transformToHDS(item, '', currentIndex + i));
 
-        articles.value = [...articles.value, ...transformed];
-        // F1·后续重算：采用 per-source rank 重算 impactScore，与榜单内顺序对齐
-        recomputeImpactByGroup(articles.value);
+        // 漏洞 3 修复：先重算后赋值。新数组先组装好、impactScore 全部 mutate 完毕，
+        // 再触发 articles.value 的响应式更新；避免依赖「Vue 渲染晚于同步 mutation」的时序巧合，
+        // 后续 NewsCard 若加 computed 缓存 impactScore 也不会出现首帧旧值。
+        const nextArticles = [...articles.value, ...transformed];
+        recomputeImpactByGroup(nextArticles);
+        articles.value = nextArticles;
         
         currentIndex += CHUNK_SIZE;
         

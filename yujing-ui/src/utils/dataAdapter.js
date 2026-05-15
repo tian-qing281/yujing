@@ -103,13 +103,21 @@ function calculateImpactScore(sourceId, item, extra, listIndex) {
     bonus = Math.min(8, (Number(extra.hot_value) || 0) / 800000000);
   }
 
-  return Math.min(100, Math.round(baseScore + bonus));
+  // T2 修复：硬上限 99 而不是 100，留 1 分作为「不可达上限」隔离带；
+  // 即便未来 baseScore + bonus 超 100，也不会出现两条都顶到 100 的视觉撞顶。
+  return Math.min(99, Math.round(baseScore + bonus));
 }
 
 /**
  * 按 source_id 分组，对同源条目按 0-based 序号重算 impactScore。
- * 用于榜单页（filteredArticles 单源展示）—— 第一名永远 ≈99，与该源整体在
- * 全局 articles 中的位置无关。
+ *
+ * 适用场景与语义：
+ *  - 榜单页（articles.value 按平台原序追加）：序号即「该源榜单内排名」，语义准确。
+ *  - 搜索页（searchedArticles 按相关度排序）：序号是「当前搜索结果中本源的命中顺序」，
+ *    本质是「检索相关度近似排名」而非「平台原始热度排名」。当前 UX 借此让搜索结果
+ *    也能展示影响指数 chip，避免后端 rank=99 占位导致的全 25 塌底；后续若需严谨
+ *    可在搜索路径渲染「相关度」标签替代影响指数（属 NewsCard 视觉变更，本期不动）。
+ *
  * @param {Array} list 已 transformToHDS 过的数组（会就地修改 impactScore）
  * @returns {Array} 同一 list（链式方便）
  */
