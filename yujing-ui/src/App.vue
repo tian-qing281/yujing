@@ -1,5 +1,6 @@
 <script setup>
 import { computed, defineAsyncComponent, nextTick, onMounted, ref, watch } from "vue";
+import NumberFlow from "@number-flow/vue";
 import { buildApiUrl } from "./config/api";
 import { transformToHDS } from "./utils/dataAdapter";
 import AIConsultant from "./components/AIConsultant.vue";
@@ -1417,7 +1418,7 @@ onMounted(() => {
                   <div v-for="metric in overviewMetrics" :key="metric.label" class="eh-metric-card">
                     <div class="eh-metric-info">
                       <span class="eh-metric-label">{{ metric.label }}</span>
-                      <strong class="eh-metric-value">{{ metric.value }}</strong>
+                      <strong class="eh-metric-value"><NumberFlow :value="Number(metric.value) || 0" /></strong>
                     </div>
                     <div class="eh-metric-icon-sw">
                       <iconify-icon :icon="metric.label.includes('事件') ? 'mdi:folder-star' : 'mdi:rss'" />

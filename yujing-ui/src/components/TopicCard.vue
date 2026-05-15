@@ -5,7 +5,7 @@
         <span class="topic-kicker">{{ item.confidence === "stable" ? "重点脉络" : "观察脉络" }}</span>
         <span class="topic-confidence" :class="item.confidence">{{ item.confidence_label }}</span>
       </div>
-      <span class="topic-meta">{{ item.platform_count }} 平台 · {{ item.event_count }} 事件</span>
+      <span class="topic-meta"><NumberFlow :value="Number(item.platform_count) || 0" /> 平台 · <NumberFlow :value="Number(item.event_count) || 0" /> 事件</span>
     </div>
 
     <div class="topic-main">
@@ -28,6 +28,7 @@
 
 <script setup>
 import { computed } from "vue";
+import NumberFlow from "@number-flow/vue";
 
 const props = defineProps({
   item: { type: Object, required: true },

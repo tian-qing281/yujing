@@ -12,7 +12,7 @@
         </div>
       </div>
       <div class="workspace-meta">
-        <span>{{ sessions.length }}个会话</span>
+        <span><NumberFlow :value="sessions.length" />个会话</span>
         <span v-if="activeSession" class="meta-sep">·</span>
         <span v-if="activeSession">{{ formatSessionMeta(activeSession) }}</span>
       </div>
@@ -111,7 +111,7 @@
           <div class="alerts-header" :class="`alerts-header-${alertsTopLevel}`">
             <iconify-icon :icon="alertLevelIcon(alertsTopLevel)" />
             <span>舆情推送中心</span>
-            <span class="alerts-count">{{ alerts.length }}</span>
+            <span class="alerts-count"><NumberFlow :value="alerts.length" /></span>
             <button class="alerts-clear" type="button" @click="clearAlerts">全部忽略</button>
           </div>
           <div
@@ -125,7 +125,7 @@
             <div class="alert-body">
               <strong>{{ alert.title }}</strong>
               <span class="alert-meta">
-                {{ alert.article_count }} 篇报道 · {{ alert.platform_count }} 个平台 ·
+                <NumberFlow :value="Number(alert.article_count) || 0" /> 篇报道 · <NumberFlow :value="Number(alert.platform_count) || 0" /> 个平台 ·
                 <span class="alert-time" :title="alert.time">{{ formatRelativeTime(alert.time) }}</span>
               </span>
             </div>
@@ -219,7 +219,7 @@
             <div v-if="msg.role === 'assistant' && msg.summoned_items?.length" class="summon-area">
               <div class="summon-header">
                 <span>关联情报</span>
-                <span class="summon-count">{{ msg.summoned_items.length }} 条</span>
+                <span class="summon-count"><NumberFlow :value="msg.summoned_items.length" /> 条</span>
               </div>
 
               <div class="summon-list">
@@ -306,6 +306,7 @@
 
 <script setup>
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
+import NumberFlow from "@number-flow/vue";
 import { marked } from "marked";
 import { renderMarkdown } from "@/utils/markdown";
 import { buildApiUrl } from "../config/api";

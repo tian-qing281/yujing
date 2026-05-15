@@ -12,7 +12,7 @@
       <div class="event-footer">
         <div class="event-count-group">
           <iconify-icon icon="mdi:fire" class="event-fire-icon" />
-          <span>{{ item.article_count }} 个热搜</span>
+          <span><NumberFlow :value="Number(item.article_count) || 0" /> 个热搜</span>
         </div>
       </div>
     </div>
@@ -21,6 +21,7 @@
 
 <script setup>
 import { computed } from "vue";
+import NumberFlow from "@number-flow/vue";
 
 const props = defineProps({
   item: { type: Object, required: true },

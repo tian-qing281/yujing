@@ -24,7 +24,7 @@
         <div class="sub-card-head">
           <iconify-icon icon="mdi:tag-heart" />
           <span>关注关键词 / 事件</span>
-          <span class="sub-count">{{ subscriptions.length }}</span>
+          <span class="sub-count"><NumberFlow :value="subscriptions.length" /></span>
         </div>
         <div class="sub-form">
           <select v-model="newSubKind" class="sub-select">
@@ -59,7 +59,7 @@
         <div class="sub-card-head">
           <iconify-icon icon="mdi:eye-off" />
           <span>屏蔽词</span>
-          <span class="sub-count">{{ blocklist.length }}</span>
+          <span class="sub-count"><NumberFlow :value="blocklist.length" /></span>
         </div>
         <div class="sub-form">
           <input
@@ -89,7 +89,7 @@
         <div class="sub-card-head">
           <iconify-icon icon="mdi:chart-pie" />
           <span>用户画像</span>
-          <span class="sub-count">浏览 {{ profile.history_count || 0 }} 次</span>
+          <span class="sub-count">浏览 <NumberFlow :value="Number(profile.history_count) || 0" /> 次</span>
         </div>
         <div class="sub-profile-block">
           <div class="sub-profile-label">常看数据源 TOP</div>
@@ -132,10 +132,10 @@
         <iconify-icon icon="mdi:sparkles" />
         <span>为你推荐 · 实时打分</span>
         <span class="sub-count">
-          候选 {{ candidatesCount }} · 命中 {{ matchedCount }} · 共 {{ totalCount }} 条
+          候选 <NumberFlow :value="Number(candidatesCount) || 0" /> · 命中 <NumberFlow :value="Number(matchedCount) || 0" /> · 共 <NumberFlow :value="Number(totalCount) || 0" /> 条
         </span>
         <span v-if="dismissedIds.size > 0" class="sub-dismiss-info">
-          已忽略 {{ dismissedIds.size }} 条
+          已忽略 <NumberFlow :value="dismissedIds.size" /> 条
           <button type="button" class="sub-dismiss-restore" @click="restoreDismissed">撤销</button>
         </span>
         <button
@@ -210,7 +210,7 @@
             </strong>
             <div class="sub-rec-meta">
               <span class="sub-rec-score" v-if="!item._fallback">
-                <iconify-icon icon="mdi:fire" />匹配 {{ item._recommend_score }}
+                <iconify-icon icon="mdi:fire" />匹配 <NumberFlow :value="Number(item._recommend_score) || 0" />
               </span>
               <span class="sub-rec-score sub-rec-score--fb" v-else>
                 <iconify-icon icon="mdi:thermometer" />热度兜底
@@ -264,6 +264,7 @@
 
 <script setup>
 import { computed, onMounted, ref, watch } from "vue";
+import NumberFlow from "@number-flow/vue";
 import { buildApiUrl } from "../config/api";
 
 const emit = defineEmits(["open-event"]);

@@ -26,14 +26,14 @@
           <div class="cmp-metric">
             <dt>相关情报</dt>
             <dd>
-              <strong>{{ metrics[side].article_count }}</strong>
+              <strong><NumberFlow :value="Number(metrics[side].article_count) || 0" /></strong>
               <span class="cmp-unit">条</span>
             </dd>
           </div>
           <div class="cmp-metric">
             <dt>覆盖平台</dt>
             <dd>
-              <strong>{{ metrics[side].platform_count }}</strong>
+              <strong><NumberFlow :value="Number(metrics[side].platform_count) || 0" /></strong>
               <span class="cmp-unit">个</span>
             </dd>
           </div>
@@ -50,7 +50,7 @@
           <div class="cmp-metric">
             <dt>关联事件</dt>
             <dd>
-              <strong>{{ metrics[side].event_count }}</strong>
+              <strong><NumberFlow :value="Number(metrics[side].event_count) || 0" /></strong>
               <span class="cmp-unit">个</span>
             </dd>
           </div>
@@ -110,6 +110,7 @@
 
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from "vue";
+import NumberFlow from "@number-flow/vue";
 
 const props = defineProps({
   metrics: { type: Object, default: null },
