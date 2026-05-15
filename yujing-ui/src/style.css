@@ -159,6 +159,38 @@ button:disabled {
   cursor: not-allowed;
 }
 
+/* Batch III · 排版微调（editorial typography）
+ * 中文正文行高 1.7、衬线标题字距收紧 -0.01em、段距 1em、meta tabular-nums
+ * 仅作 baseline 样式，组件局部样式可继续覆盖。
+ */
+body {
+  line-height: 1.7;
+}
+h1, h2, h3, h4, h5, h6 {
+  letter-spacing: -0.01em;
+}
+p {
+  margin: 0 0 1em 0;
+}
+p:last-child {
+  margin-bottom: 0;
+}
+/* meta / 数字密集场景：等宽数字，避免跳变 */
+.meta,
+[class*="meta"],
+[class*="-count"],
+[class*="-stat"],
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+/* 次按钮字距收紧（btn-ghost / btn-outline / btn-secondary） */
+.btn-ghost,
+.btn-outline,
+.btn-secondary {
+  letter-spacing: 0;
+}
+
 ::selection {
   color: #ffffff;
   background: rgba(30, 64, 175, 0.8);
