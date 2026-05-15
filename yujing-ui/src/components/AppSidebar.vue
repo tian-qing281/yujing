@@ -204,10 +204,18 @@ defineEmits(["switch", "open-cred"]);
 }
 
 .nav-item.active {
-  /* 选中态：暖白底色 + 赤陶红文字与左侧 mark，呼应 editorial 主张 */
-  background: rgba(255, 255, 255, 0.08);
+  /* Batch VI · 选中态视觉强化：
+     - 底色加重到 0.12（与 hover 0.08 拉开层级）
+     - 左侧 3px 实线 accent + 描边 1px accent 30% 不透明（细勾边突出选中）
+     - 文字加粗到 600，与未选中 400 形成字重对比
+     - letter-spacing 收紧 -0.01em，匹配 Batch III 全局排版基线 */
+  background: rgba(255, 255, 255, 0.12);
   color: #ffffff;
-  box-shadow: inset 3px 0 0 var(--color-accent, #B45309);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  box-shadow:
+    inset 3px 0 0 var(--color-accent, #B45309),
+    inset 0 0 0 1px rgba(180, 83, 9, 0.3);
 }
 
 .nav-mark {
