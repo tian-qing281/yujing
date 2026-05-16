@@ -3341,8 +3341,39 @@ def _pdf_disposition(name: str) -> dict:
     return {"Content-Disposition": f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{utf8_name}"}
 
 
+def _build_report_response(
+    title: str,
+    sections: list[dict],
+    base_name: str,
+    fmt: str,
+    images: Optional[list[str]] = None,
+):
+    """F4 · 统一导出响应。
+
+    fmt: pdf / docx / pptx，未知值降级为 pdf。``base_name`` 不带扩展名。
+    复用 ``_build_pdf`` 与 ``app.services.report_export.build_docx/build_pptx``。
+    """
+    from app.services.report_export import build_docx, build_pptx, normalize_format, MEDIA_TYPES
+
+    fmt = normalize_format(fmt)
+    if fmt == "docx":
+        content = build_docx(title, sections, images=images)
+    elif fmt == "pptx":
+        content = build_pptx(title, sections, images=images)
+    else:
+        content = _build_pdf(title, sections, images=images)
+
+    safe_base = re.sub(r'[\\/:*?"<>|]', '_', base_name)[:60] or "report"
+    fname = f"{safe_base}.{fmt}"
+    return Response(
+        content=content,
+        media_type=MEDIA_TYPES[fmt],
+        headers=_pdf_disposition(fname),
+    )
+
+
 @router.get("/articles/{article_id}/export_pdf")
-def export_article_pdf(article_id: int, db: Session = Depends(get_db)):
+def export_article_pdf(article_id: int, format: str = "pdf", db: Session = Depends(get_db)):
     article = db.query(Article).filter(Article.id == article_id).first()
     if not article:
         return Response(content="文章不存在", status_code=404)
@@ -3356,17 +3387,16 @@ def export_article_pdf(article_id: int, db: Session = Depends(get_db)):
     if article.content:
         sections.append({"heading": "正文内容", "body": article.content[:5000]})
 
-    pdf_bytes = _build_pdf(article.title or "文章报告", sections)
-    fname = re.sub(r'[\\/:*?"<>|]', '_', (article.title or "article")[:40]) + ".pdf"
-    return Response(
-        content=pdf_bytes,
-        media_type="application/pdf",
-        headers=_pdf_disposition(fname),
+    return _build_report_response(
+        article.title or "文章报告",
+        sections,
+        base_name=(article.title or "article")[:40],
+        fmt=format,
     )
 
 
 @router.get("/events/{event_id}/export_pdf")
-def export_event_pdf(event_id: int, db: Session = Depends(get_db)):
+def export_event_pdf(event_id: int, format: str = "pdf", db: Session = Depends(get_db)):
     event = db.query(Event).filter(Event.id == event_id).first()
     if not event:
         return Response(content="事件不存在", status_code=404)
@@ -3397,27 +3427,26 @@ def export_event_pdf(event_id: int, db: Session = Depends(get_db)):
             article_lines.append(f"[{src}] {a.title}")
         sections.append({"heading": "关联文章", "body": "\n".join(article_lines)})
 
-    pdf_bytes = _build_pdf(event.title or "事件报告", sections)
-    fname = re.sub(r'[\\/:*?"<>|]', '_', (event.title or "event")[:40]) + ".pdf"
-    return Response(
-        content=pdf_bytes,
-        media_type="application/pdf",
-        headers=_pdf_disposition(fname),
+    return _build_report_response(
+        event.title or "事件报告",
+        sections,
+        base_name=(event.title or "event")[:40],
+        fmt=format,
     )
 
 
 @router.get("/ai/morning_brief/pdf")
-def export_morning_brief_pdf():
+def export_morning_brief_pdf(format: str = "pdf"):
     if not _morning_brief_cache.get("content"):
         return Response(content="暂无早报内容，请先生成早报", status_code=404)
 
     sections = [{"heading": "", "body": _morning_brief_cache["content"]}]
     date_str = _morning_brief_cache.get("date", datetime.now().strftime("%Y-%m-%d"))
-    pdf_bytes = _build_pdf(f"舆情早报 {date_str}", sections)
-    return Response(
-        content=pdf_bytes,
-        media_type="application/pdf",
-        headers=_pdf_disposition(f"舆情早报_{date_str}.pdf"),
+    return _build_report_response(
+        f"舆情早报 {date_str}",
+        sections,
+        base_name=f"舆情早报_{date_str}",
+        fmt=format,
     )
 
 
@@ -3510,18 +3539,18 @@ class ExportChatPdfRequest(BaseModel):
 
 
 @router.post("/ai/export_pdf")
-def export_chat_pdf(req: ExportChatPdfRequest):
+def export_chat_pdf(req: ExportChatPdfRequest, format: str = "pdf"):
     if not req.content.strip() and not req.images:
         return Response(content="内容为空", status_code=400)
 
     sections = [{"heading": "", "body": req.content}] if req.content.strip() else []
-    pdf_bytes = _build_pdf(req.title, sections, images=req.images)
     ts = datetime.now().strftime("%Y%m%d_%H%M")
-    fname = re.sub(r'[\\/:*?"<>|]', '_', req.title[:30]) + f"_{ts}.pdf"
-    return Response(
-        content=pdf_bytes,
-        media_type="application/pdf",
-        headers=_pdf_disposition(fname),
+    return _build_report_response(
+        req.title,
+        sections,
+        base_name=f"{req.title[:30]}_{ts}",
+        fmt=format,
+        images=req.images,
     )
 
 

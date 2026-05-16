@@ -47,9 +47,17 @@
             <iconify-icon icon="ri:question-answer-line" />
             <span>基于此早报追问</span>
           </button>
-          <button class="brief-action brief-action-primary" type="button" @click="onExportPdf">
+          <button class="brief-action brief-action-primary" type="button" @click="onExportPdf('pdf')">
             <iconify-icon icon="ri:file-pdf-line" />
             <span>导出 PDF</span>
+          </button>
+          <button class="brief-action brief-action-primary" type="button" @click="onExportPdf('docx')">
+            <iconify-icon icon="ri:file-word-2-line" />
+            <span>导出 Word</span>
+          </button>
+          <button class="brief-action brief-action-primary" type="button" @click="onExportPdf('pptx')">
+            <iconify-icon icon="ri:file-ppt-2-line" />
+            <span>导出 PPT</span>
           </button>
         </footer>
       </div>
@@ -75,23 +83,24 @@ const todayLabel = new Date().toISOString().slice(0, 10);
 
 const renderedHtml = computed(() => renderMarkdown(props.content || ""));
 
-// PDF：fetch + blob + a.download，不跳页
-const onExportPdf = async () => {
+// PDF / Word / PPT：fetch + blob + a.download，不跳页
+const onExportPdf = async (format = 'pdf') => {
   try {
-    const url = buildApiUrl("/api/ai/morning_brief/pdf");
+    const ext = ['docx', 'pptx'].includes(format) ? format : 'pdf';
+    const url = buildApiUrl(`/api/ai/morning_brief/pdf?format=${ext}`);
     const res = await fetch(url);
-    if (!res.ok) throw new Error(`PDF 下载失败 ${res.status}`);
+    if (!res.ok) throw new Error(`报告下载失败 ${res.status}`);
     const blob = await res.blob();
     const objUrl = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = objUrl;
-    a.download = `舆情早报_${props.briefDate || todayLabel}.pdf`;
+    a.download = `舆情早报_${props.briefDate || todayLabel}.${ext}`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     setTimeout(() => URL.revokeObjectURL(objUrl), 4000);
   } catch (err) {
-    console.warn("[BriefModal] PDF 下载失败:", err);
+    console.warn("[BriefModal] 报告下载失败:", err);
   }
 };
 

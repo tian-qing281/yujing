@@ -101,9 +101,17 @@
             <button class="brief-banner-btn" type="button" :disabled="isActivePending" @click="openBrief">
               查看早报
             </button>
-            <button class="brief-banner-pdf" type="button" @click="exportBriefPdf" title="导出PDF">
-              <iconify-icon icon="ri:file-pdf-2-line" />
-            </button>
+            <div class="export-group">
+              <button class="brief-banner-pdf" type="button" @click="exportBriefPdf('pdf')" title="导出 PDF">
+                <iconify-icon icon="ri:file-pdf-2-line" />
+              </button>
+              <button class="brief-banner-pdf" type="button" @click="exportBriefPdf('docx')" title="导出 Word">
+                <iconify-icon icon="ri:file-word-2-line" />
+              </button>
+              <button class="brief-banner-pdf" type="button" @click="exportBriefPdf('pptx')" title="导出 PPT">
+                <iconify-icon icon="ri:file-ppt-2-line" />
+              </button>
+            </div>
           </template>
         </div>
 
@@ -208,11 +216,19 @@
             <!-- 兜底：旧消息可能无 agent_events -->
             <div v-else-if="msg.role === 'assistant' && msg.content" class="msg-text" v-html="formatMessage(msg.content)"></div>
 
-            <!-- 导出 PDF：agent_final 或 content 非空均可导出 -->
+            <!-- F4：导出报告（PDF / Word / PPT 三格式） -->
             <div v-if="msg.role === 'assistant' && (msg.agent_final || msg.content) && !msg.agent_running && !isActivePending" class="msg-actions">
-              <button class="msg-action-btn" type="button" @click="exportMessagePdf(msg, index)" title="导出PDF">
+              <button class="msg-action-btn" type="button" @click="exportMessagePdf(msg, index, 'pdf')" title="导出 PDF">
                 <iconify-icon icon="ri:file-pdf-2-line" />
-                <span>导出PDF</span>
+                <span>PDF</span>
+              </button>
+              <button class="msg-action-btn" type="button" @click="exportMessagePdf(msg, index, 'docx')" title="导出 Word">
+                <iconify-icon icon="ri:file-word-2-line" />
+                <span>Word</span>
+              </button>
+              <button class="msg-action-btn" type="button" @click="exportMessagePdf(msg, index, 'pptx')" title="导出 PPT">
+                <iconify-icon icon="ri:file-ppt-2-line" />
+                <span>PPT</span>
               </button>
             </div>
 
@@ -651,10 +667,12 @@ const downloadBlobAs = async (url, filename) => {
   }
 };
 
-const exportBriefPdf = async () => {
-  // P6：原 window.open 会跳转到新标签页中间页，现改为静默下载
+const exportBriefPdf = async (format = 'pdf') => {
+  // P6：静默下载；F4：支持 pdf / docx / pptx 三个格式
   const today = new Date().toISOString().slice(0, 10);
-  await downloadBlobAs(buildApiUrl('/api/ai/morning_brief/pdf'), `舆情早报_${today}.pdf`);
+  const ext = ['docx', 'pptx'].includes(format) ? format : 'pdf';
+  const url = buildApiUrl(`/api/ai/morning_brief/pdf?format=${ext}`);
+  await downloadBlobAs(url, `舆情早报_${today}.${ext}`);
 };
 
 // 对含可视化（如对比仪表盘）的消息，用 html2canvas 截取 DOM 并嵌入 PDF
@@ -738,15 +756,16 @@ const getReportTitle = (session, msg) => {
   return `舆镜对话报告 ${today}`;
 };
 
-const exportMessagePdf = async (msg, msgIndex) => {
+const exportMessagePdf = async (msg, msgIndex, format = 'pdf') => {
   const textContent = msg.agent_final || msg.content;
   if (!textContent && !msg.compare_metrics) return;
 
-  // 早报内容直接复用后端早报 PDF 端点，文件名/标题统一"舆情早报_YYYY-MM-DD.pdf"
+  const ext = ['docx', 'pptx'].includes(format) ? format : 'pdf';
+
+  // 早报内容直接复用后端早报端点，文件名/标题统一「舆情早报_YYYY-MM-DD.[ext]」
   if (isMorningBriefMessage(msg)) {
-    // P6：静默下载，不再跳页
     const today = new Date().toISOString().slice(0, 10);
-    await downloadBlobAs(buildApiUrl('/api/ai/morning_brief/pdf'), `舆情早报_${today}.pdf`);
+    await downloadBlobAs(buildApiUrl(`/api/ai/morning_brief/pdf?format=${ext}`), `舆情早报_${today}.${ext}`);
     return;
   }
 
@@ -761,7 +780,7 @@ const exportMessagePdf = async (msg, msgIndex) => {
     // 2. 退化到首条用户输入文本前 24 字 + “ · AI 分析报告”
     // 3. 完全拿不到 → “舆镜对话报告 yyyy-mm-dd”
     const reportTitle = getReportTitle(activeSession.value, msg);
-    const res = await fetch(buildApiUrl("/api/ai/export_pdf"), {
+    const res = await fetch(buildApiUrl(`/api/ai/export_pdf?format=${ext}`), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -775,7 +794,7 @@ const exportMessagePdf = async (msg, msgIndex) => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = reportTitle + ".pdf";
+    a.download = `${reportTitle}.${ext}`;
     a.click();
     URL.revokeObjectURL(url);
   } catch {
@@ -1527,6 +1546,8 @@ onUnmounted(() => {
   display: flex; align-items: center; justify-content: center; cursor: pointer; transition: 0.18s;
 }
 .brief-banner-pdf:hover { background: var(--color-accent); color: #fff; border-color: var(--color-accent); }
+/* F4: 早报 banner 内三按钮组 */
+.export-group { display: flex; gap: 6px; }
 .brief-banner-close {
   background: none; border: none; cursor: pointer;
   color: var(--color-text-3); opacity: 0.7; font-size: 16px;

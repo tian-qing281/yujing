@@ -19,4 +19,7 @@ jieba
 setuptools<81
 scikit-learn
 fpdf2
+python-docx
+python-pptx
+Pillow
 modelscope
