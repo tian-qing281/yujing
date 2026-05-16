@@ -49,7 +49,7 @@ class ToolSpec:
 
 `ToolRegistry.register(spec)` 幂等注册；`to_openai_functions()` 自动把 `ToolSpec` 列表编译为 OpenAI `tools=[...]` 数组格式交给 DeepSeek。
 
-### 2.2 当前 10 个原子工具
+### 2.2 当前 11 个原子工具
 
 | 工具名 | 语义能力 | 关键参数 | 底层实现 |
 |:---|:---|:---|:---|
@@ -57,6 +57,7 @@ class ToolSpec:
 | `get_event_detail` | 事件详情 + TopK 关联文章 | `event_id / top_articles` | 直读 `/api/events/{id}` 的 DB 查询，**只读不触 BERT 补全** |
 | `compare_events` | 2-4 事件并列指标对比 | `event_ids` | 关键词交并集 + max heat 摘要 |
 | `compare_platforms` | 两平台舆情概况对比（情报规模 / 情绪 / 24h 变化 / 代表情报 / 7 日曲线） | `platform_a / platform_b / topic?` | 复用 `_build_compare_metrics` + `_resolve_compare_source`；输出可直接驱动前端 `CompareDashboard` |
+| `compare_platforms_radar` | N 平台（2-6）5 维舆情画像雷达图（情报量 / 事件覆盖 / 情绪鲜明度 / 24h时效 / 单事件规模），归一化到 0~100 | `platforms[] / topic? / time_range_hours?` | 单次扫库聚合 + log 缩放归一；输出 `_type=platform_radar`，前端 `CompareDashboard` radar 分支直接渲染 ECharts 5 边形 |
 | `analyze_event_sentiment` | 事件情绪时间桶序列 | `event_id / bucket_hours ∈ {6,12,24}` | Counter 聚合 + 时间桶切片 |
 | `search_articles` | 关键词文章搜索 | `q / time_range_hours / source_id / limit` | Meili 优先 / DB LIKE 降级 |
 | `semantic_search_articles` | 向量语义搜索 | `q / limit / source_id` | 双阶段 Meili seed → BGE kNN |
@@ -453,7 +454,7 @@ python scripts/eval_agent.py --summary-only
   - `app/services/agent/loop.py` · Loop 主循环（~270 行）
   - `app/services/agent/registry.py` · 工具注册表
   - `app/services/agent/llm_adapter.py` · DeepSeek / LangChain 抽象层
-  - `app/services/agent/tools/*.py` · 10 个工具 handler（含 `tool_compare_platforms.py`）
+  - `app/services/agent/tools/*.py` · 11 个工具 handler（含 `tool_compare_platforms.py` / `tool_compare_platforms_radar.py`）
   - `app/api/agent_routes.py` · SSE / 阻塞双模式接口
   - `yujing-ui/src/components/AgentTrace.vue` · 前端调用链时间线
   - `yujing-ui/src/components/AIConsultant.vue` · 合并后的 AI 助手（含智能体模式）
