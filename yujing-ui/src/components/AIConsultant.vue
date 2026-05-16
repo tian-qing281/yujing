@@ -650,7 +650,15 @@ const askFollowupFromBrief = ({ content }) => {
 const downloadBlobAs = async (url, filename) => {
   try {
     const res = await fetch(url);
-    if (!res.ok) throw new Error(`download failed: ${res.status}`);
+    if (!res.ok) {
+      // L3：把后端 4xx/5xx 的真实错由文本透出，便于上层 toast 显示原因
+      let msg = `HTTP ${res.status}`;
+      try {
+        const body = await res.text();
+        if (body) msg = body.slice(0, 200);
+      } catch {}
+      throw new Error(msg);
+    }
     const blob = await res.blob();
     const objUrl = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -663,8 +671,34 @@ const downloadBlobAs = async (url, filename) => {
     return true;
   } catch (err) {
     console.warn('[PDF] 下载失败:', err);
-    return false;
+    throw err;
   }
+};
+
+// L3：轻量 toast。项目没有引入 element-plus / vue-sonner 之类的组件库，
+// 这里直接 DOM 注入一个全局浮层即可，2.4s 自动淡出。kind: 'info' | 'warn' | 'error'
+const showToast = (text, kind = 'info') => {
+  const colors = {
+    info: ['#0EA5E9', '#0c4a6e'],
+    warn: ['#F59E0B', '#7c2d12'],
+    error: ['#EF4444', '#7f1d1d'],
+  };
+  const [bg, fg] = colors[kind] || colors.info;
+  const el = document.createElement('div');
+  el.textContent = text;
+  el.style.cssText = `
+    position:fixed; bottom:24px; left:50%; transform:translateX(-50%);
+    background:${bg}; color:#fff; border:1px solid ${fg};
+    padding:10px 18px; border-radius:10px; font-size:14px;
+    box-shadow:0 6px 20px rgba(0,0,0,.18); z-index:99999;
+    opacity:0; transition:opacity .2s ease;
+  `;
+  document.body.appendChild(el);
+  requestAnimationFrame(() => { el.style.opacity = '1'; });
+  setTimeout(() => {
+    el.style.opacity = '0';
+    setTimeout(() => el.remove(), 250);
+  }, 2400);
 };
 
 const exportBriefPdf = async (format = 'pdf') => {
@@ -672,7 +706,18 @@ const exportBriefPdf = async (format = 'pdf') => {
   const today = new Date().toISOString().slice(0, 10);
   const ext = ['docx', 'pptx'].includes(format) ? format : 'pdf';
   const url = buildApiUrl(`/api/ai/morning_brief/pdf?format=${ext}`);
-  await downloadBlobAs(url, `舆情早报_${today}.${ext}`);
+  try {
+    await downloadBlobAs(url, `舆情早报_${today}.${ext}`);
+    showToast(`早报 ${ext.toUpperCase()} 已下载`, 'info');
+  } catch (err) {
+    // L3：早报多数失败原因是"今日早报尚未生成"，给用户明确提示
+    const msg = String(err?.message || err);
+    if (/未生成|not.?ready|尚未|404/i.test(msg)) {
+      showToast('早报正在生成中，请稍后重试', 'warn');
+    } else {
+      showToast(`早报导出失败：${msg.slice(0, 60)}`, 'error');
+    }
+  }
 };
 
 // 对含可视化（如对比仪表盘）的消息，用 html2canvas 截取 DOM 并嵌入 PDF
@@ -765,7 +810,17 @@ const exportMessagePdf = async (msg, msgIndex, format = 'pdf') => {
   // 早报内容直接复用后端早报端点，文件名/标题统一「舆情早报_YYYY-MM-DD.[ext]」
   if (isMorningBriefMessage(msg)) {
     const today = new Date().toISOString().slice(0, 10);
-    await downloadBlobAs(buildApiUrl(`/api/ai/morning_brief/pdf?format=${ext}`), `舆情早报_${today}.${ext}`);
+    try {
+      await downloadBlobAs(buildApiUrl(`/api/ai/morning_brief/pdf?format=${ext}`), `舆情早报_${today}.${ext}`);
+      showToast(`早报 ${ext.toUpperCase()} 已下载`, 'info');
+    } catch (err) {
+      const msg2 = String(err?.message || err);
+      if (/未生成|not.?ready|尚未|404/i.test(msg2)) {
+        showToast('早报正在生成中，请稍后重试', 'warn');
+      } else {
+        showToast(`早报导出失败：${msg2.slice(0, 60)}`, 'error');
+      }
+    }
     return;
   }
 
@@ -1130,10 +1185,20 @@ const sendAgentMessage = async (sessionId, outgoing) => {
             finalBuffer = ev.text || finalBuffer;
             patch.agent_final = finalBuffer;
           }
-          // 检测到平台对比工具输出时，提取 {a, b} 喂给 CompareDashboard。
-          // output 结构由 tool_compare_platforms._handler 定义，含 _type / a / b / a_source_id / b_source_id。
+          // 检测到平台对比工具输出时，提取数据喂给 CompareDashboard。
+          // - compare_platforms：双平台 a/b 结构（旧）
+          // - compare_platforms_radar：N 平台 radar 结构（新，F5）
           if (ev.type === "tool_result" && ev.name === "compare_platforms" && ev.ok && ev.output?.a && ev.output?.b) {
             patch.compare_metrics = { a: ev.output.a, b: ev.output.b };
+          }
+          if (
+            ev.type === "tool_result" &&
+            ev.name === "compare_platforms_radar" &&
+            ev.ok &&
+            ev.output?._type === "platform_radar" &&
+            Array.isArray(ev.output.platforms)
+          ) {
+            patch.compare_metrics = ev.output;
           }
           if (ev.type === "error") {
             // loop 内部终止信号（max_steps / too_many_errors）已由 AgentTrace 的
@@ -1195,6 +1260,7 @@ const TOOL_FOLLOW_UPS = {
   analyze_event_sentiment: ["哪些平台的负面情绪最多？", "和上周相比情绪有变化吗？"],
   compare_events: ["这些事件有什么共性？", "哪个事件后续影响更大？"],
   compare_platforms: ["两个平台的主要分歧是什么？", "再补上头条一起对比"],
+  compare_platforms_radar: ["哪个平台舆情画像最均衡？", "把雷达图加上百度和 B 站"],
   rank_events_by_sentiment: ["最愤怒的事件有什么共性？", "哪些事件的情绪最复杂"],
   search_articles: ["帮我总结这些文章的核心观点", "有哪些不同的立场？"],
   semantic_search_articles: ["有没有相关但被忽略的冷门事件？", "这些内容的主要分歧在哪？"],

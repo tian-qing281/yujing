@@ -18,3 +18,4 @@ from . import tool_analyze_event_sentiment  # noqa: F401
 from . import tool_compare_events  # noqa: F401
 from . import tool_rank_events_by_sentiment  # noqa: F401
 from . import tool_compare_platforms  # noqa: F401
+from . import tool_compare_platforms_radar  # noqa: F401

@@ -3540,6 +3540,19 @@ class ExportChatPdfRequest(BaseModel):
 
 @router.post("/ai/export_pdf")
 def export_chat_pdf(req: ExportChatPdfRequest, format: str = "pdf"):
+    # L5：防御性 size 限制，避免恶意/异常超大 payload 击穿后端 PDF 渲染
+    MAX_CONTENT = 200_000          # 文本内容上限 ~200KB（约 5 万汉字）
+    MAX_IMAGES = 8                 # 最多嵌入 8 张图（仪表盘截图等）
+    MAX_IMAGE_BYTES = 4_000_000    # 单张 base64 上限 ~4MB（约 3MB 实际图）
+    if len(req.content) > MAX_CONTENT:
+        raise HTTPException(status_code=413, detail=f"content 过长（{len(req.content)} > {MAX_CONTENT}）")
+    if req.images:
+        if len(req.images) > MAX_IMAGES:
+            raise HTTPException(status_code=413, detail=f"图片数量过多（{len(req.images)} > {MAX_IMAGES}）")
+        for i, img in enumerate(req.images):
+            if isinstance(img, str) and len(img) > MAX_IMAGE_BYTES:
+                raise HTTPException(status_code=413, detail=f"第 {i+1} 张图过大（{len(img)} > {MAX_IMAGE_BYTES}）")
+
     if not req.content.strip() and not req.images:
         return Response(content="内容为空", status_code=400)
 

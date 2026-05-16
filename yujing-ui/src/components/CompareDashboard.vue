@@ -1,5 +1,53 @@
 <template>
-  <section v-if="metrics" class="compare-dashboard">
+  <!-- 分支 1：N 平台雷达图（_type === 'platform_radar'） -->
+  <section v-if="isRadar" class="compare-dashboard radar-mode">
+    <header class="cmp-head">
+      <span class="cmp-head-icon">
+        <iconify-icon icon="mdi:radar" />
+      </span>
+      <h3>
+        多平台舆情画像
+        <em v-if="metrics.topic">· {{ metrics.topic }}</em>
+      </h3>
+    </header>
+
+    <div class="radar-layout">
+      <div ref="chartRef" class="cmp-chart radar-chart"></div>
+
+      <div class="radar-side">
+        <div class="leader-block">
+          <div class="cmp-sub-title">各维度领先平台</div>
+          <ul class="leader-list">
+            <li v-for="(l, i) in metrics.leaders" :key="i">
+              <span class="leader-dim">{{ l.dim_name }}</span>
+              <span class="leader-name">{{ l.label }}</span>
+              <span class="leader-score">{{ l.score }}</span>
+            </li>
+          </ul>
+        </div>
+
+        <div class="raw-block">
+          <div class="cmp-sub-title">原始数据</div>
+          <table class="radar-raw">
+            <thead>
+              <tr><th>平台</th><th>情报</th><th>事件</th><th>正向</th></tr>
+            </thead>
+            <tbody>
+              <tr v-for="p in metrics.platforms" :key="p.label">
+                <td>{{ p.label }}</td>
+                <td>{{ p.raw.article_count }}</td>
+                <td>{{ p.raw.event_count }}</td>
+                <td>{{ p.raw.sentiment.positive || 0 }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 分支 2：双平台对比（兼容旧 schema） -->
+  <section v-else-if="metrics" class="compare-dashboard">
     <header class="cmp-head">
       <span class="cmp-head-icon">
         <iconify-icon icon="mdi:scale-balance" />
@@ -121,10 +169,14 @@ defineEmits(["open-article"]);
 const chartRef = ref(null);
 let chartInst = null;
 
+// 新 schema（N 平台雷达）：metrics._type === 'platform_radar'
+// 旧 schema（双平台对比）：metrics.a / metrics.b
+const isRadar = computed(() => props.metrics?._type === "platform_radar");
+
 const winnerSide = computed(() => {
-  if (!props.metrics) return "";
-  const a = props.metrics.a.article_count || 0;
-  const b = props.metrics.b.article_count || 0;
+  if (!props.metrics || isRadar.value) return "";
+  const a = props.metrics.a?.article_count || 0;
+  const b = props.metrics.b?.article_count || 0;
   if (a === b) return "";
   return a > b ? "a" : "b";
 });
@@ -170,71 +222,137 @@ const trendClass = (pct) => {
 const renderChart = async () => {
   if (!props.metrics || !chartRef.value) return;
   if (!window.echarts) {
-    // 兜底：若 echarts 尚未加载，延迟一次
     await new Promise((r) => setTimeout(r, 200));
     if (!window.echarts) return;
+  }
+  // 若 chartInst 之前绑的 DOM 因 v-if 切换已经不是当前 chartRef.value，重建一次。
+  if (chartInst && chartInst.getDom && chartInst.getDom() !== chartRef.value) {
+    chartInst.dispose();
+    chartInst = null;
   }
   if (!chartInst) {
     chartInst = window.echarts.init(chartRef.value, null, { renderer: "canvas" });
   }
+
+  // 雷达分支：N 平台 5 维
+  if (isRadar.value) {
+    const palette = ["#B45309", "#0EA5E9", "#22C55E", "#A855F7", "#EAB308", "#EC4899"];
+    const indicators = (props.metrics.dimensions || []).map((d) => ({
+      name: d,
+      max: 100,
+    }));
+    const series = (props.metrics.platforms || []).map((p, i) => ({
+      name: p.label,
+      type: "radar",
+      data: [{ value: p.scores, name: p.label }],
+      itemStyle: { color: palette[i % palette.length] },
+      lineStyle: { color: palette[i % palette.length], width: 2 },
+      areaStyle: { color: palette[i % palette.length], opacity: 0.12 },
+      symbolSize: 5,
+    }));
+    chartInst.setOption(
+      {
+        animation: true,
+        animationDuration: 900,
+        animationEasing: "cubicOut",
+        legend: {
+          top: 0,
+          left: "center",
+          textStyle: { color: "#475569", fontSize: 12 },
+          icon: "roundRect",
+        },
+        tooltip: { trigger: "item" },
+        radar: {
+          indicator: indicators,
+          shape: "polygon",
+          splitNumber: 4,
+          center: ["50%", "55%"],
+          radius: "65%",
+          axisName: { color: "#475569", fontSize: 12 },
+          splitLine: { lineStyle: { color: "#e2e8f0" } },
+          splitArea: { areaStyle: { color: ["#fafbfc", "#ffffff"] } },
+          axisLine: { lineStyle: { color: "#e2e8f0" } },
+        },
+        series,
+      },
+      true /* notMerge：切换 schema 时清空旧 option */
+    );
+    // 双 raf 兜底：容器在 v-if 切换后宽度通常需 1-2 帧才稳定
+    requestAnimationFrame(() => requestAnimationFrame(() => chartInst && chartInst.resize()));
+    return;
+  }
+
+  // 旧分支：双平台 7 日时间轴
   const a = props.metrics.a.timeline || [];
   const b = props.metrics.b.timeline || [];
   const xAxis = a.map((d) => d.date);
 
-  chartInst.setOption({
-    animation: true,
-    animationDuration: 900,
-    animationEasing: "cubicOut",
-    animationDelay: (i) => i * 60,
-    grid: { top: 28, right: 18, bottom: 30, left: 36 },
-    legend: {
-      top: 0,
-      right: 0,
-      textStyle: { color: "#475569", fontSize: 12 },
-      icon: "roundRect",
-    },
-    tooltip: { trigger: "axis" },
-    xAxis: {
-      type: "category",
-      data: xAxis,
-      axisLabel: { color: "#94a3b8", fontSize: 11 },
-      axisLine: { lineStyle: { color: "#e2e8f0" } },
-      axisTick: { show: false },
-    },
-    yAxis: {
-      type: "value",
-      axisLabel: { color: "#94a3b8", fontSize: 11 },
-      splitLine: { lineStyle: { color: "#f1f5f9" } },
-    },
-    series: [
-      {
-        name: props.metrics.a.label,
-        type: "line",
-        smooth: true,
-        data: a.map((d) => d.count),
-        // editorial: A 赤陶红主 / B 暖灰对比，避免双明调争主
-        itemStyle: { color: "#B45309" },
-        lineStyle: { color: "#B45309", width: 2 },
-        areaStyle: { color: "rgba(180, 83, 9, 0.10)" },
-        symbolSize: 6,
+  chartInst.setOption(
+    {
+      animation: true,
+      animationDuration: 900,
+      animationEasing: "cubicOut",
+      animationDelay: (i) => i * 60,
+      grid: { top: 28, right: 18, bottom: 30, left: 36 },
+      legend: {
+        top: 0,
+        right: 0,
+        textStyle: { color: "#475569", fontSize: 12 },
+        icon: "roundRect",
       },
-      {
-        name: props.metrics.b.label,
-        type: "line",
-        smooth: true,
-        data: b.map((d) => d.count),
-        itemStyle: { color: "#78716C" },
-        lineStyle: { color: "#78716C", width: 2, type: "dashed" },
-        areaStyle: { color: "rgba(120, 113, 108, 0.08)" },
-        symbolSize: 6,
+      tooltip: { trigger: "axis" },
+      xAxis: {
+        type: "category",
+        data: xAxis,
+        axisLabel: { color: "#94a3b8", fontSize: 11 },
+        axisLine: { lineStyle: { color: "#e2e8f0" } },
+        axisTick: { show: false },
       },
-    ],
-  });
+      yAxis: {
+        type: "value",
+        axisLabel: { color: "#94a3b8", fontSize: 11 },
+        splitLine: { lineStyle: { color: "#f1f5f9" } },
+      },
+      series: [
+        {
+          name: props.metrics.a.label,
+          type: "line",
+          smooth: true,
+          data: a.map((d) => d.count),
+          itemStyle: { color: "#B45309" },
+          lineStyle: { color: "#B45309", width: 2 },
+          areaStyle: { color: "rgba(180, 83, 9, 0.10)" },
+          symbolSize: 6,
+        },
+        {
+          name: props.metrics.b.label,
+          type: "line",
+          smooth: true,
+          data: b.map((d) => d.count),
+          itemStyle: { color: "#78716C" },
+          lineStyle: { color: "#78716C", width: 2, type: "dashed" },
+          areaStyle: { color: "rgba(120, 113, 108, 0.08)" },
+          symbolSize: 6,
+        },
+      ],
+    },
+    true
+  );
 };
+
+let resizeObs = null;
 
 onMounted(async () => {
   await nextTick();
   renderChart();
+  // ResizeObserver 兜底：父气泡布局（agent_trace 折叠 / 图片懒加载等）会异步改变
+  // chart 容器尺寸；监听容器尺寸变化时主动 resize，防止雷达图被压扁。
+  if (chartRef.value && typeof ResizeObserver !== "undefined") {
+    resizeObs = new ResizeObserver(() => {
+      if (chartInst) chartInst.resize();
+    });
+    resizeObs.observe(chartRef.value);
+  }
 });
 
 watch(
@@ -247,6 +365,10 @@ watch(
 );
 
 onBeforeUnmount(() => {
+  if (resizeObs) {
+    resizeObs.disconnect();
+    resizeObs = null;
+  }
   if (chartInst) {
     chartInst.dispose();
     chartInst = null;
@@ -423,4 +545,74 @@ onBeforeUnmount(() => {
   background: #fff; border: 1px solid rgba(148, 163, 184, 0.2);
 }
 .cmp-chart { height: 200px; }
+
+/* === N 平台雷达图模式 === */
+.compare-dashboard.radar-mode { padding: 16px 18px; }
+.radar-layout {
+  /* 上下布局：雷达图在上方占满宽度，leader / 原始数据在下方
+     之前用 grid 双列在窄气泡里会塌成 0 宽导致 ECharts canvas 不可见 */
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 12px;
+}
+.radar-chart {
+  width: 100%;
+  min-width: 0;
+  height: 380px;
+  background: #fff;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 12px;
+  padding: 8px;
+  box-sizing: border-box;
+}
+.radar-side {
+  background: #fff;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 12px;
+  padding: 12px 14px;
+  font-size: 12px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 14px;
+}
+.radar-side > .leader-block { min-width: 0; }
+.radar-side > .raw-block { min-width: 0; }
+@media (max-width: 520px) {
+  .radar-side { grid-template-columns: 1fr; }
+}
+.leader-list {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.leader-list li {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+.leader-dim { color: #64748b; min-width: 76px; }
+.leader-name { color: #B45309; font-weight: 600; flex: 1; }
+.leader-score {
+  color: #475569; font-variant-numeric: tabular-nums;
+  background: #fff; border: 1px solid #e2e8f0;
+  padding: 1px 6px; border-radius: 6px;
+}
+.radar-raw {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  margin-top: 6px;
+}
+.radar-raw th, .radar-raw td {
+  text-align: left;
+  padding: 4px 6px;
+  border-bottom: 1px solid #f1f5f9;
+}
+.radar-raw th { color: #94a3b8; font-weight: 500; }
+.radar-raw td { color: #475569; font-variant-numeric: tabular-nums; }
 </style>
