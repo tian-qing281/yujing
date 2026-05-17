@@ -30,8 +30,9 @@
           <span class="nav-group-label">平台热榜</span>
           <span class="nav-group-count">{{ hotSources.length }}</span>
           <iconify-icon
-            :icon="hotOpen ? 'mdi:chevron-down' : 'mdi:chevron-right'"
+            icon="mdi:chevron-right"
             class="nav-group-chevron"
+            :class="{ rotated: hotOpen }"
           ></iconify-icon>
         </button>
 
@@ -103,18 +104,15 @@ const toolSources = computed(() =>
   props.sourceRegistry.filter((s) => TOOL_IDS.has(s.id))
 );
 
-// 默认折叠平台热榜分组（更清爽），但若当前激活的是某个热榜，则自动展开
+// 默认折叠平台热榜分组（每次进入页面保持收起状态，更清爽）
+// 仅当用户切到其他源后又切回热榜时，才自动展开，避免初次访问的视觉拥挤
 const isHotActive = computed(() =>
   hotSources.value.some((s) => s.id === props.currentSource)
 );
 const hotOpen = ref(false);
-watch(
-  isHotActive,
-  (active) => {
-    if (active) hotOpen.value = true;
-  },
-  { immediate: true }
-);
+watch(isHotActive, (active) => {
+  if (active) hotOpen.value = true;
+});
 
 defineEmits(["switch", "open-cred"]);
 </script>
@@ -414,21 +412,31 @@ defineEmits(["switch", "open-cred"]);
 .nav-group-chevron {
   font-size: 16px;
   color: rgba(226, 232, 240, 0.55);
-  transition: transform 0.2s ease;
+  transform: rotate(0deg);
+  transform-origin: center;
+  transition: transform 280ms cubic-bezier(0.2, 0.8, 0.2, 1),
+              color 180ms ease;
+}
+
+.nav-group-chevron.rotated {
+  transform: rotate(90deg);
+  color: rgba(226, 232, 240, 0.85);
 }
 
 .nav-group-body {
   display: grid;
   grid-template-rows: 1fr;
-  transition: grid-template-rows 0.28s cubic-bezier(0.4, 0, 0.2, 1),
-              opacity 0.2s ease;
+  transition: grid-template-rows 280ms cubic-bezier(0.2, 0.8, 0.2, 1),
+              opacity 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
   opacity: 1;
   overflow: hidden;
+  will-change: grid-template-rows, opacity;
 }
 
 .nav-group-body.collapsed {
   grid-template-rows: 0fr;
   opacity: 0;
+  pointer-events: none;
 }
 
 .nav-group-body > .sidebar-menu {
