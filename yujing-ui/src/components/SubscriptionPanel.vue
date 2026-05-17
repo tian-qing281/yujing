@@ -771,19 +771,24 @@ onMounted(loadAll);
   border-color: rgba(185, 28, 28, 0.18);
 }
 
+/* UI-14b: 关键词 label chip → uppercase kicker 衰宋颜色边 */
 .sub-chip-kind {
   font-size: 10px;
-  font-weight: 800;
+  font-weight: 700;
   color: var(--color-accent);
-  background: rgba(180, 83, 9, 0.10);
+  background: transparent;
   padding: 2px 6px;
-  border-radius: 3px;
-  letter-spacing: 0.06em;
+  border: 1px solid var(--color-accent);
+  border-radius: 0;
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
 }
 
 .sub-chip--block .sub-chip-kind {
   color: #B91C1C;
-  background: rgba(185, 28, 28, 0.10);
+  border-color: #B91C1C;
+  background: transparent;
 }
 
 .sub-chip-value {
@@ -811,12 +816,14 @@ onMounted(loadAll);
   gap: 6px;
 }
 
+/* UI-14b: profile label → 强化编辑部 kicker */
 .sub-profile-label {
   font-size: 11px;
   font-weight: 700;
-  color: #94a3b8;
+  color: var(--color-text-3);
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.22em;
+  font-family: var(--font-display);
 }
 
 .sub-tag-cloud {
@@ -825,15 +832,18 @@ onMounted(loadAll);
   gap: 6px;
 }
 
+/* UI-14b: 常看数据源圆胶囊 → 0 圆角 + hairline + tabular-nums */
 .sub-tag {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   padding: 4px 10px;
-  background: #f1f5f9;
-  color: #475569;
-  border-radius: 999px;
+  background: transparent;
+  color: var(--color-text-2);
+  border: 1px solid var(--color-border);
+  border-radius: 0;
   font-size: 12px;
+  font-variant-numeric: tabular-nums;
 }
 
 .sub-tag strong {
@@ -873,10 +883,13 @@ onMounted(loadAll);
   margin-left: 4px;
 }
 
+/* UI-14b: 为你推荐区 → 0 圆角 + 暖 hairline + accent 1px 顶条 */
 .sub-recommend {
   padding: 18px;
-  border: 1px solid rgba(226, 232, 240, 0.95);
-  border-radius: 20px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-top: 1px solid var(--color-accent);
+  border-radius: 0;
 }
 
 .sub-empty--big {
@@ -896,22 +909,22 @@ onMounted(loadAll);
   margin-top: 12px;
 }
 
+/* UI-14b: 推荐条目 → 0 圆角 + 暖 hairline，hover 仅换 border不浮 */
 .sub-rec-item {
   display: flex;
   align-items: center;
   gap: 14px;
   padding: 14px 16px;
-  border: 1px solid rgba(226, 232, 240, 0.7);
-  border-radius: 14px;
+  border: 1px solid var(--color-border);
+  border-radius: 0;
   cursor: pointer;
-  transition: all 0.18s ease;
+  transition: border-color 0.18s ease;
 }
 
 .sub-rec-item:hover {
-  /* editorial: 赤陶红边 + 暑色阳光 shadow */
   border-color: var(--color-accent);
-  box-shadow: 0 4px 14px rgba(180, 83, 9, 0.10);
-  transform: translateY(-1px);
+  box-shadow: none;
+  transform: none;
 }
 
 .sub-rec-rank {
@@ -1106,59 +1119,71 @@ onMounted(loadAll);
   color: #64748b;
   font-weight: 600;
 }
+/* UI-14b: 已读 tag → 0 圆角 + uppercase kicker */
 .sub-rec-readtag {
   display: inline-block;
   margin-left: 6px;
   padding: 1px 6px;
-  background: #e2e8f0;
-  color: #64748b;
-  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text-3);
+  border: 1px solid var(--color-border);
+  border-radius: 0;
   font-size: 10px;
   font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
   vertical-align: middle;
 }
+/* UI-14b: 忽略按钮 → 0 圆角 + hairline */
 .sub-rec-dismiss {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 26px;
   height: 26px;
-  border-radius: 8px;
-  border: 1px solid #e2e8f0;
-  background: #f8fafc;
-  color: #64748b;
+  border-radius: 0;
+  border: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text-3);
   cursor: pointer;
-  transition: all 0.18s ease;
+  transition: color 0.18s ease, border-color 0.18s ease;
 }
 .sub-rec-dismiss:hover {
-  border-color: #fca5a5;
-  background: #fef2f2;
-  color: #ef4444;
+  border-color: #B91C1C;
+  color: #B91C1C;
+  background: transparent;
 }
+/* UI-14b: 忽略提示胶囊 → 0 圆角 + accent 边 */
 .sub-dismiss-info {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   margin-left: 8px;
   padding: 2px 10px;
-  background: #fff7ed;
-  color: #c2410c;
-  border-radius: 999px;
+  background: transparent;
+  color: var(--color-accent);
+  border: 1px solid var(--color-accent);
+  border-radius: 0;
   font-size: 11px;
   font-weight: 700;
+  letter-spacing: 0.08em;
 }
 .sub-dismiss-restore {
   background: transparent;
-  border: 1px solid #fdba74;
-  color: #c2410c;
-  border-radius: 999px;
+  border: 1px solid var(--color-accent);
+  color: var(--color-accent);
+  border-radius: 0;
   padding: 0 8px;
   font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
   cursor: pointer;
-  transition: all 0.18s ease;
+  transition: background 0.18s ease;
 }
 .sub-dismiss-restore:hover {
-  background: #fed7aa;
+  background: var(--color-accent);
+  color: #FAFAF7;
 }
 
 /* A1: 权重调节面板 — editorial 赤陶红 chip */
