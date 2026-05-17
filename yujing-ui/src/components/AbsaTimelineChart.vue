@@ -230,9 +230,9 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .absa-timeline-section {
-  padding: 18px 20px 16px;
-  border-radius: 14px;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 4px 12px rgba(15, 23, 42, 0.04);
+  padding: 16px 18px;
+  border-radius: 0;
+  box-shadow: none;
 }
 
 .absa-timeline-head {
@@ -253,18 +253,22 @@ onBeforeUnmount(() => {
   color: #1e293b;
 }
 .absa-timeline-title iconify-icon {
-  color: #3b82f6;
+  color: var(--color-accent, #B45309);
   font-size: 18px;
 }
 
 .absa-timeline-badge {
+  /* 蓝胶囊 → accent 0 圆角衬线纸条 */
   font-size: 10px;
-  padding: 1px 6px;
-  border-radius: 6px;
-  background: linear-gradient(135deg, #3b82f6, #6366f1);
-  color: #fff;
-  letter-spacing: 0.04em;
-  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 0;
+  border: 1px solid var(--color-accent, #B45309);
+  background: transparent;
+  color: var(--color-accent, #B45309);
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  font-weight: 700;
+  font-family: var(--font-display, "Noto Serif SC", serif);
 }
 
 .absa-timeline-meta {

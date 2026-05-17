@@ -1220,14 +1220,15 @@ onUnmounted(() => {
 .event-modal {
   width: min(1420px, 100%);
   max-height: calc(100vh - 48px);
-  background: linear-gradient(180deg, #fbfdff 0%, #f4f7fb 100%);
-  border-radius: 28px;
+  /* editorial: 纸白 + 暖 hairline + 微圆角，去渐变去大 shadow */
+  background: var(--color-surface, #fff);
+  border-radius: 4px;
   overflow-y: auto;
   overflow-x: hidden;
   display: flex;
   flex-direction: column;
-  border: 1px solid rgba(226, 232, 240, 0.95);
-  box-shadow: 0 24px 80px rgba(15, 23, 42, 0.18);
+  border: 1px solid var(--color-border, #E5E5DD);
+  box-shadow: 0 18px 48px rgba(28, 25, 23, 0.12);
   padding-bottom: 28px;
 }
 
@@ -1241,7 +1242,7 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-between;
   gap: 18px;
-  border-bottom: 1px solid rgba(226, 232, 240, 0.9);
+  border-bottom: 1px solid var(--color-border, #E5E5DD);
   position: relative;
 }
 
@@ -1278,9 +1279,12 @@ onUnmounted(() => {
 }
 
 .summary-hero {
-  border: 1px solid rgba(226, 232, 240, 0.95);
-  border-radius: 24px;
-  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.04);
+  /* editorial: 外层 section 透明 + 顶 hairline 报头分隔，避免双层浮卡 */
+  border: none;
+  border-top: 1px solid var(--color-border, #E5E5DD);
+  border-radius: 0;
+  box-shadow: none;
+  padding-top: 14px;
   overflow: hidden;
 }
 
@@ -1313,26 +1317,54 @@ onUnmounted(() => {
 
 .intel-card {
   min-height: 286px;
-  border: 1px solid rgba(226, 232, 240, 0.95);
-  border-radius: 24px;
+  border: 1px solid var(--color-border, #E5E5DD);
+  border-radius: 0;
   padding: 18px;
-  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.04);
+  box-shadow: none;
+  background: var(--color-surface, #fff);
 }
 
 .intel-card--wide {
   grid-column: 1 / -1;
 }
 
+/* ABSA 时间漂移卡：编辑部化覆盖 daisyui card 默认浮卡 */
+.absa-timeline-section.card {
+  margin-top: 16px;
+  border: 1px solid var(--color-border, #E5E5DD);
+  border-radius: 0;
+  box-shadow: none;
+  background: var(--color-surface, #fff);
+  padding: 16px 18px;
+}
+.absa-timeline-badge {
+  /* 蓝色 ABSA 圆胶囊 → accent 0 圆角衬线纸条 */
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 0;
+  border: 1px solid var(--color-accent, #B45309);
+  background: transparent;
+  color: var(--color-accent, #B45309);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  font-family: var(--font-display, "Noto Serif SC", serif);
+}
+
 .intel-badge {
-  /* AI 生成徽标：去紫渐变，改赤陶红平色 */
+  /* AI 生成徽标：去胶囊，改 0 圆角衬线纸条 */
   margin-left: auto;
-  padding: 2px 10px;
-  border-radius: 999px;
+  padding: 2px 8px;
+  border-radius: 0;
   background: var(--color-accent, #B45309);
   color: #fff;
   font-size: 10px;
   font-weight: 700;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-family: var(--font-display, "Noto Serif SC", serif);
 }
 
 .intel-card-head {
@@ -1387,21 +1419,25 @@ onUnmounted(() => {
 
 .full-width-panel {
   margin-top: 18px;
-  border: 1px solid rgba(226, 232, 240, 0.95);
-  border-radius: 24px;
-  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.04);
+  border: 1px solid var(--color-border, #E5E5DD);
+  border-radius: 0;
+  box-shadow: none;
   overflow: hidden;
+  background: var(--color-surface, #fff);
 }
 
 .panel-head {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 18px 20px;
-  border-bottom: 1px solid rgba(226, 232, 240, 0.9);
-  color: #64748b;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--color-border, #E5E5DD);
+  color: var(--color-text-3, #94a3b8);
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  font-family: var(--font-display, "Noto Serif SC", serif);
 }
 
 .panel-head-right {
@@ -1416,30 +1452,31 @@ onUnmounted(() => {
 
 .eh-sort-toggle {
   display: inline-flex;
-  border-radius: 8px;
+  border-radius: 0;
   overflow: hidden;
-  border: 1px solid rgba(100, 116, 139, 0.15);
+  border: 1px solid var(--color-border, #E5E5DD);
 }
 .eh-sort-btn {
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  padding: 3px 10px;
-  font-size: 0.78rem;
-  font-weight: 500;
+  padding: 4px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  font-family: var(--font-display, "Noto Serif SC", serif);
   background: transparent;
-  color: rgba(100, 116, 139, 0.5);
+  color: var(--color-text-3, #94a3b8);
   border: none;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: color 0.15s;
 }
 .eh-sort-btn:hover {
-  background: rgba(100, 116, 139, 0.06);
+  color: var(--color-accent, #B45309);
 }
 .eh-sort-btn.active {
-  background: rgba(180, 83, 9, 0.10);
-  color: var(--color-accent, #B45309);
-  font-weight: 600;
+  background: var(--color-accent, #B45309);
+  color: #fff;
 }
 
 .timeline-window-hint {
@@ -1450,22 +1487,21 @@ onUnmounted(() => {
 
 .lead-article-card,
 .core-summary-card {
-  border: 1px solid rgba(226, 232, 240, 0.95);
-  border-radius: 18px;
-  background: #ffffff;
+  border: 1px solid var(--color-border, #E5E5DD);
+  border-radius: 0;
+  background: var(--color-surface, #fff);
 }
 
 .lead-article-card {
   padding: 16px;
   text-align: left;
   cursor: pointer;
-  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+  transition: border-color 0.18s ease;
+  border-left: 3px solid var(--color-accent, #B45309);
 }
 
 .lead-article-card:hover {
-  transform: translateY(-2px);
   border-color: var(--color-accent, #B45309);
-  box-shadow: 0 6px 14px -8px rgba(20, 16, 8, 0.10);
 }
 
 .lead-article-top {
@@ -1503,12 +1539,16 @@ onUnmounted(() => {
 .core-summary-kicker {
   display: inline-flex;
   align-items: center;
-  padding: 6px 10px;
-  border-radius: 999px;
-  background: var(--color-surface-2, #F5F5F2);
+  padding: 3px 8px;
+  border-radius: 0;
+  background: transparent;
+  border: 1px solid var(--color-accent, #B45309);
   color: var(--color-accent, #B45309);
   font-size: 11px;
-  font-weight: 800;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  font-family: var(--font-display, "Noto Serif SC", serif);
 }
 
 .core-summary-body {
@@ -1554,7 +1594,7 @@ onUnmounted(() => {
   grid-template-columns: 84px 24px minmax(0, 1fr);
   gap: 14px;
   padding: 12px 12px 12px 0;
-  border-radius: 16px;
+  border-radius: 0;
   cursor: pointer;
   position: relative;
   transition: transform 0.18s ease;
