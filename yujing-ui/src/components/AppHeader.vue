@@ -7,6 +7,11 @@ defineProps({
     type: String,
     default: "实时热榜",
   },
+  // UI-4A：同步进度 { done, total }，为 null 时展示默认 loading 文案
+  syncProgress: {
+    type: Object,
+    default: null,
+  },
 })
 defineEmits(['refresh'])
 </script>
@@ -26,7 +31,14 @@ defineEmits(['refresh'])
     <div class="header-right">
       <button class="btn btn-primary btn-sm rounded-full btn-sync-all" @click="$emit('refresh')" :disabled="loading">
         <iconify-icon icon="mdi:reload" :class="{ 'anim-spin': loading }" />
-        <span>{{ loading ? '数据同步中' : '全站同步' }}</span>
+        <span v-if="!loading">全站同步</span>
+        <span v-else-if="syncProgress" class="sync-progress">
+          <span class="sync-num mono">{{ String(syncProgress.done).padStart(2, '0') }}</span>
+          <span class="sync-sep">/</span>
+          <span class="sync-num mono">{{ String(syncProgress.total).padStart(2, '0') }}</span>
+          <span class="sync-label">平台·同步中</span>
+        </span>
+        <span v-else>数据同步中</span>
       </button>
     </div>
   </header>
@@ -81,6 +93,34 @@ defineEmits(['refresh'])
 }
 .btn-sync-all:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 8px 20px rgba(20, 16, 8, 0.12); }
 .btn-sync-all:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* UI-4A：同步进度内嵌按钮 —— mono 数字 + 小字标签，平时不占新位置 */
+.sync-progress {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  font-size: 13px;
+}
+.sync-num {
+  font-family: var(--font-mono, "JetBrains Mono", "SFMono-Regular", Menlo, Consolas, monospace);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  letter-spacing: 0;
+  /* 容器宽度由 padStart 保证（"01" "02" ... "08"），无需固定宽度 */
+  transition: color 200ms ease;
+}
+.sync-sep {
+  opacity: 0.55;
+  font-weight: 400;
+  margin: 0 1px;
+}
+.sync-label {
+  margin-left: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  opacity: 0.78;
+  letter-spacing: 0.02em;
+}
 
 @media (max-width: 960px) {
   .app-header {

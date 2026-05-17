@@ -98,6 +98,9 @@ const overlayStack = ref([]);
 const activeTab = ref("visual");
 const statusMsg = ref("系统就绪");
 const isCredOpen = ref(false);
+// UI-4A：全站同步进度（信息藏在按钮交互里）
+const syncProgress = ref(null); // null 或 { done: N, total: 8 }
+let syncStartedAt = 0; // 同步启动时间戳（ms），用于判定 sources[] 中哪些已完成
 const isGlobalSyncing = ref(false);
 const lastSyncTime = ref("正在对齐节点...");
 const lastSyncAt = ref(null);
@@ -688,17 +691,38 @@ const pollSyncStatus = async () => {
     
     const stillFetching = !!data.fetching;
     isGlobalSyncing.value = stillFetching;
+
+    // UI-4A：基于 sources[] 推算已完成平台数（latest_fetch_at > syncStartedAt 即视为本轮已完成）
+    if (syncStartedAt && Array.isArray(data.sources) && data.sources.length > 0) {
+      const total = data.sources.length;
+      const done = data.sources.filter((s) => {
+        if (!s.latest_fetch_at) return false;
+        try {
+          return new Date(s.latest_fetch_at).getTime() >= syncStartedAt;
+        } catch {
+          return false;
+        }
+      }).length;
+      syncProgress.value = { done, total };
+    }
     
     if (stillFetching) {
       setTimeout(pollSyncStatus, 2000);
     } else {
       syncPollCount = 0;
+      // 同步收尾：进度归位（短暂停留显示 8/8 给到视觉确认，然后清空）
+      if (syncProgress.value) {
+        syncProgress.value = { done: syncProgress.value.total, total: syncProgress.value.total };
+        setTimeout(() => { syncProgress.value = null; syncStartedAt = 0; }, 1200);
+      }
       fetchArticles(false);
       fetchEvents(false);
     }
   } catch (e) {
     isGlobalSyncing.value = false;
     syncPollCount = 0;
+    syncProgress.value = null;
+    syncStartedAt = 0;
   }
 };
 
@@ -722,6 +746,8 @@ const handleRefresh = async () => {
   
   // 启动同步并进入轮询
   isGlobalSyncing.value = true;
+  syncStartedAt = Date.now() - 5000; // -5s 容差：补偿后端 _run_refresh_job 启动前可能已在制作中的项
+syncProgress.value = { done: 0, total: 8 };
   await fetchArticles(true);
   pollSyncStatus();
 };
@@ -1405,6 +1431,7 @@ onMounted(() => {
             :currentSourceIcon="sidebarItems.find((item) => item.id === 'event_hub')?.icon"
             modeLabel=""
             :loading="isLoadingEvents || isLoadingTopics || isLoadingArticleSearch"
+            :syncProgress="syncProgress"
             @refresh="handleRefresh"
           />
           <div class="content-scroll">
@@ -1548,6 +1575,7 @@ onMounted(() => {
           :currentSourceName="sidebarItems.find((item) => item.id === activePlatform)?.name"
           :currentSourceIcon="sidebarItems.find((item) => item.id === activePlatform)?.icon"
           :loading="isLoadingArticles || isGlobalSyncing"
+          :syncProgress="syncProgress"
           @refresh="handleRefresh"
         />
 
