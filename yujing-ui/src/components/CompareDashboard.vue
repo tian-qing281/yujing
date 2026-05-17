@@ -590,15 +590,14 @@ onBeforeUnmount(() => {
   border-radius: 0;
   padding: 12px 14px;
   font-size: 12px;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  /* UI-18 修复（2026-05-19）：原 2 列 grid 在 AI 助手对话流深处（消息气泡 ~600px、雷达图占一半后侧栏仅 ~250px）会被挤压成两个 125px 窄列，
+     导致 leader-list 行内 dim/name/score flex 撑爆、radar-raw 4 列表头被拆成单字竖排。改为单列垂直排，leader-block 在上 / raw-block 在下。 */
+  display: flex;
+  flex-direction: column;
   gap: 14px;
 }
 .radar-side > .leader-block { min-width: 0; }
 .radar-side > .raw-block { min-width: 0; }
-@media (max-width: 520px) {
-  .radar-side { grid-template-columns: 1fr; }
-}
 .leader-list {
   list-style: none;
   margin: 6px 0 0;
