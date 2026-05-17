@@ -1903,6 +1903,151 @@ async def get_event_detail(event_id: int, db: Session = Depends(get_db)):
     return payload
 
 
+@router.get("/events/{event_id}/absa_timeline")
+async def get_event_absa_timeline(
+    event_id: int,
+    bucket_hours: int = 12,
+    top_k_aspects: int = 5,
+    db: Session = Depends(get_db),
+):
+    """ABSA 维度时间漂移：聚合事件下文章已缓存的 ABSA 数据，按时间桶展开多 aspect series。
+
+    设计要点：
+    - 只读 runtime/absa_cache/<sha1(title+content)>.json 命中的文章，不触发新 LLM 调用，
+      避免长事件首次访问时陷入数十次 LLM 同步等待。
+    - 极性数值化：positive=+1 / neutral=0 / negative=-1，桶内对同一 aspect 取均值。
+    - top_k_aspects 按 ABSA 缓存命中文章中 aspect 出现总次数排名取前 K。
+    - 时间桶以文章 fetch_time（无则 pub_date）为依据；若全事件时间跨度 ≤ bucket_hours 则只产 1 个桶。
+    - 桶内某 aspect 无样本 → series 该位置返回 null，前端 ECharts connectNulls=false 自动断线。
+    """
+    from app.services import absa as absa_service
+    from datetime import datetime, timedelta
+
+    if bucket_hours <= 0 or bucket_hours > 24 * 7:
+        raise HTTPException(status_code=400, detail="bucket_hours 必须在 1~168 之间")
+    if top_k_aspects <= 0 or top_k_aspects > 20:
+        raise HTTPException(status_code=400, detail="top_k_aspects 必须在 1~20 之间")
+
+    event = db.query(Event).filter(Event.id == event_id).first()
+    if not event:
+        raise HTTPException(status_code=404, detail="未找到事件")
+
+    link_rows = (
+        db.query(EventArticle)
+        .filter(EventArticle.event_id == event_id)
+        .all()
+    )
+    article_ids = [row.article_id for row in link_rows]
+    if not article_ids:
+        return {
+            "event_id": event_id,
+            "bucket_hours": bucket_hours,
+            "total_articles": 0,
+            "absa_covered_articles": 0,
+            "coverage_ratio": 0.0,
+            "buckets": [],
+            "aspects": [],
+            "hint": "事件下暂无文章",
+        }
+
+    articles = db.query(Article).filter(Article.id.in_(article_ids)).all()
+
+    # 读 ABSA 缓存
+    POLARITY_MAP = {"positive": 1.0, "neutral": 0.0, "negative": -1.0}
+    covered: list[tuple[datetime, list[dict]]] = []  # [(time, aspects[])]
+    for art in articles:
+        # 优先 pub_date（反映新闻产生时序），缺失时回退 fetch_time
+        ts = art.pub_date or art.fetch_time
+        if not ts:
+            continue
+        key = absa_service._cache_key(art.title or "", art.content or "")
+        cached = absa_service._cache_load(key)
+        if not cached:
+            continue
+        covered.append((ts, cached))
+
+    if not covered:
+        return {
+            "event_id": event_id,
+            "bucket_hours": bucket_hours,
+            "total_articles": len(article_ids),
+            "absa_covered_articles": 0,
+            "coverage_ratio": 0.0,
+            "buckets": [],
+            "aspects": [],
+            "hint": "该事件文章尚未触发 ABSA 抽取，请先在文章详情页点击 AI 分析",
+        }
+
+    # 聚合 aspect 总频次，取 top_k
+    aspect_total: dict[str, int] = {}
+    for _, aspects in covered:
+        for it in aspects:
+            name = (it.get("aspect") or "").strip()
+            if name:
+                aspect_total[name] = aspect_total.get(name, 0) + 1
+    top_names = [n for n, _ in sorted(aspect_total.items(), key=lambda kv: kv[1], reverse=True)[:top_k_aspects]]
+    top_set = set(top_names)
+
+    # 时间桶分桶（按 fetch_time / pub_date 升序）
+    covered.sort(key=lambda x: x[0])
+    t_min = covered[0][0]
+    t_max = covered[-1][0]
+    span_hours = max(1.0, (t_max - t_min).total_seconds() / 3600.0)
+    bucket_count = max(1, int(span_hours // bucket_hours) + 1)
+
+    # 桶起点对齐到 bucket_hours 整点（基于 t_min 向下取整）
+    def _floor_bucket(t: datetime) -> datetime:
+        epoch = datetime(1970, 1, 1)
+        secs = int((t - epoch).total_seconds())
+        bucket_secs = bucket_hours * 3600
+        return epoch + timedelta(seconds=(secs // bucket_secs) * bucket_secs)
+
+    bucket_start = _floor_bucket(t_min)
+    buckets_dt = [bucket_start + timedelta(hours=bucket_hours * i) for i in range(bucket_count)]
+
+    # 桶内每 aspect 累计 polarity & count
+    # series_acc[aspect][bucket_idx] = (sum_polarity, count)
+    series_acc: dict[str, list[list[float]]] = {n: [[0.0, 0] for _ in range(bucket_count)] for n in top_names}
+
+    for ts, aspects in covered:
+        idx = int((ts - bucket_start).total_seconds() // (bucket_hours * 3600))
+        if idx < 0 or idx >= bucket_count:
+            continue
+        for it in aspects:
+            name = (it.get("aspect") or "").strip()
+            if name not in top_set:
+                continue
+            polarity = POLARITY_MAP.get((it.get("sentiment") or "").lower(), 0.0)
+            series_acc[name][idx][0] += polarity
+            series_acc[name][idx][1] += 1
+
+    aspects_out = []
+    for name in top_names:
+        series: list = []
+        counts: list[int] = []
+        total = 0
+        for sum_p, cnt in series_acc[name]:
+            counts.append(cnt)
+            total += cnt
+            series.append(round(sum_p / cnt, 3) if cnt > 0 else None)
+        aspects_out.append({
+            "name": name,
+            "series": series,
+            "counts": counts,
+            "total_count": total,
+        })
+
+    return {
+        "event_id": event_id,
+        "bucket_hours": bucket_hours,
+        "total_articles": len(article_ids),
+        "absa_covered_articles": len(covered),
+        "coverage_ratio": round(len(covered) / max(1, len(article_ids)), 3),
+        "buckets": [d.strftime("%m-%d %H:%M") for d in buckets_dt],
+        "aspects": aspects_out,
+    }
+
+
 @router.get("/topics", response_model=List[TopicResponse])
 async def get_topics(db: Session = Depends(get_db), force_refresh: bool = False, q: str = "", time_range: int = None, source_id: str = ""):
     current_time = time.time()

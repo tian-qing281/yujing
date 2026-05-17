@@ -90,6 +90,14 @@
             </div>
           </section>
 
+          <!-- F6: ABSA 维度时间漂移（独立 section，复用上方 padding 节奏） -->
+          <AbsaTimelineChart
+            v-if="item?.id"
+            :event-id="item.id"
+            :bucket-hours="12"
+            :top-k-aspects="5"
+          />
+
           <section class="full-width-panel card bg-base-100">
             <div class="panel-head">
               <span>事件脉络</span>
@@ -174,6 +182,7 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { buildApiUrl } from "../config/api";
 import { ANIM } from "../utils/chartAnimation";
+import AbsaTimelineChart from "./AbsaTimelineChart.vue";
 
 const props = defineProps({
   item: { type: Object, default: null },
