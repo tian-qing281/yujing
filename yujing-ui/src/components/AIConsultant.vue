@@ -20,7 +20,7 @@
 
     <div class="workspace-layout">
       <aside class="session-rail">
-        <div class="rail-block rail-head card bg-base-100">
+        <div class="rail-block rail-head">
           <div class="rail-copy">
             <span class="rail-label">会话</span>
             <strong>本地历史</strong>
@@ -1367,14 +1367,16 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+/* 编辑部全面升级 UI-13：整页浅蓝灰 SaaS 底 → 暖灰纸面 */
 .ai-shell {
   height: 100%; display: grid; grid-template-rows: auto 1fr auto;
-  background: #f1f4f9; color: #1e293b;
+  background: var(--color-surface-2, #F5F5F2); color: var(--color-brand, #0F172A);
   font-family: 'Inter', system-ui, sans-serif;
 }
+/* 编辑部全面升级 UI-13：白底 + blur 改透明 + hairline 报头 */
 .workspace-header {
-  padding: 10px 28px; background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(20px);
-  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+  padding: 10px 28px; background: transparent;
+  border-bottom: 1px solid var(--color-border, #E5E5DD);
   display: flex; justify-content: space-between; align-items: center;
   z-index: 10;
 }
@@ -1385,34 +1387,42 @@ onUnmounted(() => {
 .workspace-layout { min-height: 0; display: grid; grid-template-columns: 280px 1fr; gap: 0; }
 
 .session-rail {
-  background: #f8fafc;
-  border-right: 1px solid rgba(0, 0, 0, 0.05);
+  background: transparent;
+  border-right: 1px solid var(--color-border, #E5E5DD);
   padding: 32px 24px; display: flex; flex-direction: column; gap: 24px;
 }
+/* 编辑部全面升级 UI-13：白底 16px 圆角 shadow → 透明 + 顶/底 hairline */
 .rail-head {
-  padding: 20px; background: #fff; border: 1px solid rgba(59, 130, 246, 0.12);
-  border-radius: 16px; box-shadow: 0 4px 20px rgba(15, 23, 42, 0.04);
+  padding: 20px 4px; background: transparent; border: none;
+  border-top: 1px solid var(--color-border, #E5E5DD);
+  border-bottom: 1px solid var(--color-border, #E5E5DD);
+  border-radius: 0; box-shadow: none;
   display: flex; flex-direction: column; gap: 16px;
 }
 .rail-label { font-size: 11px; font-weight: 800; color: var(--color-accent); text-transform: uppercase; letter-spacing: 0.18em; opacity: 0.85; }
 .rail-copy strong { display: block; font-size: 18px; color: #0f172a; font-weight: 900; }
 
+/* 编辑部全面升级 UI-13：黑色圆角胶囊 → 透明 + accent 实线边编辑部按钮 */
 .session-create {
-  width: 100%; height: 44px; background: #0f172a; color: #fff; border-radius: 12px;
-  font-weight: 800; display: flex; align-items: center; justify-content: center; gap: 8px;
-  transition: 0.2s cubic-bezier(0.4, 0, 0.2, 1); border: none; font-size: 14px;
+  width: 100%; height: 40px; background: transparent; color: var(--color-accent);
+  border: 1px solid var(--color-accent); border-radius: 0;
+  font-family: var(--font-display, "Noto Serif SC", serif);
+  font-weight: 600; letter-spacing: 0.12em; font-size: 13px;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  transition: background 180ms ease; cursor: pointer;
 }
-.session-create:hover { background: var(--color-accent); transform: translateY(-2px); box-shadow: 0 10px 20px rgba(180, 83, 9, 0.15); }
+.session-create:hover { background: rgba(180, 83, 9, 0.08); }
 
-.session-list { display: flex; flex-direction: column; gap: 6px; overflow-y: auto; padding-right: 4px; }
+.session-list { display: flex; flex-direction: column; gap: 2px; overflow-y: auto; padding-right: 4px; }
+/* 编辑部全面升级 UI-13：圆角 12 → 0，active 浮卡 → 仅 surface-2 + accent 左色带 */
 .session-card {
-  position: relative; border-radius: 12px; border: 1px solid transparent; transition: 0.2s;
+  position: relative; border-radius: 0; border: none; transition: background 180ms ease;
   background: transparent; cursor: pointer;
 }
 .session-card:hover { background: var(--color-surface-2); }
 .session-card.active {
-  background: #fff; border-color: rgba(180, 83, 9, 0.20);
-  box-shadow: 0 4px 12px rgba(28, 25, 23, 0.06);
+  background: var(--color-surface-2); border: none;
+  box-shadow: none;
 }
 .session-card.active::before {
   content: ""; position: absolute; left: 0; top: 12px; bottom: 12px; width: 3px;
@@ -1507,13 +1517,14 @@ onUnmounted(() => {
 .msg-text :deep(th) { background: var(--color-surface-2); font-weight: 800; color: var(--color-accent); }
 .msg-text :deep(a) { color: var(--color-accent); text-decoration: underline; }
 
+/* 编辑部全面升级 UI-13：composer 白底 blur 浮卡 → 透明 + 顶 hairline */
 .composer-shell {
-  padding: 32px 40px; background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(20px);
-  border-top: 1px solid rgba(0, 0, 0, 0.04);
+  padding: 24px 40px; background: transparent;
+  border-top: 1px solid var(--color-border, #E5E5DD);
 }
 .composer-panel {
-  background: #fff; border: 1px solid var(--color-surface-2); border-radius: 24px;
-  padding: 28px; box-shadow: 0 30px 60px rgba(15, 23, 42, 0.1);
+  background: transparent; border: none; border-radius: 0;
+  padding: 0; box-shadow: none;
   width: 100%; margin: 0 auto;
 }
 .composer-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
@@ -1521,19 +1532,24 @@ onUnmounted(() => {
 .composer-meta { font-size: 11px; color: #94a3b8; }
 
 .composer-field { display: flex; gap: 16px; align-items: flex-end; }
+/* 编辑部全面升级 UI-13：输入框圆角 12 → 4，蓝灰底 → 透明 hairline */
 .mcp-input-area {
-  flex: 1; background: #f8fafc; border: 1px solid rgba(226, 232, 240, 0.8); border-radius: 12px;
-  padding: 16px; font-size: 15px; resize: none; min-height: 56px; outline: none; border: 1px solid transparent;
-  transition: all 0.2s;
+  flex: 1; background: transparent; border: 1px solid var(--color-border, #E5E5DD); border-radius: 4px;
+  padding: 16px; font-size: 15px; resize: none; min-height: 56px; outline: none;
+  transition: border-color 200ms ease, box-shadow 200ms ease;
 }
-.mcp-input-area:focus { border-color: var(--color-accent, #B45309); background: #fff; box-shadow: 0 0 0 3px rgba(180, 83, 9, 0.08); }
+.mcp-input-area:focus { border-color: var(--color-accent, #B45309); background: var(--color-surface, #FFFFFF); box-shadow: inset 0 0 0 1px var(--color-accent, #B45309); }
 
+/* 编辑部全面升级 UI-13：发送按钮去 translateY + 圆角 12 → 0 */
 .btn-send-capsule {
-  /* 发送按钮：近墨石板底 + 暖白文字，与 header"全站同步"主按钮一致 */
-  background: var(--color-brand, #0F172A); color: #fff; border: none; border-radius: 12px; height: 56px; padding: 0 24px;
-  display: flex; align-items: center; gap: 10px; font-weight: 800; cursor: pointer; transition: 0.2s;
+  background: var(--color-brand, #0F172A); color: #fff; border: none; border-radius: 0;
+  height: 56px; padding: 0 28px;
+  display: flex; align-items: center; gap: 10px;
+  font-family: var(--font-display, "Noto Serif SC", serif);
+  font-weight: 600; letter-spacing: 0.12em;
+  cursor: pointer; transition: background 180ms ease;
 }
-.btn-send-capsule:hover { transform: translateY(-2px); box-shadow: 0 8px 18px rgba(20, 16, 8, 0.12); }
+.btn-send-capsule:hover { background: var(--color-accent, #B45309); }
 
 .summon-area { margin-top: 24px; border-top: 1px solid rgba(0,0,0,0.04); padding-top: 16px; }
 .summon-header { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: #64748b; font-weight: 700; margin-bottom: 8px; }
@@ -1775,17 +1791,19 @@ onUnmounted(() => {
  * 智能体模式 · 顶部标记 + 预设条 + 消息气泡中的 AgentTrace/final-card
  * ========================================================================= */
 .agent-badge {
-  /* Tool-Calling chip：去紫色渐变，暖白底 + 赤陶红描边/字 */
+  /* 编辑部全面升级 UI-13：Tool-Calling chip 999px 圆胶囊 → 0 圆角衬线标签 */
   display: inline-flex;
   align-items: center;
   gap: 0.3rem;
-  padding: 0.2rem 0.6rem 0.2rem 0.5rem;
-  border-radius: 999px;
-  background: var(--color-surface-2, #F5F5F2);
+  padding: 0.15rem 0.55rem;
+  border-radius: 0;
+  background: transparent;
   border: 1px solid var(--color-border, #E5E5DD);
   color: var(--color-accent, #B45309);
-  font-size: 0.72rem;
+  font-family: var(--font-display, "Noto Serif SC", serif);
+  font-size: 0.7rem;
   font-weight: 600;
+  letter-spacing: 0.08em;
 }
 
 .agent-preset-strip {
