@@ -726,6 +726,11 @@ const handleRefresh = async () => {
 };
 
 const filteredArticles = computed(() => articles.value.filter((item) => item.source_id === activePlatform.value));
+
+// editorial Q: 传给 lead NewsCard 的前 5 名影响指数数组，用于右侧 mini bar
+const top5Stats = computed(() =>
+  filteredArticles.value.slice(0, 5).map((it) => Math.round(Number(it.impactScore) || 0))
+);
 const canonicalizeEventTitle = (value) =>
   String(value || "")
     .toLowerCase()
@@ -1559,6 +1564,7 @@ onMounted(() => {
               :index="idx"
               :variant="idx === 0 ? 'lead' : 'major'"
               :hideSource="true"
+              :leadStats="idx === 0 ? top5Stats : []"
               @click="openDetail(item)"
             />
           </div>

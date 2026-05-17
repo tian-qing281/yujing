@@ -1,5 +1,10 @@
 <template>
-  <div class="news-card card bg-base-100" :class="`news-card--${props.variant}`" @click="$emit('click')">
+  <div
+    class="news-card card bg-base-100"
+    :class="`news-card--${props.variant}`"
+    :style="majorTopBarStyle"
+    @click="$emit('click')"
+  >
     <div class="card-body news-card-body">
       <div class="card-kicker">
         <div class="card-rank-box" :style="rankStyle">
@@ -20,6 +25,28 @@
         <p v-if="displayExcerpt" class="card-excerpt" v-html="displayExcerpt"></p>
         <div v-if="searchReasons.length" class="card-search-meta">
           <span v-for="reason in searchReasons" :key="reason" class="search-chip badge badge-soft badge-primary">{{ reason }}</span>
+        </div>
+      </div>
+
+      <!-- editorial Q: lead 卡右侧加前 5 名影响指数对比 mini bar -->
+      <div v-if="variant === 'lead' && leadStats?.length" class="lead-sparkline" aria-hidden="true">
+        <div class="lead-sparkline-title">前 5 影响指数</div>
+        <div class="lead-sparkline-bars">
+          <div
+            v-for="(score, i) in leadStats"
+            :key="i"
+            class="lsb-col"
+            :class="{ 'lsb-self': i === 0 }"
+          >
+            <div class="lsb-bar-track">
+              <div
+                class="lsb-bar-fill"
+                :style="{ height: barPct(score) + '%', background: barColor(i) }"
+              ></div>
+            </div>
+            <div class="lsb-score">{{ score }}</div>
+            <div class="lsb-label">{{ String(i + 1).padStart(2, "0") }}</div>
+          </div>
         </div>
       </div>
 
@@ -50,8 +77,8 @@ const props = defineProps({
   hideSource: { type: Boolean, default: false },
   // editorial Batch F: 卡片密度变体
   // major → 大卡（前 5 名）、row → 紧凑行（第 6+ 名）
-  variant: { type: String, default: "major" },
-});
+  variant: { type: String, default: "major" },  // editorial Q: lead 卡右侧 mini bar 所需 — 传入前 5 名的 impactScore 数组
+  leadStats: { type: Array, default: () => [] },});
 
 defineEmits(["click"]);
 
@@ -149,6 +176,37 @@ const displayExcerpt = computed(() =>
 const searchReasons = computed(() =>
   Array.isArray(props.item.search_match_reasons) ? props.item.search_match_reasons.slice(0, 3) : [],
 );
+
+// editorial Q: lead sparkline 辅助 — 用相对差（min-max 归一化）放大 bar 高度对比
+// 避免 93/91/90 这种小差距渲染出几乎等高的柱子
+const leadMax = computed(() => {
+  const arr = (props.leadStats || []).filter((v) => Number(v) > 0);
+  return arr.length ? Math.max(...arr) : 1;
+});
+const leadMin = computed(() => {
+  const arr = (props.leadStats || []).filter((v) => Number(v) > 0);
+  return arr.length ? Math.min(...arr) : 0;
+});
+const barPct = (score) => {
+  const v = Number(score) || 0;
+  if (v <= 0) return 4;
+  const range = leadMax.value - leadMin.value;
+  if (range <= 0) return 100;
+  // 18% 保底（最低柱仍可见）+ 82% 区间归一化
+  const norm = (v - leadMin.value) / range;
+  return Math.round(18 + norm * 82);
+};
+const BAR_COLORS = ["#B45309", "#C77B2A", "#D9A471", "#C9BFA8", "#A8A29E"];
+const barColor = (i) => BAR_COLORS[i] || "#A8A29E";
+
+// editorial Q: major 卡（#02 / #03）顶部色阶条，与序号色阶呼应
+// #02 深赤陶红 #92400E；#03 中暖橙 #C77B2A；#04/#05 不加（保持克制）
+const majorTopBarStyle = computed(() => {
+  if (props.variant !== "major") return {};
+  const colors = { 1: "#92400E", 2: "#C77B2A" };
+  const c = colors[props.index];
+  return c ? { borderTop: `3px solid ${c}` } : {};
+});
 </script>
 
 <style scoped>
@@ -373,6 +431,95 @@ const searchReasons = computed(() =>
   font-family: var(--font-display, "Noto Serif SC", serif);
   letter-spacing: -0.005em;
   -webkit-line-clamp: 2;
+}
+
+/* lead 卡布局：grid 让 kicker 跨满，main 与右侧 sparkline 横向并排 */
+.news-card--lead .news-card-body {
+  display: grid;
+  grid-template-columns: 1fr 220px;
+  grid-template-rows: auto 1fr;
+  gap: 14px 28px;
+}
+.news-card--lead .card-kicker { grid-column: 1 / -1; }
+.news-card--lead .card-main { grid-column: 1; grid-row: 2; }
+.news-card--lead .lead-sparkline { grid-column: 2; grid-row: 2; }
+
+/* === editorial Q: lead mini bar 影响指数对比 === */
+.lead-sparkline {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px 10px;
+  background: var(--color-surface-2, #F5F5F2);
+  border: 1px solid var(--color-border-soft, #EFEFEA);
+  border-radius: 8px;
+  min-width: 0;
+}
+.lead-sparkline-title {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-text-3, #A8A29E);
+  font-family: var(--font-display, "Noto Serif SC", serif);
+}
+.lead-sparkline-bars {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 6px;
+  height: 78px;
+}
+.lsb-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  height: 100%;
+  min-width: 0;
+}
+.lsb-bar-track {
+  width: 100%;
+  flex: 1;
+  background: rgba(180, 83, 9, 0.04);
+  border-radius: 2px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  overflow: hidden;
+}
+.lsb-bar-fill {
+  width: 100%;
+  border-radius: 2px 2px 0 0;
+  min-height: 3px;
+  transition: height 320ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.lsb-score {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--color-text-2, #57534E);
+  font-family: var(--font-mono, "JetBrains Mono", monospace);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.lsb-label {
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--color-text-3, #A8A29E);
+  font-family: var(--font-mono, "JetBrains Mono", monospace);
+  letter-spacing: 0.04em;
+  line-height: 1;
+}
+.lsb-self .lsb-score { color: var(--color-accent, #B45309); }
+.lsb-self .lsb-label { color: var(--color-accent, #B45309); }
+
+/* 窄屏：sparkline 隐藏，main 占满 */
+@media (max-width: 768px) {
+  .news-card--lead .news-card-body {
+    grid-template-columns: 1fr;
+  }
+  .news-card--lead .lead-sparkline { display: none; }
 }
 
 /* === Batch F: row variant - 紧凑列表行 === */
