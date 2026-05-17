@@ -2067,48 +2067,56 @@ body { font-family: "Fira Sans", "PingFang SC", "Microsoft YaHei", sans-serif; b
   color: #94a3b8;
 }
 
+/* 编辑部全面升级：去 join 圆角容器，改横排下划线 tab */
 .eh-btn-group {
-  background: rgba(255, 255, 255, 0.8);
-  padding: 3px;
-  border-radius: 12px;
-  border: 1px solid rgba(148, 163, 184, 0.1);
+  background: transparent !important;
+  padding: 0 !important;
+  border: none !important;
+  border-radius: 0 !important;
+  display: flex !important;
+  gap: 22px;
 }
 
 .eh-pill-wrap {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 22px;
 }
 
 .eh-pill-btn {
   border: none !important;
   background: transparent !important;
-  border-radius: 4px !important;
-  font-size: 11px !important;
-  font-weight: 700 !important;
-  height: 28px !important;
-  min-height: 28px !important;
-  padding-inline: 14px !important;
-  color: var(--color-text-2);
-  letter-spacing: 0.04em;
-  transition: all 0.18s ease;
+  border-radius: 0 !important;
+  border-bottom: 2px solid transparent !important;
+  font-family: var(--font-display) !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  height: 26px !important;
+  min-height: 26px !important;
+  padding: 0 2px !important;
+  margin: 0 !important;
+  color: var(--color-text-3, #94a3b8) !important;
+  letter-spacing: 0.12em;
+  transition: color 180ms ease, border-color 180ms ease;
 }
 
 .eh-pill-btn.active {
-  /* editorial: \u8d64\u9676\u7ea2\u5b9e\u8272\u592a\u5f3a\uff0c\u6539\u4e3a\u201c\u8df3\u4e3b\u8272\u6587\u5b57 + \u4f4e\u900f\u660e\u80cc\u201d\u7f16\u8f91\u8c03 */
-  background: rgba(180, 83, 9, 0.10) !important;
+  background: transparent !important;
   color: var(--color-accent) !important;
+  border-bottom-color: var(--color-accent) !important;
   box-shadow: none;
 }
 
 .eh-pill-btn.active-neutral {
-  background: var(--color-brand) !important;
-  color: #FAFAF7 !important;
+  background: transparent !important;
+  color: var(--color-brand) !important;
+  border-bottom-color: var(--color-brand) !important;
 }
 
 .eh-pill-btn:hover:not(.active):not(.active-neutral) {
-  background: rgba(28, 25, 23, 0.05) !important;
-  color: var(--color-text);
+  background: transparent !important;
+  color: var(--color-text) !important;
+  border-bottom-color: var(--color-border) !important;
 }
 
 .eh-facets {
