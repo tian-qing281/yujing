@@ -1927,19 +1927,20 @@ body { font-family: "Fira Sans", "PingFang SC", "Microsoft YaHei", sans-serif; b
 }
 
 .eh-search-bar-group {
+  /* UI-9 编辑部纸条搜索栏：去 100px 胶囊 + 去蓝灰阴影，改 hairline 报纸纸条 */
   display: flex;
   align-items: center;
   background: white;
-  border: 1px solid rgba(148, 163, 184, 0.24);
-  border-radius: 100px;
-  padding: 8px 18px 8px 20px;
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.05);
-  transition: all 0.3s ease;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  padding: 10px 18px;
+  box-shadow: none;
+  transition: border-color 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .eh-search-bar-group:focus-within {
   border-color: var(--color-accent);
-  box-shadow: 0 10px 28px rgba(37, 99, 235, 0.12);
+  box-shadow: inset 0 0 0 1px var(--color-accent);
 }
 
 .eh-search-input-wrap {
@@ -1951,7 +1952,7 @@ body { font-family: "Fira Sans", "PingFang SC", "Microsoft YaHei", sans-serif; b
 
 .eh-search-icon {
   font-size: 18px;
-  color: #94a3b8;
+  color: var(--color-text-3, #94a3b8);
 }
 
 .eh-main-input {
