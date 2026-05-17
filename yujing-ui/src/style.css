@@ -196,19 +196,33 @@ p:last-child {
   background: rgba(30, 64, 175, 0.8);
 }
 
+/* 报纸编辑部风滚动条：暖赤陶细窄轨，去 track 让其融入米色底 */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(180, 83, 9, 0.28) transparent;
+}
+
 ::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: rgba(226, 232, 240, 0.46);
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  border-radius: 999px;
-  background: rgba(100, 116, 139, 0.38);
-  border: 2px solid rgba(248, 250, 252, 0.86);
+  border-radius: 2px;
+  background: rgba(180, 83, 9, 0.22);
+  border: none;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(180, 83, 9, 0.42);
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
 }
 
 /* 全局窄屏兜底：避免 chip / badge / 按钮在 ≤768px 触发逐字换行（伪「文字竖排」） */
