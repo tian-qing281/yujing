@@ -1517,9 +1517,10 @@ onUnmounted(() => {
 .msg-text :deep(th) { background: var(--color-surface-2); font-weight: 800; color: var(--color-accent); }
 .msg-text :deep(a) { color: var(--color-accent); text-decoration: underline; }
 
-/* 编辑部全面升级 UI-13：composer 白底 blur 浮卡 → 透明 + 顶 hairline */
+/* 编辑部全面升级 UI-13：composer 白底 blur 浮卡 → 透明 + 顶 hairline
+   UI-17 微调：透明背景在米色聊天流上视觉边界弱导致"看不清"，加 surface-2 弱底色 */
 .composer-shell {
-  padding: 24px 40px; background: transparent;
+  padding: 24px 40px; background: var(--color-surface-2, #F5F5F2);
   border-top: 1px solid var(--color-border, #E5E5DD);
 }
 .composer-panel {
@@ -1529,14 +1530,21 @@ onUnmounted(() => {
 }
 .composer-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
 .composer-label { display: flex; align-items: center; gap: 8px; color: var(--color-accent); font-size: 11px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.5px; }
-.composer-meta { font-size: 11px; color: #94a3b8; }
+.composer-meta { font-size: 11px; color: var(--color-text-3, #78716c); }
 
 .composer-field { display: flex; gap: 16px; align-items: flex-end; }
-/* 编辑部全面升级 UI-13：输入框圆角 12 → 4，蓝灰底 → 透明 hairline */
+/* 编辑部全面升级 UI-13：输入框圆角 12 → 4，蓝灰底 → 透明 hairline
+   UI-17 微调：透明 + 米色 shell 下文字偏淡难读，改纯白 surface + 加深 placeholder/正文色 */
 .mcp-input-area {
-  flex: 1; background: transparent; border: 1px solid var(--color-border, #E5E5DD); border-radius: 4px;
-  padding: 16px; font-size: 15px; resize: none; min-height: 56px; outline: none;
+  flex: 1; background: var(--color-surface, #FFFFFF); border: 1px solid var(--color-border, #E5E5DD); border-radius: 4px;
+  padding: 16px; font-size: 15px; line-height: 1.6;
+  color: var(--color-text-1, #1c1917);
+  resize: none; min-height: 56px; outline: none;
   transition: border-color 200ms ease, box-shadow 200ms ease;
+}
+.mcp-input-area::placeholder {
+  color: var(--color-text-3, #78716c);
+  opacity: 1;
 }
 .mcp-input-area:focus { border-color: var(--color-accent, #B45309); background: var(--color-surface, #FFFFFF); box-shadow: inset 0 0 0 1px var(--color-accent, #B45309); }
 
