@@ -149,19 +149,17 @@ const emitSubmit = () => {
   align-items: center;
   justify-content: center;
   padding: 24px;
-  background: rgba(15, 23, 42, 0.72);
-  backdrop-filter: blur(16px);
+  background: rgba(28, 25, 23, 0.42);
 }
 
 .credential-box {
   width: min(720px, 100%);
-  /* editorial: 去渐变 + 大圆角，走报纸严谨面 */
-  border-radius: 6px;
+  border-radius: 4px;
   overflow: hidden;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-top: 3px solid var(--color-accent);
-  box-shadow: 0 18px 50px rgba(15, 23, 42, 0.14);
+  box-shadow: 0 18px 48px rgba(28, 25, 23, 0.12);
   color: var(--color-text);
   text-align: left;
   font-family: "PingFang SC", "Microsoft YaHei", sans-serif;
@@ -180,7 +178,7 @@ const emitSubmit = () => {
   justify-content: space-between;
   gap: 20px;
   padding: 28px 30px 24px;
-  border-bottom: 1px solid rgba(226, 232, 240, 0.9);
+  border-bottom: 1px solid var(--color-border, #E5E5DD);
 }
 
 .header-main {
@@ -195,12 +193,11 @@ const emitSubmit = () => {
   place-items: center;
   width: 44px;
   height: 44px;
-  /* editorial: 糖果蓝 → 米白 + 赤陶红 */
-  border-radius: 4px;
-  background: var(--color-surface-2);
+  border-radius: 0;
+  background: transparent;
   color: var(--color-accent);
   font-size: 22px;
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--color-accent);
 }
 
 .title-icon :deep(span) {
@@ -214,14 +211,16 @@ const emitSubmit = () => {
   margin: 0 0 6px;
   font-size: 24px;
   font-weight: 800;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.01em;
+  font-family: var(--font-display, "Noto Serif SC", serif);
+  color: var(--color-text-1, #1c1917);
 }
 
 .header-main p {
   margin: 0;
   max-width: 420px;
-  color: #64748b;
-  font-size: 14px;
+  color: var(--color-text-3, #78716c);
+  font-size: 13px;
   line-height: 1.6;
 }
 
@@ -232,7 +231,7 @@ const emitSubmit = () => {
 }
 
 .btn-close:hover {
-  color: var(--color-text);
+  color: var(--color-accent);
 }
 
 .cred-body {
@@ -253,10 +252,12 @@ const emitSubmit = () => {
 .field-label {
   display: block;
   margin-bottom: 10px;
-  color: #475569;
-  font-size: 12px;
+  color: var(--color-accent, #B45309);
+  font-size: 10px;
   font-weight: 700;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  font-family: var(--font-display, "Noto Serif SC", serif);
 }
 
 .cred-select,
@@ -267,8 +268,8 @@ const emitSubmit = () => {
 }
 
 .credential-textarea:disabled {
-  background: #f8fafc;
-  color: #94a3b8;
+  background: var(--color-surface-2, #F5F5F2);
+  color: var(--color-text-3, #94a3b8);
   cursor: not-allowed;
 }
 
@@ -278,8 +279,7 @@ const emitSubmit = () => {
   color: var(--color-text);
   font-size: 15px;
   font-weight: 700;
-  /* editorial: 去圆额 */
-  border-radius: 4px;
+  border-radius: 0;
   border: 1px solid var(--color-border);
   background: var(--color-surface);
   box-shadow: none;
@@ -288,7 +288,6 @@ const emitSubmit = () => {
 .cred-select:focus,
 .credential-textarea:focus {
   outline: none;
-  /* editorial: 蓝 focus ring → 赤陶红 */
   border-color: var(--color-accent);
   box-shadow: 0 0 0 3px rgba(180, 83, 9, 0.16);
 }
@@ -296,17 +295,15 @@ const emitSubmit = () => {
 .status-card {
   min-height: 54px;
   padding: 14px 16px;
-  /* editorial: 去圆额 + 走 token */
-  border-radius: 4px;
+  border-radius: 0;
   background: var(--color-surface-2);
   border: 1px solid var(--color-border);
   box-shadow: none;
 }
 
 .status-card.active {
-  /* 保留绿作为 success 语义，但去糖果渐变 */
-  border-color: rgba(21, 128, 61, 0.25);
-  background: rgba(21, 128, 61, 0.04);
+  border-color: rgba(21, 128, 61, 0.35);
+  background: transparent;
 }
 
 .status-row {
@@ -319,46 +316,44 @@ const emitSubmit = () => {
   width: 9px;
   height: 9px;
   border-radius: 999px;
-  background: #94a3b8;
+  background: var(--color-text-3, #94a3b8);
 }
 
 .status-card.active .status-dot {
-  /* editorial: 保留信号绿但用 token success */
   background: var(--color-success, #15803D);
   box-shadow: 0 0 0 4px rgba(21, 128, 61, 0.10);
 }
 
 .status-card p {
   margin: 8px 0 0;
-  color: #64748b;
-  font-size: 13px;
+  color: var(--color-text-3, #78716c);
+  font-size: 12px;
   line-height: 1.5;
 }
 
 .credential-textarea {
   min-height: 210px;
   resize: vertical;
-  /* editorial: 去圆额 */
-  border-radius: 4px;
+  border-radius: 0;
   padding: 16px 18px;
   font-size: 14px;
   line-height: 1.65;
   background: var(--color-surface);
   color: var(--color-text);
+  border: 1px solid var(--color-border);
   caret-color: var(--color-accent);
 }
 
 .credential-textarea::placeholder {
-  color: #64748b;
+  color: var(--color-text-3, #94a3b8);
   opacity: 1;
 }
 
 .feedback {
   margin-bottom: 16px;
   padding: 12px 14px;
-  /* editorial: 去圆额 */
-  border-radius: 4px;
-  font-size: 14px;
+  border-radius: 0;
+  font-size: 13px;
   line-height: 1.5;
   border-width: 1px;
   justify-content: flex-start;
@@ -366,20 +361,21 @@ const emitSubmit = () => {
 
 .feedback.success {
   color: var(--color-success, #15803D);
-  background: rgba(21, 128, 61, 0.06);
-  border: 1px solid rgba(21, 128, 61, 0.20);
+  background: transparent;
+  border: 1px solid rgba(21, 128, 61, 0.35);
+  border-left: 3px solid var(--color-success, #15803D);
 }
 
 .feedback.error {
   color: var(--color-critical, #B91C1C);
-  background: rgba(185, 28, 28, 0.05);
-  border: 1px solid rgba(185, 28, 28, 0.18);
+  background: transparent;
+  border: 1px solid rgba(185, 28, 28, 0.35);
+  border-left: 3px solid var(--color-critical, #B91C1C);
 }
 
 .feedback.info {
-  /* editorial: 糖果蓝 → 赤陶红中性 info */
   color: var(--color-text-2);
-  background: var(--color-surface-2);
+  background: transparent;
   border: 1px solid var(--color-border);
   border-left: 3px solid var(--color-accent);
 }
@@ -392,44 +388,46 @@ const emitSubmit = () => {
 
 .btn-secondary,
 .btn-primary {
-  /* editorial: 去圆额 */
-  border-radius: 4px;
-  height: 46px;
-  padding: 0 20px;
+  border-radius: 0;
+  height: 44px;
+  padding: 0 22px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 10px;
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  font-family: var(--font-display, "Noto Serif SC", serif);
   cursor: pointer;
-  transition: transform 0.2s ease, background 0.2s ease, opacity 0.2s ease;
+  transition: background 0.18s, color 0.18s, border-color 0.18s;
 }
 
 .btn-secondary {
   color: var(--color-text-2);
   background: transparent;
   border: 1px solid var(--color-border);
-  text-transform: none;
+}
+.btn-secondary:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
 }
 
 .btn-primary {
-  /* editorial: 糖果蓝 → 近墨石板主动作 */
-  background: var(--color-brand);
+  background: var(--color-text-1, #1c1917);
   color: #FAFAF7;
   min-width: 148px;
-  text-transform: none;
-  border: none;
+  border: 1px solid var(--color-text-1, #1c1917);
+}
+.btn-primary:hover:not(:disabled) {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
 }
 
 .btn-primary:disabled {
   opacity: 0.55;
   cursor: not-allowed;
-}
-
-.btn-secondary:hover,
-.btn-primary:hover:not(:disabled) {
-  transform: translateY(-1px);
 }
 
 .fade-enter-active,
@@ -459,7 +457,7 @@ const emitSubmit = () => {
 @media (max-width: 720px) {
   .credential-box {
     width: 100%;
-    border-radius: 22px;
+    border-radius: 0;
   }
 
   .cred-header,
