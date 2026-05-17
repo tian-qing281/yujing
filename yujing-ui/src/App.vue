@@ -73,6 +73,9 @@ const activeSourceFilter = ref("");
 const signalPage = ref(1);
 const aggregatedPage = ref(1);
 const articlePage = ref(1);
+// UI-7: 热榜 More Headlines（第 6+ 名）翻页，每页 10 条
+const rankingPage = ref(1);
+const RANKING_PAGE_SIZE = 10;
 
 const activeTimeRange = ref(null);
 const setTimeRange = (range) => {
@@ -600,6 +603,8 @@ onMounted(() => {
 
 watch(activePlatform, (value) => {
   sessionStorage.setItem("yj-platform", value);
+  // UI-7: 切换平台时 More Headlines 翻页重置到第 1 页
+  rankingPage.value = 1;
   if (value === "event_hub") {
     scheduleSearchInsightPreload();
     scheduleEventHubHydration(false);
@@ -753,6 +758,42 @@ syncProgress.value = { done: 0, total: 8 };
 };
 
 const filteredArticles = computed(() => articles.value.filter((item) => item.source_id === activePlatform.value));
+
+// UI-7: 热榜 More Headlines（第 6+ 名）翻页
+const rankingRestArticles = computed(() => filteredArticles.value.slice(5));
+const rankingPageCount = computed(() => Math.max(1, Math.ceil(rankingRestArticles.value.length / RANKING_PAGE_SIZE)));
+const pagedRankingArticles = computed(() => {
+  const start = (rankingPage.value - 1) * RANKING_PAGE_SIZE;
+  return rankingRestArticles.value.slice(start, start + RANKING_PAGE_SIZE);
+});
+const visibleRankingPages = computed(() => {
+  const total = rankingPageCount.value;
+  const current = rankingPage.value;
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+  const pages = [1];
+  let start = Math.max(2, current - 1);
+  let end = Math.min(total - 1, current + 1);
+  if (current <= 3) { start = 2; end = 5; }
+  if (current >= total - 2) { start = total - 4; end = total - 1; }
+  if (start > 2) pages.push("...");
+  for (let i = start; i <= end; i++) pages.push(i);
+  if (end < total - 1) pages.push("...");
+  pages.push(total);
+  return pages;
+});
+const goToRankingPage = (p) => {
+  if (typeof p !== "number") return;
+  const target = Math.max(1, Math.min(rankingPageCount.value, p));
+  if (target === rankingPage.value) return;
+  rankingPage.value = target;
+  // 翻页后滚动到 More Headlines 顶部，避免用户找不到位置
+  requestAnimationFrame(() => {
+    const el = document.querySelector(".ranking-rows");
+    if (el && typeof el.scrollIntoView === "function") {
+      el.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  });
+};
 
 // editorial Q: 传给 lead NewsCard 的前 5 名影响指数数组，用于右侧 mini bar
 const top5Stats = computed(() =>
@@ -1604,14 +1645,44 @@ onMounted(() => {
             <div class="ranking-rows-kicker">More headlines</div>
             <div class="ranking-rows-list">
               <NewsCard
-                v-for="(item, idx) in filteredArticles.slice(5)"
+                v-for="(item, idx) in pagedRankingArticles"
                 :key="item.id"
                 :item="item"
-                :index="idx + 5"
+                :index="(rankingPage - 1) * 10 + idx + 5"
                 variant="row"
                 :hideSource="true"
                 @click="openDetail(item)"
               />
+            </div>
+
+            <div v-if="rankingPageCount > 1" class="eh-pagination-wrapper">
+              <button
+                class="eh-page-btn eh-page-arrow"
+                :disabled="rankingPage <= 1"
+                @click="goToRankingPage(rankingPage - 1)"
+              >
+                <iconify-icon icon="mdi:chevron-left" />
+              </button>
+
+              <template v-for="(p, idx) in visibleRankingPages" :key="idx">
+                <span v-if="p === '...'" class="eh-page-ellipsis">…</span>
+                <button
+                  v-else
+                  class="eh-page-btn"
+                  :class="{ 'eh-page-active': rankingPage === p }"
+                  @click="goToRankingPage(p)"
+                >
+                  {{ p }}
+                </button>
+              </template>
+
+              <button
+                class="eh-page-btn eh-page-arrow"
+                :disabled="rankingPage >= rankingPageCount"
+                @click="goToRankingPage(rankingPage + 1)"
+              >
+                <iconify-icon icon="mdi:chevron-right" />
+              </button>
             </div>
           </div>
         </div>
