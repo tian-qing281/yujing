@@ -1476,7 +1476,7 @@ onMounted(() => {
             @refresh="handleRefresh"
           />
           <div class="content-scroll">
-            <div class="event-hub-header hs-panel card bg-base-100 overflow-visible">
+            <div class="event-hub-header overflow-visible">
               <div class="eh-header-grid">
                 <div class="eh-search-core">
                   <div class="eh-search-bar-group">
@@ -1880,7 +1880,11 @@ body { font-family: "Fira Sans", "PingFang SC", "Microsoft YaHei", sans-serif; b
 
 .event-hub-header {
   margin-bottom: 28px;
-  padding: 24px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
 }
 
 .eh-header-grid {
@@ -2041,30 +2045,36 @@ body { font-family: "Fira Sans", "PingFang SC", "Microsoft YaHei", sans-serif; b
   opacity: 0.4;
 }
 
+/* 编辑部全面升级：去蓝灰圆角容器，改透明 + 顶/底 hairline 报头分隔 */
 .eh-command-bar {
   display: flex;
   align-items: center;
   gap: 40px;
   flex-wrap: wrap;
-  padding: 14px 24px;
-  background: rgba(248, 250, 252, 0.5);
-  border-radius: 20px;
-  border: 1px solid rgba(148, 163, 184, 0.1);
+  padding: 14px 0;
+  background: transparent;
+  border-radius: 0;
+  border: none;
+  border-top: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .eh-filter-cluster {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 18px;
 }
 
 .eh-cluster-label {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 12px;
-  font-weight: 800;
-  color: #94a3b8;
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--color-text-3, #94a3b8);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
 }
 
 /* 编辑部全面升级：去 join 圆角容器，改横排下划线 tab */
