@@ -199,13 +199,19 @@ const barPct = (score) => {
 const BAR_COLORS = ["#B45309", "#C77B2A", "#D9A471", "#C9BFA8", "#A8A29E"];
 const barColor = (i) => BAR_COLORS[i] || "#A8A29E";
 
-// editorial Q: major 卡（#02 / #03）顶部色阶条，与序号色阶呼应
-// #02 深赤陶红 #92400E；#03 中暖橙 #C77B2A；#04/#05 不加（保持克制）
+// editorial Q+R: major 卡（#02-#05）顶部色阶条，与序号色阶呼应
+// 5 档完整色阶：#02 深赤陶红 / #03 中暖橙 / #04 浅暖橙 / #05 暖灰
+// 从 3px 加到 5px，避免浏览器 sub-pixel 还原后看不清
 const majorTopBarStyle = computed(() => {
   if (props.variant !== "major") return {};
-  const colors = { 1: "#92400E", 2: "#C77B2A" };
+  const colors = {
+    1: "#92400E", // #02
+    2: "#C77B2A", // #03
+    3: "#D9A471", // #04
+    4: "#C9BFA8", // #05
+  };
   const c = colors[props.index];
-  return c ? { borderTop: `3px solid ${c}` } : {};
+  return c ? { borderTop: `5px solid ${c}` } : {};
 });
 </script>
 
@@ -271,10 +277,11 @@ const majorTopBarStyle = computed(() => {
 .card-rank-box {
   font-size: 32px;
   font-weight: 900;
-  font-family: "Fira Code", ui-monospace, monospace;
+  /* editorial R：major 卡也用衰线（与 lead 序号呼应）；mono 仅留给 row 小字号 */
+  font-family: var(--font-display, "Noto Serif SC", "Source Han Serif SC", serif);
   min-width: 42px;
-  letter-spacing: -0.06em;
-  opacity: 0.88;
+  letter-spacing: -0.04em;
+  opacity: 0.92;
   line-height: 1;
 }
 
@@ -413,12 +420,28 @@ const majorTopBarStyle = computed(() => {
    Batch V 微调：用户反馈 01 太大与 02-05 落差太突兀，
    padding/字号/序号都缩一档，整体更接近 NYT 头版的克制比例。 */
 .news-card--lead {
-  padding: 22px 28px;
+  padding: 24px 28px 22px;
   gap: 14px;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  /* 顶部一条赤陶红规格条，强化"今日头条"仪式感 */
-  border-top: 3px solid var(--color-accent);
+  /* 顶部赤陶红规格条：3px → 6px，强化今日头条仪式感 */
+  border-top: 6px solid var(--color-accent);
+}
+
+/* lead 头条加一个小 kicker：TOP STORY · 今日头条，位于序号右侧 */
+.news-card--lead .card-rank-box::after {
+  content: "TOP STORY · 今日头条";
+  display: inline-block;
+  margin-left: 14px;
+  vertical-align: middle;
+  font-family: var(--font-display, "Noto Serif SC", serif);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  color: var(--color-accent, #B45309);
+  text-transform: uppercase;
+  position: relative;
+  top: -6px;
 }
 
 .news-card--lead .card-rank-box {
