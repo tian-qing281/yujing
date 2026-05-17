@@ -476,8 +476,7 @@ watch(
   position: fixed;
   inset: 0;
   z-index: 200;
-  background: rgba(15, 23, 42, 0.4);
-  backdrop-filter: blur(12px);
+  background: rgba(28, 25, 23, 0.42);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -487,10 +486,10 @@ watch(
 .topic-modal {
   width: min(1560px, 98vw);
   height: 94vh;
-  background: #fff;
-  border-radius: 28px;
-  border: 1px solid rgba(226, 232, 240, 0.95);
-  box-shadow: 0 40px 120px rgba(15, 23, 42, 0.3);
+  background: var(--color-surface, #fff);
+  border-radius: 4px;
+  border: 1px solid var(--color-border, #E5E5DD);
+  box-shadow: 0 18px 48px rgba(28, 25, 23, 0.12);
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -498,8 +497,8 @@ watch(
 
 .topic-header {
   padding: 24px 32px;
-  background: linear-gradient(180deg, #fff 0%, #f8fafc 100%);
-  border-bottom: 1px solid rgba(226, 232, 240, 0.9);
+  background: transparent;
+  border-bottom: 1px solid var(--color-border, #E5E5DD);
 }
 
 .header-inner {
@@ -526,10 +525,11 @@ watch(
 
 .topic-main-title h1 {
   font-size: 26px;
-  font-weight: 900;
-  letter-spacing: -0.04em;
-  color: #0f172a;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--color-text-1, #1c1917);
   margin: 0;
+  font-family: var(--font-display, "Noto Serif SC", serif);
 }
 .topic-meta {
   display: flex;
@@ -567,8 +567,8 @@ watch(
 
 .quick-entry-shell {
   padding: 20px 32px 18px;
-  border-bottom: 1px solid rgba(226, 232, 240, 0.6);
-  background: linear-gradient(180deg, rgba(248, 250, 252, 0.9) 0%, rgba(255, 255, 255, 0.96) 100%);
+  border-bottom: 1px solid var(--color-border, #E5E5DD);
+  background: var(--color-surface-2, #F5F5F2);
 }
 
 .quick-entry-head {
@@ -576,10 +576,12 @@ watch(
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  color: #64748b;
+  color: var(--color-accent, #B45309);
   font-size: 11px;
-  font-weight: 900;
-  letter-spacing: 0.06em;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  font-family: var(--font-display, "Noto Serif SC", serif);
   margin-bottom: 12px;
 }
 
@@ -590,21 +592,22 @@ watch(
 }
 
 .quick-entry-card {
-  border: 1px solid rgba(226, 232, 240, 0.95);
-  border-radius: 16px;
+  background: var(--color-surface, #fff);
+  border: 1px solid var(--color-border, #E5E5DD);
+  border-radius: 0;
   padding: 14px 16px;
   text-align: left;
   display: flex;
   flex-direction: column;
   gap: 8px;
   cursor: pointer;
-  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+  transition: border-color 0.18s ease;
 }
 
 .quick-entry-card:hover {
-  border-color: var(--color-text-3);
-  box-shadow: 0 4px 12px -4px rgba(28, 25, 23, 0.08);
-  transform: translateY(-1px);
+  border-color: var(--color-accent, #B45309);
+  box-shadow: none;
+  transform: none;
 }
 
 .quick-entry-kicker {
@@ -659,17 +662,29 @@ watch(
 }
 .pipeline-card {
   padding: 24px;
-  border-radius: 6px;
+  border-radius: 0;
   border: 1px solid var(--color-border);
+  background: var(--color-surface, #fff);
   cursor: pointer;
-  /* Batch H：单独过渡 + 位移缩小 */
-  transition: transform 0.18s ease-out, border-color 0.18s ease-out, box-shadow 0.18s ease-out;
+  position: relative;
+  transition: border-color 0.18s ease-out;
   box-shadow: none;
 }
+.pipeline-card::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 3px;
+  background: transparent;
+  transition: background 0.18s ease;
+}
 .pipeline-card:hover {
-  border-color: var(--color-text-3);
-  box-shadow: 0 4px 12px -4px rgba(28, 25, 23, 0.08);
-  transform: translateX(3px);
+  border-color: var(--color-accent, #B45309);
+  box-shadow: none;
+  transform: none;
+}
+.pipeline-card:hover::before {
+  background: var(--color-accent, #B45309);
 }
 .pipeline-card.single:hover {
   transform: translateX(2px);
@@ -692,11 +707,12 @@ watch(
 }
 .pipeline-title {
   font-size: 19px;
-  font-weight: 900;
-  color: #0f172a;
+  font-weight: 800;
+  color: var(--color-text-1, #1c1917);
   line-height: 1.4;
   margin: 0;
   transition: color 0.2s;
+  font-family: var(--font-display, "Noto Serif SC", serif);
 }
 .pipeline-title:hover {
   text-decoration: underline;
@@ -739,8 +755,8 @@ watch(
 }
 
 .insight-sidebar {
-  background: #f8fafc;
-  border-left: 1px solid rgba(226, 232, 240, 0.9);
+  background: var(--color-surface-2, #F5F5F2);
+  border-left: 1px solid var(--color-border, #E5E5DD);
   padding: 0 24px 24px;
   display: flex;
   flex-direction: column;
@@ -751,11 +767,11 @@ watch(
   position: sticky;
   top: 0;
   z-index: 10;
-  background: #f8fafc;
+  background: var(--color-surface-2, #F5F5F2);
   padding: 24px 0 16px;
   display: flex;
   gap: 10px;
-  border-bottom: 1px solid rgba(226, 232, 240, 0.4);
+  border-bottom: 1px solid var(--color-border, #E5E5DD);
   margin-bottom: 24px;
 }
 .sidebar-tabs.solo {
@@ -770,23 +786,27 @@ watch(
 }
 
 .tab-item.active {
-  box-shadow: 0 8px 16px rgba(15, 23, 42, 0.15);
+  box-shadow: none;
 }
 
 .insight-card {
-  padding: 24px;
-  border-radius: 20px;
-  border: 1px solid #f1f5f9;
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.02);
+  padding: 22px;
+  background: var(--color-surface, #fff);
+  border-radius: 0;
+  border: 1px solid var(--color-border, #E5E5DD);
+  box-shadow: none;
 }
 
 .card-head {
-  padding-bottom: 16px;
+  padding-bottom: 14px;
   margin-bottom: 16px;
-  border-bottom: 1px solid #f1f5f9;
-  font-size: 12px;
-  font-weight: 900;
-  color: #475569;
+  border-bottom: 1px solid var(--color-border, #E5E5DD);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--color-accent, #B45309);
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  font-family: var(--font-display, "Noto Serif SC", serif);
   display: flex;
   align-items: center;
   gap: 8px;
@@ -817,35 +837,40 @@ watch(
   padding: 40px 0;
 }
 .markdown-view :deep(h1), .markdown-view :deep(h2), .markdown-view :deep(h3) {
-  font-size: 16px; font-weight: 900; margin: 20px 0 10px; color: #0f172a;
+  font-size: 16px; font-weight: 800; margin: 20px 0 10px; color: var(--color-text-1, #1c1917); font-family: var(--font-display, "Noto Serif SC", serif);
 }
 .markdown-view :deep(p) { margin-bottom: 12px; }
 .markdown-view :deep(.ref-badge) {
   display: inline-flex; align-items: center; gap: 3px;
-  padding: 1px 8px; border-radius: 999px;
-  font-size: 12px; font-weight: 600; cursor: pointer;
+  padding: 1px 8px; border-radius: 0;
+  font-size: 11px; font-weight: 700; cursor: pointer;
   vertical-align: middle; white-space: nowrap;
-  transition: opacity 0.15s;
+  letter-spacing: 0.08em;
+  font-family: var(--font-display, "Noto Serif SC", serif);
+  transition: opacity 0.15s, border-color 0.18s;
 }
 .markdown-view :deep(.ref-badge:hover) { opacity: 0.75; }
 .markdown-view :deep(.ref-article) {
-  background: var(--color-surface-2); color: var(--color-accent); border: 1px solid var(--color-border);
+  background: transparent; color: var(--color-accent); border: 1px solid var(--color-accent);
 }
 .markdown-view :deep(.ref-event) {
-  background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0;
+  background: transparent; color: #047857; border: 1px solid #047857;
 }
 
 .load-more-box {
-  padding: 16px;
-  background: #f8fafc;
-  border: 1px dashed #e2e8f0;
-  border-radius: 12px;
+  padding: 14px;
+  background: transparent;
+  border: 1px dashed var(--color-border, #E5E5DD);
+  border-radius: 0;
   text-align: center;
   cursor: pointer;
-  color: #64748b;
-  font-size: 12px;
-  font-weight: 800;
-  transition: all 0.2s;
+  color: var(--color-text-3, #78716c);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  font-family: var(--font-display, "Noto Serif SC", serif);
+  transition: color 0.18s, border-color 0.18s;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -853,9 +878,9 @@ watch(
   margin: 16px 0;
 }
 .load-more-box:hover {
-  background: var(--color-surface);
+  background: transparent;
   color: var(--color-accent);
-  border-color: var(--color-text-3);
+  border-color: var(--color-accent);
 }
 
 .expand-detail {
@@ -883,14 +908,15 @@ watch(
   align-items: center;
   gap: 12px;
   padding: 8px 12px;
-  border-radius: 10px;
+  border-radius: 0;
+  border-left: 2px solid transparent;
   font-size: 12px;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: background 0.18s, border-color 0.18s, color 0.18s;
 }
 .sub-art-link:hover {
   background: var(--color-surface-2);
-  transform: translateX(2px);
+  border-left-color: var(--color-accent);
   color: var(--color-accent);
 }
 .art-source {
