@@ -113,8 +113,7 @@ const onAskFollowup = () => {
 .brief-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(15, 23, 42, 0.42);
-  backdrop-filter: blur(6px);
+  background: rgba(28, 25, 23, 0.42);
   z-index: 9000;
   display: flex;
   align-items: center;
@@ -124,9 +123,10 @@ const onAskFollowup = () => {
 .brief-modal {
   width: min(960px, 100%);
   max-height: calc(100vh - 64px);
-  background: #ffffff;
-  border-radius: 28px;
-  box-shadow: 0 30px 80px -20px rgba(15, 23, 42, 0.4);
+  background: var(--color-surface, #ffffff);
+  border-radius: 4px;
+  border: 1px solid var(--color-border, #E5E5DD);
+  box-shadow: 0 18px 48px rgba(28, 25, 23, 0.12);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -138,54 +138,51 @@ const onAskFollowup = () => {
   align-items: flex-start;
   justify-content: space-between;
   gap: 18px;
-  background: linear-gradient(135deg, #fef3c7 0%, #fed7aa 50%, #fee2e2 100%);
+  background: transparent;
+  border-bottom: 1px solid var(--color-border, #E5E5DD);
   position: relative;
-}
-.brief-header::after {
-  content: "";
-  position: absolute;
-  left: 32px; right: 32px; bottom: 0;
-  height: 1px;
-  background: rgba(15, 23, 42, 0.08);
 }
 .brief-header-left { display: flex; align-items: flex-start; gap: 16px; }
 .brief-header-icon {
-  font-size: 38px;
-  color: #ea580c;
-  background: #ffffff;
-  border-radius: 12px;
-  padding: 8px;
-  box-shadow: 0 4px 12px rgba(234, 88, 12, 0.18);
+  font-size: 32px;
+  color: var(--color-accent, #B45309);
+  background: transparent;
+  border: 1px solid var(--color-accent, #B45309);
+  border-radius: 0;
+  padding: 6px;
+  box-shadow: none;
   flex-shrink: 0;
 }
 .brief-eyebrow {
   font-size: 11px;
-  letter-spacing: 0.18em;
-  font-weight: 800;
-  color: rgba(120, 53, 15, 0.7);
+  letter-spacing: 0.22em;
+  font-weight: 700;
+  color: var(--color-accent, #B45309);
   text-transform: uppercase;
   margin-bottom: 4px;
+  font-family: var(--font-display, "Noto Serif SC", serif);
 }
 .brief-title {
   font-size: 26px;
   font-weight: 900;
-  color: #0f172a;
+  color: var(--color-text-1, #1c1917);
   margin: 0 0 4px;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.01em;
+  font-family: var(--font-display, "Noto Serif SC", serif);
 }
-.brief-meta { font-size: 13px; color: #78716c; font-weight: 700; margin: 0; }
+.brief-meta { font-size: 12px; color: var(--color-text-3, #78716c); font-weight: 600; margin: 0; letter-spacing: 0.06em; }
 .brief-close {
-  background: rgba(255, 255, 255, 0.6);
-  border: 1px solid rgba(15, 23, 42, 0.08);
-  border-radius: 10px;
+  background: transparent;
+  border: 1px solid var(--color-border, #E5E5DD);
+  border-radius: 0;
   width: 36px; height: 36px;
   display: flex; align-items: center; justify-content: center;
   cursor: pointer;
-  color: #475569;
-  transition: 0.2s;
+  color: var(--color-text-2, #475569);
+  transition: border-color 0.18s, color 0.18s;
   flex-shrink: 0;
 }
-.brief-close:hover { background: #ffffff; color: #0f172a; transform: rotate(90deg); }
+.brief-close:hover { border-color: var(--color-accent, #B45309); color: var(--color-accent, #B45309); }
 .brief-close iconify-icon { font-size: 20px; }
 
 .brief-body {
@@ -196,78 +193,83 @@ const onAskFollowup = () => {
 }
 .brief-loading {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
-  padding: 80px 0; gap: 16px; color: #78716c;
+  padding: 80px 0; gap: 16px; color: var(--color-text-3, #78716c);
 }
-.brief-loading-icon { font-size: 48px; color: #ea580c; animation: brief-spin 1.4s linear infinite; }
+.brief-loading-icon { font-size: 48px; color: var(--color-accent, #B45309); animation: brief-spin 1.4s linear infinite; }
 @keyframes brief-spin { to { transform: rotate(360deg); } }
 .brief-empty {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
-  padding: 80px 0; gap: 12px; color: #94a3b8;
+  padding: 80px 0; gap: 12px; color: var(--color-text-3, #94a3b8);
 }
-.brief-empty iconify-icon { font-size: 56px; color: #cbd5e1; }
+.brief-empty iconify-icon { font-size: 56px; color: var(--color-text-3, #cbd5e1); }
 .brief-empty p { font-size: 15px; font-weight: 700; margin: 0; }
 .brief-empty-btn {
   margin-top: 8px;
-  background: #ea580c; color: #ffffff;
-  border: none; border-radius: 12px;
-  padding: 10px 20px; font-size: 13px; font-weight: 800;
-  cursor: pointer; transition: 0.2s;
+  background: var(--color-text-1, #1c1917); color: #ffffff;
+  border: none; border-radius: 0;
+  padding: 10px 22px; font-size: 12px; font-weight: 700;
+  letter-spacing: 0.18em; text-transform: uppercase;
+  font-family: var(--font-display, "Noto Serif SC", serif);
+  cursor: pointer; transition: background 0.18s;
 }
-.brief-empty-btn:hover { background: #c2410c; transform: translateY(-1px); }
+.brief-empty-btn:hover { background: var(--color-accent, #B45309); }
 
-.brief-content { font-size: 15px; line-height: 1.85; color: #1e293b; }
+.brief-content { font-size: 15px; line-height: 1.85; color: var(--color-text-1, #1e293b); }
 
-/* markdown 样式（与 AnalysisModal / AIConsultant 一致） */
+/* markdown 样式（编辑部规范，去渐变） */
 .markdown-body :deep(h1),
 .markdown-body :deep(h2),
 .markdown-body :deep(h3),
-.markdown-body :deep(h4) { font-weight: 900; color: #0f172a; margin: 18px 0 8px; line-height: 1.4; letter-spacing: -0.01em; }
+.markdown-body :deep(h4) { font-weight: 800; color: var(--color-text-1, #1c1917); margin: 18px 0 8px; line-height: 1.4; letter-spacing: -0.01em; font-family: var(--font-display, "Noto Serif SC", serif); }
 .markdown-body :deep(h1) { font-size: 22px; }
-.markdown-body :deep(h2) { font-size: 19px; padding-bottom: 6px; border-bottom: 2px solid rgba(234, 88, 12, 0.25); }
-.markdown-body :deep(h3) { font-size: 17px; color: #c2410c; }
-.markdown-body :deep(h4) { font-size: 15px; color: #334155; }
+.markdown-body :deep(h2) { font-size: 19px; padding-bottom: 6px; border-bottom: 1px solid var(--color-border, #E5E5DD); }
+.markdown-body :deep(h3) { font-size: 17px; color: var(--color-accent, #B45309); }
+.markdown-body :deep(h4) { font-size: 15px; color: var(--color-text-2, #334155); }
 .markdown-body :deep(p) { margin: 8px 0; }
 .markdown-body :deep(ul),
 .markdown-body :deep(ol) { margin: 8px 0 8px 4px; padding-left: 22px; }
 .markdown-body :deep(li) { margin: 4px 0; line-height: 1.75; }
-.markdown-body :deep(li::marker) { color: #ea580c; font-weight: 800; }
-.markdown-body :deep(strong) { color: #0f172a; font-weight: 900; }
-.markdown-body :deep(em) { color: #475569; font-style: normal; background: linear-gradient(180deg, transparent 60%, rgba(254, 215, 170, 0.6) 60%); padding: 0 2px; }
-.markdown-body :deep(blockquote) { margin: 12px 0; padding: 10px 14px; border-left: 4px solid #ea580c; background: rgba(234, 88, 12, 0.05); border-radius: 0 10px 10px 0; color: #334155; }
-.markdown-body :deep(hr) { border: none; border-top: 1px dashed rgba(148, 163, 184, 0.4); margin: 16px 0; }
-.markdown-body :deep(code) { background: rgba(15, 23, 42, 0.06); padding: 2px 6px; border-radius: 4px; font-family: 'Fira Code', monospace; font-size: 13px; color: #be185d; }
+.markdown-body :deep(li::marker) { color: var(--color-accent, #B45309); font-weight: 800; }
+.markdown-body :deep(strong) { color: var(--color-text-1, #0f172a); font-weight: 800; }
+.markdown-body :deep(em) { color: var(--color-text-1, #1c1917); font-style: normal; background: transparent; border-bottom: 2px solid var(--color-accent, #B45309); padding: 0; }
+.markdown-body :deep(blockquote) { margin: 12px 0; padding: 8px 14px; border-left: 3px solid var(--color-accent, #B45309); background: transparent; border-radius: 0; color: var(--color-text-2, #334155); }
+.markdown-body :deep(hr) { border: none; border-top: 1px solid var(--color-border, #E5E5DD); margin: 16px 0; }
+.markdown-body :deep(code) { background: var(--color-surface-2, #F5F5F2); padding: 2px 6px; border-radius: 0; font-family: 'Fira Code', monospace; font-size: 13px; color: var(--color-accent, #B45309); border: 1px solid var(--color-border, #E5E5DD); }
 .markdown-body :deep(table) { border-collapse: collapse; width: 100%; margin: 12px 0; font-size: 13.5px; }
 .markdown-body :deep(th),
-.markdown-body :deep(td) { border: 1px solid rgba(148, 163, 184, 0.28); padding: 7px 10px; }
-.markdown-body :deep(th) { background: rgba(234, 88, 12, 0.08); font-weight: 800; color: #c2410c; }
+.markdown-body :deep(td) { border: 1px solid var(--color-border, #E5E5DD); padding: 7px 10px; }
+.markdown-body :deep(th) { background: var(--color-surface-2, #F5F5F2); font-weight: 800; color: var(--color-text-1, #1c1917); text-transform: uppercase; letter-spacing: 0.08em; font-size: 11px; }
 
 .brief-footer {
   padding: 18px 32px 24px;
   display: flex;
   justify-content: flex-end;
   gap: 10px;
-  background: #ffffff;
-  border-top: 1px solid rgba(15, 23, 42, 0.06);
+  background: var(--color-surface, #ffffff);
+  border-top: 1px solid var(--color-border, #E5E5DD);
 }
 .brief-action {
   display: inline-flex; align-items: center; gap: 7px;
-  padding: 10px 18px;
-  font-size: 13px; font-weight: 800;
-  border-radius: 12px;
-  cursor: pointer; transition: 0.2s;
-  border: 1px solid transparent;
+  padding: 10px 20px;
+  font-size: 12px; font-weight: 700;
+  letter-spacing: 0.18em; text-transform: uppercase;
+  font-family: var(--font-display, "Noto Serif SC", serif);
+  border-radius: 0;
+  cursor: pointer; transition: background 0.18s, color 0.18s, border-color 0.18s;
+  border: 1px solid var(--color-border, #E5E5DD);
 }
 .brief-action iconify-icon { font-size: 16px; }
 .brief-action-secondary {
-  background: #f1f5f9; color: #475569; border-color: rgba(148, 163, 184, 0.2);
+  background: transparent; color: var(--color-text-2, #475569);
 }
-.brief-action-secondary:hover { background: #e2e8f0; color: #0f172a; }
+.brief-action-secondary:hover { border-color: var(--color-accent, #B45309); color: var(--color-accent, #B45309); }
 .brief-action-primary {
-  background: linear-gradient(135deg, #ea580c, #dc2626);
+  background: var(--color-text-1, #1c1917);
   color: #ffffff;
-  box-shadow: 0 6px 18px -6px rgba(234, 88, 12, 0.5);
+  border-color: var(--color-text-1, #1c1917);
+  box-shadow: none;
 }
-.brief-action-primary:hover { transform: translateY(-1px); box-shadow: 0 10px 22px -8px rgba(234, 88, 12, 0.6); }
+.brief-action-primary:hover { background: var(--color-accent, #B45309); border-color: var(--color-accent, #B45309); transform: none; box-shadow: none; }
 
 .brief-fade-enter-active,
 .brief-fade-leave-active { transition: opacity 0.22s ease; }
@@ -275,5 +277,5 @@ const onAskFollowup = () => {
 .brief-fade-leave-to { opacity: 0; }
 .brief-fade-enter-active .brief-modal,
 .brief-fade-leave-active .brief-modal { transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1); }
-.brief-fade-enter-from .brief-modal { transform: translateY(20px) scale(0.96); }
+.brief-fade-enter-from .brief-modal { transform: translateY(20px) scale(0.98); }
 </style>
