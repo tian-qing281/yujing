@@ -155,19 +155,6 @@ const sidebarItems = [
   { id: "my_subscriptions", name: "我的订阅", icon: "ri:bookmark-line" },
 ];
 
-// editorial UI-3：AppHeader 平台语义化 kicker 副标题映射
-// 格式：ENGLISH CODENAME · 中文简介（mono 起手、克制色阶）
-const sourceMetaMap = {
-  weibo_hot_search: "WEIBO TRENDING · 实时上榜话题",
-  baidu_hot: "BAIDU REAL-TIME · 实时搜索趋势",
-  toutiao_hot: "TOUTIAO LIVE · 实时新闻热度",
-  bilibili_hot_video: "BILIBILI POPULAR · 站内热门视频",
-  zhihu_hot_question: "ZHIHU TOP · 全站热门提问",
-  thepaper_hot: "THE PAPER · 时政与深度报道",
-  wallstreetcn_news: "WALLSTREETCN · 全球财经资讯",
-  cls_telegraph: "CAILIANSHE · 实时财经快讯",
-};
-
 const sourceRegistry = sidebarItems;
 
 const prettifySourceIds = (value) => {
@@ -1559,7 +1546,6 @@ onMounted(() => {
         <AppHeader
           :currentSourceName="sidebarItems.find((item) => item.id === activePlatform)?.name"
           :currentSourceIcon="sidebarItems.find((item) => item.id === activePlatform)?.icon"
-          :currentSourceMeta="sourceMetaMap[activePlatform] || ''"
           :loading="isLoadingArticles || isGlobalSyncing"
           @refresh="handleRefresh"
         />
