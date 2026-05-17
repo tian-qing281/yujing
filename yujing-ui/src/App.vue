@@ -1560,6 +1560,7 @@ onMounted(() => {
                   :item="item"
                   :query="activeEventQuery"
                   :sourceRegistry="sourceRegistry"
+                  :variant="idx === 0 ? 'lead' : 'default'"
                   :style="{ '--item-index': idx }"
                   @click="openEventDetail(item)"
                 />
@@ -1571,6 +1572,7 @@ onMounted(() => {
                   :item="item"
                   :query="activeEventQuery"
                   :sourceRegistry="sourceRegistry"
+                  :variant="idx === 0 ? 'lead' : 'default'"
                   :style="{ '--item-index': idx }"
                   @click="openEventDetail(item)"
                 />

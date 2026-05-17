@@ -1,7 +1,12 @@
 <template>
-  <article class="event-card glass-panel" @click="$emit('click')">
+  <article
+    class="event-card glass-panel"
+    :class="{ 'event-card--lead': variant === 'lead' }"
+    @click="$emit('click')"
+  >
     <div class="card-body event-card-body">
       <div class="event-main">
+        <span v-if="variant === 'lead'" class="event-kicker">TOP EVENT · 跨平台焦点</span>
         <h3 class="event-title" v-html="highlight(item.title)"></h3>
         <p
           class="event-preview"
@@ -26,6 +31,8 @@ import NumberFlow from "@number-flow/vue";
 const props = defineProps({
   item: { type: Object, required: true },
   query: { type: String, default: "" },
+  // UI-8: 'lead' 变体为首屏顶条（8 仪式感），加 6px accent 顶条 + TOP EVENT kicker
+  variant: { type: String, default: "default" },
 });
 
 defineEmits(["click"]);
@@ -185,5 +192,39 @@ const prettifySummary = (value) => {
   padding: 0 4px;
   border-radius: 2px;
   font-weight: 600;
+}
+
+/* UI-8 顶条仪式感：6px accent 顶条 + TOP EVENT 衰线 kicker + 更大标题，与 NewsCard lead 同源 */
+.event-card--lead {
+  border-top: 6px solid var(--color-accent);
+  border-radius: 0;
+  min-height: 220px;
+}
+
+.event-card--lead .event-card-body {
+  padding: 26px 28px;
+}
+
+.event-kicker {
+  display: inline-block;
+  font-family: var(--font-display, "Noto Serif SC", serif);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--color-accent);
+  margin-bottom: 10px;
+}
+
+.event-card--lead .event-title {
+  font-size: clamp(22px, 1.8vw, 28px);
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+  -webkit-line-clamp: 3;
+}
+
+.event-card--lead .event-preview {
+  font-size: 14px;
+  line-height: 1.7;
 }
 </style>
