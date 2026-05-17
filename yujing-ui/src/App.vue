@@ -2405,11 +2405,11 @@ body { font-family: "Fira Sans", "PingFang SC", "Microsoft YaHei", sans-serif; b
   gap: 20px;
   align-items: center;
   padding: 22px 24px;
-  border: 1px solid rgba(148, 163, 184, 0.22);
-  border-radius: 28px;
-  background:
-    linear-gradient(135deg, rgba(255,255,255,0.97) 0%, rgba(248,250,252,0.92) 100%);
-  box-shadow: var(--hs-shadow, 0 18px 55px rgba(15, 23, 42, 0.08));
+  /* 编辑部全面升级 UI-13c：SaaS 渐变白底 28px 圆角浮卡 → 纠白 + 4px 圆角 + hairline */
+  border: 1px solid var(--color-border, #E5E5DD);
+  border-radius: 4px;
+  background: var(--color-surface, #FFFFFF);
+  box-shadow: none;
   position: relative;
   overflow: hidden;
   animation: panel-rise 0.52s cubic-bezier(0.16, 1, 0.3, 1) both;
@@ -2538,10 +2538,11 @@ body { font-family: "Fira Sans", "PingFang SC", "Microsoft YaHei", sans-serif; b
 }
 
 .toolbar-choice--active {
-  background: linear-gradient(135deg, var(--color-accent) 0%, var(--color-accent) 100%);
+  /* 编辑部全面升级 UI-13c：同色渐变 → 纯 accent + 去蓝 shadow */
+  background: var(--color-accent);
   border-color: var(--color-accent);
   color: #ffffff;
-  box-shadow: 0 12px 26px rgba(37, 99, 235, 0.22);
+  box-shadow: none;
 }
 
 .toolbar-choice--active span {
@@ -2549,8 +2550,9 @@ body { font-family: "Fira Sans", "PingFang SC", "Microsoft YaHei", sans-serif; b
 }
 
 .toolbar-choice--mode-active {
-  background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-  border-color: #0f172a;
+  /* 编辑部全面升级 UI-13c：黑蓝渐变 → 纯 brand */
+  background: var(--color-brand, #0F172A);
+  border-color: var(--color-brand, #0F172A);
 }
 
 .source-filter-note {
@@ -2700,24 +2702,24 @@ body { font-family: "Fira Sans", "PingFang SC", "Microsoft YaHei", sans-serif; b
   min-width: 40px;
   height: 40px;
   padding: 0 6px;
-  border: 1px solid rgba(148, 163, 184, 0.3);
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.88);
-  color: #334155;
+  /* 编辑部全面升级 UI-13c：翻页按钮 blur 胶囊 → hairline + 0 圆角 */
+  border: 1px solid var(--color-border, #E5E5DD);
+  border-radius: 0;
+  background: transparent;
+  color: var(--color-text-2, #475569);
   font-size: 13px;
   font-weight: 700;
   font-family: inherit;
   cursor: pointer;
-  transition: all 0.2s ease;
-  backdrop-filter: blur(8px);
+  transition: background 180ms ease, border-color 180ms ease;
   user-select: none;
 }
 
 .eh-page-btn:hover:not(:disabled) {
-  border-color: rgba(59, 130, 246, 0.4);
-  background: rgba(239, 246, 255, 0.9);
+  border-color: var(--color-accent);
+  background: var(--color-surface-2, #F5F5F2);
   color: var(--color-accent);
-  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.1);
+  box-shadow: none;
 }
 
 .eh-page-btn:disabled {
@@ -2726,10 +2728,11 @@ body { font-family: "Fira Sans", "PingFang SC", "Microsoft YaHei", sans-serif; b
 }
 
 .eh-page-btn.eh-page-active {
+  /* 编辑部全面升级 UI-13c：同色渐变 + 蓝 shadow → 纯 accent */
   border-color: var(--color-accent);
-  background: linear-gradient(135deg, var(--color-accent) 0%, var(--color-accent) 100%);
+  background: var(--color-accent);
   color: #fff;
-  box-shadow: 0 4px 14px rgba(30, 64, 175, 0.3);
+  box-shadow: none;
   font-weight: 800;
 }
 

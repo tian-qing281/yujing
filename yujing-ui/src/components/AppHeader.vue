@@ -45,15 +45,15 @@ defineEmits(['refresh'])
 </template>
 
 <style scoped>
+/* 编辑部全面升级 UI-13c：顶部毛玻璃 → 纠白 + 底 hairline */
 .app-header { 
   height: 80px;
   padding: 0 32px;
   display: flex;
   align-items: center;
   justify-content: space-between; 
-  background: rgba(255, 255, 255, 0.82);
-  backdrop-filter: blur(24px);
-  border-bottom: 1px solid rgba(0, 0, 0, 0.04);
+  background: var(--color-surface, #FFFFFF);
+  border-bottom: 1px solid var(--color-border, #E5E5DD);
   position: sticky; top: 0; z-index: 100;
   border-radius: 0;
 }
