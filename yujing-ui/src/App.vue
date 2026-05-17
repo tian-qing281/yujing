@@ -1504,7 +1504,10 @@ onMounted(() => {
 
             <div v-if="events.length > 0" class="eh-workspace-section">
               <div class="section-head">
-                <h4 class="section-title">{{ aggregatedSectionTitle }}</h4>
+                <div class="section-head-main">
+                  <span class="section-kicker">EVENTS · 跨平台聚合</span>
+                  <h4 class="section-title">{{ aggregatedSectionTitle }}</h4>
+                </div>
                 <div class="section-head-meta">
                     <span class="section-note badge badge-ghost">{{ aggregatedVisibleHint }}</span>
                 </div>
@@ -2192,23 +2195,41 @@ body { font-family: "Fira Sans", "PingFang SC", "Microsoft YaHei", sans-serif; b
 }
 
 .section-title {
-  margin-bottom: 0;
-  color: #0f172a;
-  font-size: 20px;
-  font-weight: 900;
+  margin: 0;
+  color: var(--color-brand, #0f172a);
+  font-size: 26px;
+  font-weight: 700;
   letter-spacing: -0.03em;
+  font-family: var(--font-display, "Noto Serif SC", serif);
+  line-height: 1.15;
 }
 
 .section-head {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 20px;
-  padding: 16px 24px;
-  border-radius: 20px;
-  background: var(--bg-surface, rgba(255, 255, 255, 0.6));
-  border: 1px solid rgba(0, 0, 0, 0.04);
+  margin-bottom: 18px;
+  padding: 14px 0 12px;
+  border-top: 3px solid var(--color-accent);
+  border-bottom: 1px solid var(--color-border);
+  background: transparent;
+  border-radius: 0;
+}
+
+.section-head-main {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.section-kicker {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--color-accent);
+  font-family: var(--font-display, "Noto Serif SC", serif);
 }
 
 .section-note {
