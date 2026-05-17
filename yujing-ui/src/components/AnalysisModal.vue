@@ -857,14 +857,15 @@ watch(() => props.activeTab, (newTab) => {
 }
 .detail-capsule { 
   width: 100%; max-width: 1180px; height: 90vh; 
-  background: rgba(255, 255, 255, 0.98); 
-  border-radius: 30px; display: flex; flex-direction: column; overflow: hidden; 
-  box-shadow: 0 40px 100px rgba(15, 23, 42, 0.12); 
-  border: 1px solid rgba(255, 255, 255, 0.8); 
+  /* editorial: 纸白 · 0 圆角 · 暖 hairline · 弱 shadow · 去 glass */
+  background: var(--color-surface, #fff); 
+  border-radius: 4px; display: flex; flex-direction: column; overflow: hidden; 
+  box-shadow: 0 18px 48px rgba(28, 25, 23, 0.12); 
+  border: 1px solid var(--color-border, #E5E5DD); 
   animation: modal-panel-rise 0.42s cubic-bezier(0.16, 1, 0.3, 1) both; 
 }
 .detail-capsule.modal-box { max-width: 1180px; padding: 0; }
-.capsule-header { height: 68px; padding: 0 26px; background: rgba(255,255,255,0.58); border-bottom: 1px solid rgba(148,163,184,0.18); display: flex; align-items: center; justify-content: space-between; backdrop-filter: blur(10px); }
+.capsule-header { height: 68px; padding: 0 26px; background: transparent; border-bottom: 1px solid var(--color-border, #E5E5DD); display: flex; align-items: center; justify-content: space-between; }
 
 .vis-intel-dashboard { display: flex; flex-direction: column; gap: 24px; height: 100%; animation: modal-panel-rise 0.4s ease-out; }
 
@@ -876,14 +877,15 @@ watch(() => props.activeTab, (newTab) => {
 }
 
 .intel-box { 
-  background: #ffffff; 
-  border: 1px solid rgba(148, 163, 184, 0.08); 
-  border-radius: 24px; 
-  padding: 24px; 
+  background: var(--color-surface, #ffffff); 
+  border: 1px solid var(--color-border, #E5E5DD); 
+  border-radius: 0; 
+  padding: 22px; 
   position: relative; 
-  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1); 
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.02);
+  transition: border-color 0.18s ease; 
+  box-shadow: none;
 }
+.intel-box:hover { border-color: var(--color-accent, #B45309); }
 
 .intel-label { 
   display: flex; 
@@ -894,15 +896,17 @@ watch(() => props.activeTab, (newTab) => {
   font-weight: 800; 
   text-transform: uppercase; 
   margin-bottom: 24px; 
-  letter-spacing: 0.12em; 
+  letter-spacing: 0.22em; 
+  font-family: var(--font-display, "Noto Serif SC", serif);
 }
 .source-tag { font-size: 11px; font-weight: 800; color: #64748b; display: flex; align-items: center; gap: 8px; text-transform: uppercase; letter-spacing: 0.12em; }
 .absa-badge {
-  display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 4px;
-  background: var(--color-surface-2);
+  display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 0;
+  background: transparent;
   color: var(--color-accent);
-  border: 1px solid var(--color-border);
-  font-size: 9px; font-weight: 800; letter-spacing: 0.12em;
+  border: 1px solid var(--color-accent);
+  font-size: 9px; font-weight: 700; letter-spacing: 0.22em; text-transform: uppercase;
+  font-family: var(--font-display, "Noto Serif SC", serif);
   margin-left: auto;
 }
 .absa-badge--loading {
@@ -933,28 +937,27 @@ watch(() => props.activeTab, (newTab) => {
 .absa-list::-webkit-scrollbar-track { background: transparent; }
 .absa-card {
   position: relative;
-  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
-  border: 1px solid rgba(148, 163, 184, 0.18);
-  border-radius: 14px;
+  background: var(--color-surface, #fff);
+  border: 1px solid var(--color-border, #E5E5DD);
+  border-radius: 0;
   padding: 12px 14px 12px 18px;
-  box-shadow: 0 2px 6px -3px rgba(15, 23, 42, 0.08);
-  transition: transform 0.16s ease, box-shadow 0.16s ease;
+  box-shadow: none;
+  transition: border-color 0.18s ease;
 }
 .absa-card:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 8px 22px -10px rgba(15, 23, 42, 0.18);
+  border-color: var(--color-accent, #B45309);
 }
 .absa-card::before {
   content: '';
   position: absolute;
-  left: 0; top: 12px; bottom: 12px;
-  width: 4px;
-  border-radius: 0 4px 4px 0;
-  background: #94a3b8;
+  left: 0; top: 0; bottom: 0;
+  width: 3px;
+  border-radius: 0;
+  background: var(--color-text-3, #94a3b8);
 }
-.absa-card--positive::before { background: linear-gradient(180deg, #34d399, #10b981); }
-.absa-card--neutral::before  { background: linear-gradient(180deg, #cbd5e1, #94a3b8); }
-.absa-card--negative::before { background: linear-gradient(180deg, #f87171, #ef4444); }
+.absa-card--positive::before { background: #047857; }
+.absa-card--neutral::before  { background: var(--color-text-3, #94a3b8); }
+.absa-card--negative::before { background: #b91c1c; }
 
 .absa-card-head {
   display: flex;
@@ -972,16 +975,20 @@ watch(() => props.activeTab, (newTab) => {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 3px 10px;
-  border-radius: 999px;
+  padding: 2px 8px;
+  border-radius: 0;
   font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.04em;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-family: var(--font-display, "Noto Serif SC", serif);
+  border: 1px solid currentColor;
+  background: transparent;
 }
 .absa-chip iconify-icon { font-size: 13px; }
-.absa-chip--positive { background: rgba(16, 185, 129, 0.12); color: #047857; }
-.absa-chip--neutral  { background: rgba(100, 116, 139, 0.12); color: #475569; }
-.absa-chip--negative { background: rgba(239, 68, 68, 0.12); color: #b91c1c; }
+.absa-chip--positive { color: #047857; }
+.absa-chip--neutral  { color: #57534E; }
+.absa-chip--negative { color: #b91c1c; }
 
 .absa-evidence {
   margin-top: 8px;
@@ -1135,14 +1142,15 @@ watch(() => props.activeTab, (newTab) => {
 }
 
 .intel-box { 
-  background: #ffffff; 
-  border: 1px solid rgba(148, 163, 184, 0.08); 
-  border-radius: 24px; 
-  padding: 24px; 
+  background: var(--color-surface, #ffffff); 
+  border: 1px solid var(--color-border, #E5E5DD); 
+  border-radius: 0; 
+  padding: 22px; 
   position: relative; 
-  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1); 
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.02);
+  transition: border-color 0.18s ease; 
+  box-shadow: none;
 }
+.intel-box:hover { border-color: var(--color-accent, #B45309); }
 
 .intel-label { 
   display: flex; 
@@ -1153,7 +1161,8 @@ watch(() => props.activeTab, (newTab) => {
   font-weight: 800; 
   text-transform: uppercase; 
   margin-bottom: 24px; 
-  letter-spacing: 0.12em; 
+  letter-spacing: 0.22em; 
+  font-family: var(--font-display, "Noto Serif SC", serif);
 }
 
 .emotion-flex-container {
