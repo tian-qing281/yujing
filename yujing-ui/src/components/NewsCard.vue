@@ -351,27 +351,36 @@ const majorTopBarStyle = computed(() => {
 .card-badges {
   display: flex;
   gap: 10px;
+  font-family: var(--font-display, "Noto Serif SC", serif);
   font-size: 11px;
-  font-weight: 800;
-  color: #94a3b8;
+  font-weight: 600;
+  color: var(--color-text-3, #94a3b8);
   align-items: center;
   flex-wrap: wrap;
   justify-content: flex-end;
+  letter-spacing: 0.08em;
 }
 
+/* 编辑部全面升级：daisyui 圆胶囊 badge → 0 圆角衬线标签 */
 .badge {
-  padding: 6px 10px;
-  border-radius: 999px;
-  border: 1px solid rgba(226, 232, 240, 0.72);
+  padding: 2px 8px !important;
+  border-radius: 0 !important;
+  border: 1px solid var(--color-border) !important;
   min-height: auto;
   height: auto;
+  font-family: var(--font-display, "Noto Serif SC", serif);
+  font-weight: 600 !important;
+  letter-spacing: 0.06em;
+  background: transparent !important;
 }
 
 .badge.heat {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  background: #f8fafc;
+  background: transparent !important;
+  border-color: transparent !important;
+  padding-inline: 4px !important;
   max-width: 150px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -379,18 +388,18 @@ const majorTopBarStyle = computed(() => {
 }
 
 .badge.source {
-  background: var(--color-surface-2);
+  background: var(--color-surface-2) !important;
   color: var(--color-text-2);
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--color-border) !important;
 }
 
 .badge.cached {
   /* editorial: 已采集 = 已入库的中性状态提示，用暑色阳光不争主 */
-  background: rgba(180, 83, 9, 0.08);
+  background: rgba(180, 83, 9, 0.08) !important;
   color: var(--color-accent);
-  border: 1px solid rgba(180, 83, 9, 0.20);
-  font-weight: 800;
-  letter-spacing: 0.04em;
+  border: 1px solid rgba(180, 83, 9, 0.20) !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.06em;
 }
 
 @media (max-width: 960px) {
