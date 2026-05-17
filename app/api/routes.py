@@ -1109,18 +1109,9 @@ async def warmup_runtime_dependencies():
     print(f"[{datetime.now().strftime('%H:%M:%S')}] [预热] 全系统预热完成 (耗时: {duration:.1f}秒; LLM 客户端将在首次使用时 lazy 加载)")
 
 
-@router.get("/sync/status")
-async def get_sync_status():
-    """同步状态 + 8 平台分源状态 + 全局聚合指标（供 UI-4c 顶部状态轴使用）。
-
-    向后兼容：保留原 fetching / last_fetch 字段；
-    新增 sources[]（每个源最新抓取时间、在榜条数、stale 判定）+ meta（跨平台事件、全平台齐发、24h 新增）。
-    """
+def _query_sync_status_db_snapshot():
+    """同步函数：在线程池里跑，避免阻塞事件循环。"""
     from sqlalchemy import func as sa_func
-
-    async with swr_state_lock:
-        fetching = swr_cache["fetching"]
-        last_fetch = swr_cache["last_fetch"]
 
     sources: list[dict] = []
     meta: dict = {
@@ -1128,10 +1119,8 @@ async def get_sync_status():
         "top_event_spread": 0,
         "new_24h": 0,
     }
-
     db = SessionLocal()
     try:
-        # 每个源：最新 fetch_time（任意 rank） + 当前在榜条数（rank<999）
         latest_rows = (
             db.query(Article.source_id, sa_func.max(Article.fetch_time))
             .filter(Article.source_id.in_(SOURCE_IDS))
@@ -1152,11 +1141,9 @@ async def get_sync_status():
         stale_threshold = timedelta(minutes=30)
         for sid in SOURCE_IDS:
             latest = latest_map.get(sid)
-            # 统一为 UTC ISO + Z 后缀，前端用 Asia/Shanghai 时区渲染
             latest_iso = None
             status = "missing"
             if latest is not None:
-                # DB 中 fetch_time 存储为 naive UTC（与 utcnow() 一致），直接比较
                 latest_naive = latest.replace(tzinfo=None) if latest.tzinfo else latest
                 latest_iso = latest_naive.isoformat() + "Z"
                 status = "active" if (now_utc - latest_naive) <= stale_threshold else "stale"
@@ -1168,7 +1155,6 @@ async def get_sync_status():
                 "status": status,
             })
 
-        # meta：跨 ≥3 平台事件、全平台齐发（>=7 个平台）事件、近 24h 新增 Article
         meta["cross_platform_events"] = int(
             db.query(sa_func.count(Event.id))
             .filter(Event.platform_count >= 3)
@@ -1185,6 +1171,48 @@ async def get_sync_status():
         )
     finally:
         db.close()
+    return sources, meta
+
+
+# 缓存 sources/meta 的快照（昂贵 DB 查询），fetching 期间复用避免与
+# _refresh_events_cache 抢 SQLite 锁导致 status 端点超时（用户感知「永远转圈」根因）
+_status_snapshot_cache: dict = {"sources": [], "meta": {}, "ts": 0.0}
+_status_snapshot_lock = asyncio.Lock()
+
+
+@router.get("/sync/status")
+async def get_sync_status():
+    """同步状态 + 8 平台分源状态 + 全局聚合指标（供 UI-4c 顶部状态轴使用）。
+
+    设计：
+    - 廉价字段（fetching/last_fetch/last_sync_*）走 swr_cache，永远即时返回；
+    - 昂贵 DB 字段（sources/meta）：to_thread 包同步查询不阻塞事件循环；
+      fetching=True 时复用 2s 快照，避免与 _refresh_events_cache 抢 SQLite 锁。
+    """
+    async with swr_state_lock:
+        fetching = swr_cache["fetching"]
+        last_fetch = swr_cache["last_fetch"]
+
+    now = time.time()
+    cache_age = now - _status_snapshot_cache["ts"]
+    # fetching 期间 2s 内复用上次快照；空闲时 0.5s 内复用
+    cache_ttl = 2.0 if fetching else 0.5
+
+    if cache_age < cache_ttl and _status_snapshot_cache["sources"]:
+        sources = _status_snapshot_cache["sources"]
+        meta = _status_snapshot_cache["meta"]
+    else:
+        async with _status_snapshot_lock:
+            # 二次检查，避免并发涌入时多次打 DB
+            cache_age2 = time.time() - _status_snapshot_cache["ts"]
+            if cache_age2 < cache_ttl and _status_snapshot_cache["sources"]:
+                sources = _status_snapshot_cache["sources"]
+                meta = _status_snapshot_cache["meta"]
+            else:
+                sources, meta = await asyncio.to_thread(_query_sync_status_db_snapshot)
+                _status_snapshot_cache["sources"] = sources
+                _status_snapshot_cache["meta"] = meta
+                _status_snapshot_cache["ts"] = time.time()
 
     return {
         "fetching": fetching,
