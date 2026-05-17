@@ -17,8 +17,46 @@
     </div>
 
     <nav class="sidebar-nav" aria-label="数据源导航">
-      <ul class="menu menu-lg sidebar-menu">
-        <li v-for="source in sourceRegistry" :key="source.id">
+      <!-- 平台热榜分组：可折叠（仅在侧栏未收起时显示分组头） -->
+      <div class="nav-group" :class="{ open: hotOpen || isCollapsed }">
+        <button
+          v-if="!isCollapsed"
+          type="button"
+          class="nav-group-header"
+          :aria-expanded="hotOpen"
+          @click="hotOpen = !hotOpen"
+        >
+          <iconify-icon icon="ri:fire-fill" class="nav-group-icon"></iconify-icon>
+          <span class="nav-group-label">平台热榜</span>
+          <span class="nav-group-count">{{ hotSources.length }}</span>
+          <iconify-icon
+            :icon="hotOpen ? 'mdi:chevron-down' : 'mdi:chevron-right'"
+            class="nav-group-chevron"
+          ></iconify-icon>
+        </button>
+
+        <div class="nav-group-body" :class="{ collapsed: !hotOpen && !isCollapsed }">
+          <ul class="menu menu-lg sidebar-menu">
+            <li v-for="source in hotSources" :key="source.id">
+              <button
+                type="button"
+                class="nav-item btn btn-ghost"
+                :class="{ active: currentSource === source.id }"
+                :title="source.name"
+                @click="$emit('switch', source.id)"
+              >
+                <span class="nav-mark"></span>
+                <iconify-icon :icon="source.icon" class="nav-icon"></iconify-icon>
+                <span v-if="!isCollapsed" class="nav-label">{{ source.name }}</span>
+              </button>
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- 工具入口：常驻可见，不折叠 -->
+      <ul class="menu menu-lg sidebar-menu sidebar-menu-tools">
+        <li v-for="source in toolSources" :key="source.id">
           <button
             type="button"
             class="nav-item btn btn-ghost"
@@ -44,9 +82,9 @@
 </template>
 
 <script setup>
-import { ref } from "vue";
+import { ref, computed, watch } from "vue";
 
-defineProps({
+const props = defineProps({
   sourceRegistry: { type: Array, default: () => [] },
   currentSource: { type: String, default: "" },
   syncTime: { type: String, default: "" },
@@ -54,6 +92,29 @@ defineProps({
 });
 
 const isCollapsed = ref(false);
+
+// 工具入口 ID 白名单：这些常驻可见，不计入"平台热榜"分组
+const TOOL_IDS = new Set(["event_hub", "ai_consultant", "my_subscriptions"]);
+
+const hotSources = computed(() =>
+  props.sourceRegistry.filter((s) => !TOOL_IDS.has(s.id))
+);
+const toolSources = computed(() =>
+  props.sourceRegistry.filter((s) => TOOL_IDS.has(s.id))
+);
+
+// 默认折叠平台热榜分组（更清爽），但若当前激活的是某个热榜，则自动展开
+const isHotActive = computed(() =>
+  hotSources.value.some((s) => s.id === props.currentSource)
+);
+const hotOpen = ref(false);
+watch(
+  isHotActive,
+  (active) => {
+    if (active) hotOpen.value = true;
+  },
+  { immediate: true }
+);
 
 defineEmits(["switch", "open-cred"]);
 </script>
@@ -297,5 +358,96 @@ defineEmits(["switch", "open-cred"]);
 .sidebar-nav::-webkit-scrollbar-thumb {
   background: rgba(148, 163, 184, 0.18);
   border-radius: 999px;
+}
+
+/* === 分组折叠（平台热榜） === */
+.nav-group {
+  margin-bottom: 12px;
+}
+
+.nav-group-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px 8px 12px;
+  background: transparent;
+  border: 0;
+  border-radius: 10px;
+  color: rgba(226, 232, 240, 0.7);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.nav-group-header:hover {
+  background: rgba(255, 255, 255, 0.04);
+  color: #ffffff;
+}
+
+.nav-group-icon {
+  font-size: 14px;
+  color: var(--color-accent, #b45309);
+  flex-shrink: 0;
+}
+
+.nav-group-label {
+  flex: 1;
+  text-align: left;
+}
+
+.nav-group-count {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0;
+  color: rgba(226, 232, 240, 0.55);
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 999px;
+  padding: 1px 8px;
+  min-width: 22px;
+  text-align: center;
+}
+
+.nav-group-chevron {
+  font-size: 16px;
+  color: rgba(226, 232, 240, 0.55);
+  transition: transform 0.2s ease;
+}
+
+.nav-group-body {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows 0.28s cubic-bezier(0.4, 0, 0.2, 1),
+              opacity 0.2s ease;
+  opacity: 1;
+  overflow: hidden;
+}
+
+.nav-group-body.collapsed {
+  grid-template-rows: 0fr;
+  opacity: 0;
+}
+
+.nav-group-body > .sidebar-menu {
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* 收起态：隐藏分组头，菜单恢复直挂 */
+.app-sidebar.collapsed .nav-group-header {
+  display: none;
+}
+
+.app-sidebar.collapsed .nav-group {
+  margin-bottom: 8px;
+}
+
+.sidebar-menu-tools {
+  margin-top: 6px;
+  padding-top: 10px;
+  border-top: 1px dashed rgba(255, 255, 255, 0.06);
 }
 </style>
