@@ -1571,27 +1571,27 @@ onUnmounted(() => {
 .quick-actions {
   display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 8px;
 }
+/* 编辑部全面升级 UI-13b：PDF/Word/PPT 浅蓝渐变胶囊 → 透明 + hairline + 衬线 */
 .quick-action-btn {
   display: flex; align-items: center; gap: 8px;
-  padding: 10px 20px; border-radius: 12px;
-  font-size: 14px; font-weight: 800; cursor: pointer;
-  border: 1.5px solid rgba(59, 130, 246, 0.15);
-  background: linear-gradient(135deg, var(--color-surface-2) 0%, #f8fbff 100%);
-  color: var(--color-accent); transition: all 0.2s;
+  padding: 8px 16px; border-radius: 0;
+  font-family: var(--font-display, "Noto Serif SC", serif);
+  font-size: 12px; font-weight: 600; letter-spacing: 0.12em; cursor: pointer;
+  border: 1px solid var(--color-border, #E5E5DD);
+  background: transparent;
+  color: var(--color-accent); transition: background 180ms ease, border-color 180ms ease;
 }
 .quick-action-btn:hover:not(:disabled) {
-  background: var(--color-accent); color: #fff;
-  transform: translateY(-2px); box-shadow: 0 8px 20px rgba(180, 83, 9, 0.15);
+  background: var(--color-surface-2, #F5F5F2); border-color: var(--color-accent);
 }
 .quick-action-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .quick-action-compare {
-  /* editorial: \u53bb\u7d2b\u3001\u8d70 token \u8d64\u9676\u7ea2 */
   border-color: var(--color-border);
-  background: var(--color-surface-2);
+  background: transparent;
   color: var(--color-accent);
 }
 .quick-action-compare:hover:not(:disabled) {
-  background: var(--color-accent); color: #FAFAF7;
+  background: var(--color-surface-2, #F5F5F2);
   border-color: var(--color-accent);
 }
 
@@ -1668,24 +1668,29 @@ onUnmounted(() => {
 }
 
 .suggest-area {
-  margin-top: 16px; border-top: 1px solid rgba(0,0,0,0.04); padding-top: 12px;
+  margin-top: 16px; border-top: 1px solid var(--color-border, #E5E5DD); padding-top: 12px;
 }
+/* 编辑部全面升级 UI-13b：继续追问头黄色 → accent 赤陶 + uppercase kicker */
 .suggest-header {
   display: flex; align-items: center; gap: 6px;
-  font-size: 12px; font-weight: 700; color: #f59e0b; margin-bottom: 10px;
+  font-family: var(--font-display, "Noto Serif SC", serif);
+  font-size: 11px; font-weight: 700; letter-spacing: 0.22em; text-transform: uppercase;
+  color: var(--color-accent, #B45309); margin-bottom: 10px;
 }
 .suggest-list { display: flex; flex-wrap: wrap; gap: 8px; }
+/* 编辑部全面升级 UI-13b：继续追问黄底胶囊 20px → 0 圆角 + accent hairline + 透明 */
 .suggest-pill {
   display: flex; align-items: center; gap: 6px;
-  padding: 8px 16px; border-radius: 20px;
-  font-size: 13px; font-weight: 700; cursor: pointer;
-  border: 1.5px solid rgba(245, 158, 11, 0.2);
-  background: linear-gradient(135deg, #fffbeb 0%, #fefce8 100%);
-  color: #b45309; transition: all 0.2s;
+  padding: 6px 14px; border-radius: 0;
+  font-family: var(--font-display, "Noto Serif SC", serif);
+  font-size: 13px; font-weight: 600; letter-spacing: 0.04em; cursor: pointer;
+  border: 1px solid var(--color-border, #E5E5DD);
+  border-left: 2px solid var(--color-accent, #B45309);
+  background: transparent;
+  color: var(--color-brand, #0F172A); transition: background 180ms ease, border-color 180ms ease;
 }
 .suggest-pill:hover:not(:disabled) {
-  background: #f59e0b; color: #fff; border-color: #f59e0b;
-  transform: translateY(-1px); box-shadow: 0 4px 12px rgba(245, 158, 11, 0.25);
+  background: var(--color-surface-2, #F5F5F2); border-color: var(--color-accent, #B45309);
 }
 .suggest-pill:disabled { opacity: 0.5; cursor: not-allowed; }
 
