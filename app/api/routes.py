@@ -122,6 +122,10 @@ swr_cache = {
     "events_last_fetch": 0.0,
     "topics": [],
     "topics_last_fetch": 0.0,
+    # 最近一次同步中失败或超时的 crawler，供 /sync/status 抑露给前端弹 toast
+    # 元素结构：{"name": "WeiboHotSearch", "reason": "timeout"|"异常名:消息", "duration": 30.0}
+    "last_sync_errors": [],
+    "last_sync_finished_at": 0.0,
 }
 swr_state_lock = asyncio.Lock()
 event_hub_refresh_lock = threading.Lock()
@@ -959,14 +963,21 @@ async def sync_trigger_crawlers():
         WallstreetcnNews(),
         ClsTelegraph(),
     ]
+    # 每个 crawler 的硬性超时，防单个 socket 阻塞拖死整个同步 job
+    # 调研值：本地最慢 ToutiaoHotBoard ~15s，30s 上限留 2x 余量。
+    PER_CRAWLER_TIMEOUT_S = 30.0
+
     async def run_with_delay(c):
         import random
         await asyncio.sleep(random.uniform(0.01, 0.5)) # 随机延迟 10~500ms 削峰
         start = time.time()
         try:
-            result = await c.run_and_save()
+            result = await asyncio.wait_for(c.run_and_save(), timeout=PER_CRAWLER_TIMEOUT_S)
             duration = time.time() - start
             return ("ok", c.__class__.__name__, duration, result)
+        except asyncio.TimeoutError:
+            duration = time.time() - start
+            return ("timeout", c.__class__.__name__, duration, None)
         except Exception as exc:
             duration = time.time() - start
             return ("err", c.__class__.__name__, duration, exc)
@@ -977,18 +988,28 @@ async def sync_trigger_crawlers():
     ts = datetime.now().strftime("%H:%M:%S")
     ok_count = 0
     log_lines: list[str] = []
+    errors_for_ui: list[dict] = []  # 抑露给 /sync/status 供前端 toast
     for status, name, duration, payload in results:
         if status == "ok":
             ok_count += 1
             line = f"[{ts}] [同步] OK {name} ({duration:.2f}s)"
+        elif status == "timeout":
+            line = f"[{ts}] [同步] TIMEOUT {name} ({duration:.2f}s) 超过 {PER_CRAWLER_TIMEOUT_S}s 被强制切断"
+            errors_for_ui.append({"name": name, "reason": "timeout", "duration": round(duration, 2)})
         else:
             exc = payload
-            line = f"[{ts}] [同步] FAIL {name} ({duration:.2f}s) {type(exc).__name__}: {exc}"
+            reason = f"{type(exc).__name__}: {str(exc)[:120]}"
+            line = f"[{ts}] [同步] FAIL {name} ({duration:.2f}s) {reason}"
+            errors_for_ui.append({"name": name, "reason": reason, "duration": round(duration, 2)})
         print(line)
         log_lines.append(line)
     summary = f"[{ts}] [同步] 汇总: {ok_count}/{len(results)} 成功"
     print(summary)
     log_lines.append(summary)
+
+    # 写入 swr_cache 供 /sync/status 读；GIL 保护 dict 赋值原子性，不用 lock
+    swr_cache["last_sync_errors"] = errors_for_ui
+    swr_cache["last_sync_finished_at"] = time.time()
     # 同步落盘，便于不直接访问后端控制台时排查（如本次「卡 0/8」排查场景）
     try:
         from pathlib import Path as _SyncLogPath
@@ -1170,6 +1191,9 @@ async def get_sync_status():
         "last_fetch": last_fetch,
         "sources": sources,
         "meta": meta,
+        # 最近一次同步中失败/超时的 crawler；前端轮询发现非空且 finished_at > syncStartedAt 时弹 toast
+        "last_sync_errors": list(swr_cache.get("last_sync_errors", [])),
+        "last_sync_finished_at": swr_cache.get("last_sync_finished_at", 0.0),
     }
 
 

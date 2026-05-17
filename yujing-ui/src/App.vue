@@ -679,6 +679,31 @@ watch(activeSourceFilter, () => {
 let syncPollCount = 0;
 const SYNC_POLL_MAX = 90;
 
+// 轻量 editorial 风格 toast（黑底白字 + 0 圆角 + hairline accent 左色带），
+// 不引入组件库。kind: 'info' | 'warn' | 'error'。
+// 主要场景：/api/sync/status 返回 last_sync_errors 非空时提醒哪个 crawler 超时/失败。
+const showToast = (text, kind = 'info') => {
+  const accent = kind === 'error' ? '#B45309' : (kind === 'warn' ? '#B45309' : '#1c1917');
+  const el = document.createElement('div');
+  el.textContent = text;
+  el.style.cssText = `
+    position:fixed; bottom:28px; left:50%; transform:translateX(-50%);
+    background:#1c1917; color:#fff;
+    border-left:3px solid ${accent}; border-radius:0;
+    padding:12px 20px 12px 18px; font-size:13px; line-height:1.5;
+    font-family: var(--font-body, system-ui, -apple-system, "Segoe UI", sans-serif);
+    letter-spacing:0.01em; max-width: min(560px, 92vw);
+    box-shadow:0 8px 24px rgba(0,0,0,.16); z-index:99999;
+    opacity:0; transition:opacity .25s ease;
+  `;
+  document.body.appendChild(el);
+  requestAnimationFrame(() => { el.style.opacity = '1'; });
+  setTimeout(() => {
+    el.style.opacity = '0';
+    setTimeout(() => el.remove(), 280);
+  }, 3600);
+};
+
 const pollSyncStatus = async () => {
   if (!isGlobalSyncing.value) return;
   syncPollCount++;
@@ -715,6 +740,31 @@ const pollSyncStatus = async () => {
       setTimeout(pollSyncStatus, 2000);
     } else {
       syncPollCount = 0;
+      // 同步收尾：检查后端报告的本轮错误（finished_at 需在本轮启动后）
+      const errs = Array.isArray(data.last_sync_errors) ? data.last_sync_errors : [];
+      const finishedAt = (data.last_sync_finished_at || 0) * 1000; // 后端是秒，转 ms
+      if (errs.length > 0 && finishedAt >= syncStartedAt) {
+        const total = (syncProgress.value && syncProgress.value.total) || 8;
+        const okCnt = total - errs.length;
+        // 简化名称：WeiboHotSearch -> 微博热搜
+        const nameMap = {
+          WeiboHotSearch: '微博热搜',
+          BaiduHotSearch: '百度热搜',
+          ToutiaoHotBoard: '头条实时',
+          BilibiliHotVideo: 'B站热门',
+          ZhihuHotQuestion: '知乎热榜',
+          ThePaperHotNews: '澎湃新闻',
+          WallstreetcnNews: '华尔街见闻',
+          ClsTelegraph: '财联社电报',
+        };
+        const failedNames = errs.map(e => nameMap[e.name] || e.name).join('、');
+        const hasTimeout = errs.some(e => e.reason === 'timeout');
+        const kind = okCnt === 0 ? 'error' : 'warn';
+        const txt = okCnt === 0
+          ? `同步全部失败：${failedNames}${hasTimeout ? '（含超时）' : ''}`
+          : `同步 ${okCnt}/${total} 完成，${failedNames} 失败${hasTimeout ? '（含超时）' : ''}`;
+        showToast(txt, kind);
+      }
       // 同步收尾：进度归位（短暂停留显示 8/8 给到视觉确认，然后清空）
       if (syncProgress.value) {
         syncProgress.value = { done: syncProgress.value.total, total: syncProgress.value.total };
