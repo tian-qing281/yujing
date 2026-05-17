@@ -470,6 +470,10 @@ const normalizedWordcloud = computed(() => {
     })
     .filter((entry) => entry.word && entry.value > 0)
     .sort((a, b) => b.value - a.value)
+    // 只取 Top 22：更多的小权重词会被 wordcloud2.js 填进大字的留白，
+    // 造成「日本」中间夹「分享/官方」这种视觉噪声。截断后保留主调
+    // 同时避免留白被塑装。
+    .slice(0, 22)
 })
 
 const scheduleRender = (task) => {
@@ -633,13 +637,15 @@ const renderCloud = (data) => {
   if (window.WordCloud) {
       window.WordCloud(wcCanvas.value, {
         list: entries,
-        gridSize: 6,
+        // gridSize=8 + Top22 词：避免小词填进大字内部留白，
+        // 同时不会像 gridSize=16 那样整个云变得稀疏。
+        gridSize: 8,
         weightFactor: (size) => {
           const baseSize = Math.min(width, height);
           const factor = (width > 600) ? 2.8 : 3.5;
           return (size * baseSize) / (maxVal * factor);
         },
-        minSize: 6,
+        minSize: 10,
         fontFamily: 'Outfit, Inter, system-ui, sans-serif',
         // editorial: 赤陶红 → 近墨石板梯度，应拍主调
         color: (word) => {

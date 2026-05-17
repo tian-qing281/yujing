@@ -6,7 +6,7 @@ from datetime import datetime
 
 import httpx
 
-from app.database import Article, SessionLocal
+from app.database import Article, SessionLocal, utcnow
 
 
 class BaseSource:
@@ -195,6 +195,11 @@ class BaseSource:
         db = SessionLocal()
         try:
             now = datetime.now()
+            # fetch_time 语义：「本平台最近一次成功抓到此条目」的 UTC 时间戳。
+            # 修复点：早期实现只在 INSERT 时由 default=utcnow 写入，UPDATE 分支不动，
+            # 导致热榜里复现的旧条目永远停在首次插入时刻，前端 /sync/status 的
+            # max(fetch_time) 一直早于本轮 syncStartedAt，进度卡 00/08 直到 fetching=false。
+            fetched_utc = utcnow()
             db.query(Article).filter(Article.source_id == self.source_id).update({Article.rank: 999})
 
             item_ids = [item["item_id"] for item in items]
@@ -208,6 +213,7 @@ class BaseSource:
                     article.pub_date = item.get("pub_date", now)
                     article.url = item.get("url") or article.url
                     article.title = item.get("title") or article.title
+                    article.fetch_time = fetched_utc
                     if item.get("content"):
                         article.content = item["content"]
                     if "extra" in item:

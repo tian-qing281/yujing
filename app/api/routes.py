@@ -118,6 +118,9 @@ swr_cache = {
     "articles": [],
     "last_fetch": 0.0,
     "fetching": False,
+    # 同步阶段：idle / crawling（8 个 crawler 拓抓）/ aggregating（meili+事件聚类+topic 重建，~30s）
+    # 前端可据此把「08/08 平台同步中」文案切为「事件聚类中…」，避免被误读为「卡住」
+    "phase": "idle",
     "events": [],
     "events_last_fetch": 0.0,
     "topics": [],
@@ -1026,13 +1029,18 @@ async def _run_refresh_job():
     try:
         if _shutting_down.is_set():
             return
+        async with swr_state_lock:
+            swr_cache["phase"] = "crawling"
         await sync_trigger_crawlers()
         if _shutting_down.is_set():
             return
+        async with swr_state_lock:
+            swr_cache["phase"] = "aggregating"
         await asyncio.to_thread(_refresh_events_cache)
     finally:
         async with swr_state_lock:
             swr_cache["fetching"] = False
+            swr_cache["phase"] = "idle"
             swr_cache["last_fetch"] = time.time()
 
 
@@ -1192,6 +1200,7 @@ async def get_sync_status():
     async with swr_state_lock:
         fetching = swr_cache["fetching"]
         last_fetch = swr_cache["last_fetch"]
+        phase = swr_cache.get("phase", "idle")
 
     now = time.time()
     cache_age = now - _status_snapshot_cache["ts"]
@@ -1216,6 +1225,7 @@ async def get_sync_status():
 
     return {
         "fetching": fetching,
+        "phase": phase,
         "last_fetch": last_fetch,
         "sources": sources,
         "meta": meta,

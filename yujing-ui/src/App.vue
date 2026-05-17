@@ -721,6 +721,7 @@ const pollSyncStatus = async () => {
     
     const stillFetching = !!data.fetching;
     isGlobalSyncing.value = stillFetching;
+    const phase = data.phase || (stillFetching ? 'crawling' : 'idle');
 
     // UI-4A：基于 sources[] 推算已完成平台数（latest_fetch_at > syncStartedAt 即视为本轮已完成）
     if (syncStartedAt && Array.isArray(data.sources) && data.sources.length > 0) {
@@ -733,7 +734,9 @@ const pollSyncStatus = async () => {
           return false;
         }
       }).length;
-      syncProgress.value = { done, total };
+      syncProgress.value = { done, total, phase };
+    } else if (syncProgress.value) {
+      syncProgress.value = { ...syncProgress.value, phase };
     }
     
     if (stillFetching) {
@@ -767,7 +770,7 @@ const pollSyncStatus = async () => {
       }
       // 同步收尾：进度归位（短暂停留显示 8/8 给到视觉确认，然后清空）
       if (syncProgress.value) {
-        syncProgress.value = { done: syncProgress.value.total, total: syncProgress.value.total };
+        syncProgress.value = { done: syncProgress.value.total, total: syncProgress.value.total, phase: 'idle' };
         setTimeout(() => { syncProgress.value = null; syncStartedAt = 0; }, 1200);
       }
       fetchArticles(false);
@@ -802,7 +805,7 @@ const handleRefresh = async () => {
   // 启动同步并进入轮询
   isGlobalSyncing.value = true;
   syncStartedAt = Date.now() - 5000; // -5s 容差：补偿后端 _run_refresh_job 启动前可能已在制作中的项
-syncProgress.value = { done: 0, total: 8 };
+syncProgress.value = { done: 0, total: 8, phase: 'crawling' };
   await fetchArticles(true);
   pollSyncStatus();
 };

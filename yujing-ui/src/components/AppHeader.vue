@@ -32,6 +32,9 @@ defineEmits(['refresh'])
       <button class="btn btn-primary btn-sm rounded-full btn-sync-all" @click="$emit('refresh')" :disabled="loading">
         <iconify-icon icon="mdi:reload" :class="{ 'anim-spin': loading }" />
         <span v-if="!loading">全站同步</span>
+        <span v-else-if="syncProgress && syncProgress.phase === 'aggregating'" class="sync-progress">
+          <span class="sync-label">事件聚类中…</span>
+        </span>
         <span v-else-if="syncProgress" class="sync-progress">
           <span class="sync-num mono">{{ String(syncProgress.done).padStart(2, '0') }}</span>
           <span class="sync-sep">/</span>
