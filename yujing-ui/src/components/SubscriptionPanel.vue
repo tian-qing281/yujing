@@ -518,12 +518,11 @@ onMounted(loadAll);
 }
 
 /* === Hero 标题 === */
+/* 编辑部全面升级 UI-14a：hero 4px 圆角 → 0 圆角 + 6px accent 顶条 */
 .sub-hero {
   position: relative;
-  border-radius: 4px;
+  border-radius: 0;
   overflow: hidden;
-  /* editorial: 去黑，改为报纸头版”纸白 + 顽赤陶红 kicker + 衰宋体标题“
-     仅保留上下 1px hairline 作为“版面划颗” */
   background: var(--color-surface);
   box-shadow: none;
   padding: 28px 28px 26px;
@@ -531,7 +530,7 @@ onMounted(loadAll);
   min-height: 132px;
   flex-shrink: 0;
   border: 1px solid var(--color-border);
-  border-top: 3px solid var(--color-accent);
+  border-top: 6px solid var(--color-accent);
 }
 
 .sub-hero-bg {
@@ -556,18 +555,20 @@ onMounted(loadAll);
 
 .sub-hero-left { flex: 1; min-width: 240px; }
 
+/* 编辑部全面升级 UI-14a：个性化订阅 kicker chip 3px 圆角 → 0 圆角 + 透明 + accent hairline */
 .sub-kicker {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 3px 10px;
-  /* editorial: 赤陶红 chip走报纸 kicker */
-  background: rgba(180, 83, 9, 0.10);
+  padding: 2px 8px;
+  background: transparent;
+  border: 1px solid var(--color-accent);
   color: var(--color-accent);
+  font-family: var(--font-display, "Noto Serif SC", serif);
   font-size: 11px;
-  font-weight: 800;
-  border-radius: 3px;
-  letter-spacing: 0.18em;
+  font-weight: 700;
+  border-radius: 0;
+  letter-spacing: 0.22em;
   text-transform: uppercase;
 }
 
@@ -593,26 +594,28 @@ onMounted(loadAll);
   max-width: 540px;
 }
 
+/* 编辑部全面升级 UI-14a：刷新按钮 4px 圆角 → 0 + 去 translateY + 衷线 letter-spacing */
 .sub-refresh-btn {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   padding: 9px 18px;
-  /* editorial: 近墨石板实色作“主动作”，仅此一黑 */
   background: var(--color-brand);
   color: #FAFAF7;
-  font-weight: 700;
+  font-family: var(--font-display, "Noto Serif SC", serif);
+  font-weight: 600;
+  letter-spacing: 0.12em;
   border: none;
-  border-radius: 4px;
+  border-radius: 0;
   cursor: pointer;
   font-size: 13px;
-  transition: all 0.18s ease;
-  box-shadow: 0 1px 2px rgba(28, 25, 23, 0.08);
+  transition: background 180ms ease;
+  box-shadow: none;
 }
 
 .sub-refresh-btn:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: 0 10px 28px -10px rgba(0, 0, 0, 0.35);
+  background: var(--color-accent);
+  box-shadow: none;
 }
 
 .sub-refresh-btn:disabled { opacity: 0.6; cursor: not-allowed; }
@@ -626,31 +629,43 @@ onMounted(loadAll);
   gap: 16px;
 }
 
+/* 编辑部全面升级 UI-14a：3 大白底浮卡 20px 圆角蓝灰 hairline → 0 圆角 + 暖色 hairline + accent 顶条 1px */
 .sub-card {
   padding: 18px;
-  border: 1px solid rgba(226, 232, 240, 0.95);
-  border-radius: 20px;
+  border: 1px solid var(--color-border, #E5E5DD);
+  border-top: 1px solid var(--color-accent);
+  border-radius: 0;
+  background: var(--color-surface, #FFFFFF);
   display: flex;
   flex-direction: column;
   gap: 14px;
 }
 
+/* 编辑部全面升级 UI-14a：卡头 uppercase letter-spacing 0.22em kicker */
 .sub-card-head {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 13px;
-  font-weight: 800;
-  color: #475569;
+  font-family: var(--font-display, "Noto Serif SC", serif);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--color-text-2, #475569);
 }
 
+/* 编辑部全面升级 UI-14a：数字胶囊 999px → 0 圆角 + tabular-nums */
 .sub-count {
   margin-left: auto;
-  background: #f1f5f9;
-  color: #64748b;
-  padding: 2px 8px;
-  border-radius: 999px;
-  font-size: 11px;
+  background: transparent;
+  color: var(--color-text-3, #94A3A0);
+  padding: 0;
+  border-radius: 0;
+  font-family: var(--font-display, "Noto Serif SC", serif);
+  font-feature-settings: "tnum";
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
 }
 
 .sub-form {
@@ -659,16 +674,16 @@ onMounted(loadAll);
   align-items: stretch;
 }
 
-/* 自定义表单控件：避免依赖 daisyUI 主题在不同上下文下错位 */
+/* 编辑部全面升级 UI-14a：表单输入 10px 圆角 → 4px + 暖色 hairline */
 .sub-select,
 .sub-input {
   height: 36px;
-  border: 1px solid #e2e8f0;
-  border-radius: 10px;
+  border: 1px solid var(--color-border, #E5E5DD);
+  border-radius: 4px;
   padding: 0 12px;
   font-size: 13px;
-  color: #1e293b;
-  background: #fff;
+  color: var(--color-text, #1e293b);
+  background: var(--color-surface, #FFFFFF);
   outline: none;
   transition: border-color 0.18s ease, box-shadow 0.18s ease;
   box-sizing: border-box;
@@ -690,37 +705,36 @@ onMounted(loadAll);
   height: 36px;
   padding: 0 14px;
   border: none;
-  border-radius: 4px;
-  font-size: 13px;
-  font-weight: 700;
+  /* 编辑部全面升级 UI-14a：按钮 4px 圆角 → 0 + 衷线 */
+  border-radius: 0;
+  font-family: var(--font-display, "Noto Serif SC", serif);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
   color: #fff;
   cursor: pointer;
-  transition: all 0.18s ease;
+  transition: background 180ms ease;
   white-space: nowrap;
 }
 
 .sub-btn iconify-icon { font-size: 16px; }
 
 .sub-btn--primary {
-  /* editorial: 去紫蓝渐变，近墨石板实色 */
   background: var(--color-brand);
   box-shadow: none;
 }
 
 .sub-btn--primary:hover:not(:disabled) {
-  background: #1E293B;
-  transform: translateY(-1px);
+  background: var(--color-accent);
 }
 
 .sub-btn--danger {
-  /* editorial: 警示仍需红，一色深红 token critical */
   background: #B91C1C;
   box-shadow: none;
 }
 
 .sub-btn--danger:hover:not(:disabled) {
   background: #991B1B;
-  transform: translateY(-1px);
 }
 
 .sub-btn:disabled {
