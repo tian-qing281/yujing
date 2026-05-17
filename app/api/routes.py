@@ -962,9 +962,43 @@ async def sync_trigger_crawlers():
     async def run_with_delay(c):
         import random
         await asyncio.sleep(random.uniform(0.01, 0.5)) # 随机延迟 10~500ms 削峰
-        return await c.run_and_save()
+        start = time.time()
+        try:
+            result = await c.run_and_save()
+            duration = time.time() - start
+            return ("ok", c.__class__.__name__, duration, result)
+        except Exception as exc:
+            duration = time.time() - start
+            return ("err", c.__class__.__name__, duration, exc)
 
-    await asyncio.gather(*(run_with_delay(crawler) for crawler in crawlers), return_exceptions=True)
+    results = await asyncio.gather(*(run_with_delay(crawler) for crawler in crawlers), return_exceptions=False)
+    # UI-4A 调试：把每个 crawler 的成功/失败明细打到控制台 + 落盘 logs/sync_debug.log，
+    # 避免 8 个 crawler 全失败而日志一片寂静（用户感知为「0/8 同步中」长时间卡住）
+    ts = datetime.now().strftime("%H:%M:%S")
+    ok_count = 0
+    log_lines: list[str] = []
+    for status, name, duration, payload in results:
+        if status == "ok":
+            ok_count += 1
+            line = f"[{ts}] [同步] OK {name} ({duration:.2f}s)"
+        else:
+            exc = payload
+            line = f"[{ts}] [同步] FAIL {name} ({duration:.2f}s) {type(exc).__name__}: {exc}"
+        print(line)
+        log_lines.append(line)
+    summary = f"[{ts}] [同步] 汇总: {ok_count}/{len(results)} 成功"
+    print(summary)
+    log_lines.append(summary)
+    # 同步落盘，便于不直接访问后端控制台时排查（如本次「卡 0/8」排查场景）
+    try:
+        from pathlib import Path as _SyncLogPath
+        log_path = _SyncLogPath(__file__).resolve().parents[2] / "logs" / "sync_debug.log"
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        with log_path.open("a", encoding="utf-8") as fp:
+            for line in log_lines:
+                fp.write(line + "\n")
+    except Exception:
+        pass
 
 
 async def _run_refresh_job():
