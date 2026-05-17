@@ -1912,48 +1912,56 @@ body { font-family: "Fira Sans", "PingFang SC", "Microsoft YaHei", sans-serif; b
 }
 
 .eh-metric-card {
-  /* editorial: 去变色玻璃 + 渐变 hover，走 token 纸质面 */
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: 4px;
-  padding: 12px 14px;
+  /* editorial: 报纸数据栏 —— 去边框圆角 + 左侧赤陶红色带 + 大字号衬线数字 */
+  background: transparent;
+  border: none;
+  border-left: 4px solid var(--color-border);
+  border-radius: 0;
+  padding: 6px 14px 6px 18px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  transition: all 0.2s ease;
+  transition: border-color 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.eh-metric-card:first-child {
+  border-left-color: var(--color-accent);
 }
 
 .eh-metric-card:hover {
-  background: var(--color-surface);
-  border-color: var(--color-accent);
+  border-left-color: var(--color-accent);
 }
 
 .eh-metric-info {
   display: flex;
   flex-direction: column;
+  gap: 4px;
 }
 
 .eh-metric-label {
   font-size: 10px;
-  font-weight: 800;
-  color: #94a3b8;
+  font-weight: 700;
+  color: var(--color-text-3, #94a3b8);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.18em;
+  font-family: var(--font-display, "Noto Serif SC", serif);
 }
 
 .eh-metric-value {
-  font-size: 18px;
-  font-weight: 900;
-  color: #0f172a;
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--color-brand, #0f172a);
   line-height: 1;
-  margin-top: 2px;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  font-family: var(--font-display, "Noto Serif SC", serif);
 }
 
 .eh-metric-icon-sw {
-  /* editorial: 糖果蓝 → 赤陶红 */
-  font-size: 20px;
-  color: var(--color-accent);
-  opacity: 0.7;
+  /* editorial: icon 退到背景，让数字成为视觉焦点 */
+  font-size: 22px;
+  color: var(--color-text-3, #94a3b8);
+  opacity: 0.4;
 }
 
 .eh-command-bar {
