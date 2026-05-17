@@ -90,11 +90,10 @@
             </div>
           </section>
 
-          <!-- F6: ABSA 维度时间漂移（独立 section，复用上方 padding 节奏） -->
+          <!-- F6: ABSA 维度时间漂移（bucket-hours 由后端按事件跨度自适应选择） -->
           <AbsaTimelineChart
             v-if="item?.id"
             :event-id="item.id"
-            :bucket-hours="12"
             :top-k-aspects="5"
           />
 

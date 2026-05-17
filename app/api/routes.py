@@ -1906,7 +1906,7 @@ async def get_event_detail(event_id: int, db: Session = Depends(get_db)):
 @router.get("/events/{event_id}/absa_timeline")
 async def get_event_absa_timeline(
     event_id: int,
-    bucket_hours: int = 12,
+    bucket_hours: int | None = None,
     top_k_aspects: int = 5,
     db: Session = Depends(get_db),
 ):
@@ -1917,13 +1917,13 @@ async def get_event_absa_timeline(
       避免长事件首次访问时陷入数十次 LLM 同步等待。
     - 极性数值化：positive=+1 / neutral=0 / negative=-1，桶内对同一 aspect 取均值。
     - top_k_aspects 按 ABSA 缓存命中文章中 aspect 出现总次数排名取前 K。
-    - 时间桶以文章 fetch_time（无则 pub_date）为依据；若全事件时间跨度 ≤ bucket_hours 则只产 1 个桶。
+    - bucket_hours 不传时按事件跨度自适应：≤2 天 → 6h；≤7 天 → 12h；≤14 天 → 48h；更长 → 72h。
     - 桶内某 aspect 无样本 → series 该位置返回 null，前端 ECharts connectNulls=false 自动断线。
     """
     from app.services import absa as absa_service
     from datetime import datetime, timedelta
 
-    if bucket_hours <= 0 or bucket_hours > 24 * 7:
+    if bucket_hours is not None and (bucket_hours <= 0 or bucket_hours > 24 * 7):
         raise HTTPException(status_code=400, detail="bucket_hours 必须在 1~168 之间")
     if top_k_aspects <= 0 or top_k_aspects > 20:
         raise HTTPException(status_code=400, detail="top_k_aspects 必须在 1~20 之间")
@@ -1993,6 +1993,19 @@ async def get_event_absa_timeline(
     t_min = covered[0][0]
     t_max = covered[-1][0]
     span_hours = max(1.0, (t_max - t_min).total_seconds() / 3600.0)
+
+    # 自适应桶宽：跨度越长，桶越粗，避免 60+ 个稀疏点
+    if bucket_hours is None:
+        span_days = span_hours / 24
+        if span_days <= 2:
+            bucket_hours = 6
+        elif span_days <= 7:
+            bucket_hours = 12
+        elif span_days <= 14:
+            bucket_hours = 48
+        else:
+            bucket_hours = 72
+
     bucket_count = max(1, int(span_hours // bucket_hours) + 1)
 
     # 桶起点对齐到 bucket_hours 整点（基于 t_min 向下取整）

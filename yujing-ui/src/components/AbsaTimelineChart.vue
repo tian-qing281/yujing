@@ -59,7 +59,7 @@ import { ANIM } from "../utils/chartAnimation";
 
 const props = defineProps({
   eventId: { type: [Number, String], default: null },
-  bucketHours: { type: Number, default: 12 },
+  bucketHours: { type: Number, default: null },
   topKAspects: { type: Number, default: 5 },
 });
 
@@ -86,7 +86,7 @@ const fetchData = async () => {
   payload.value = null;
   try {
     const url = buildApiUrl(
-      `/api/events/${props.eventId}/absa_timeline?bucket_hours=${props.bucketHours}&top_k_aspects=${props.topKAspects}`
+      `/api/events/${props.eventId}/absa_timeline?${props.bucketHours ? `bucket_hours=${props.bucketHours}&` : ""}top_k_aspects=${props.topKAspects}`
     );
     const resp = await fetch(url);
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);

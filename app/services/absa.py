@@ -28,10 +28,14 @@ _CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def _cache_key(title: str, content: str) -> str:
+    # 主动截断以与 extract_aspects 传给 LLM 的输入保持一致，
+    # 避免不同调用方（预热脚本 / timeline 端点）传入未截断原文导致 hash 不一致 / 缓存读不中。
+    title = (title or "")[:120]
+    content = (content or "")[:1800]
     h = hashlib.sha1()
-    h.update((title or "").encode("utf-8", errors="ignore"))
+    h.update(title.encode("utf-8", errors="ignore"))
     h.update(b"\x1e")
-    h.update((content or "").encode("utf-8", errors="ignore"))
+    h.update(content.encode("utf-8", errors="ignore"))
     return h.hexdigest()
 
 
@@ -113,8 +117,7 @@ def extract_aspects(title: str, content: str) -> List[Dict[str, Any]]:
     """
     if not (title or content):
         return []
-    title = (title or "")[:120]
-    content = (content or "")[:1800]
+    # 不再在这里重复截断：_cache_key 已统一截断；prompt 如需手动限长可在下方 format 时控制。
 
     # 文件缓存：命中直接返回
     key = _cache_key(title, content)
@@ -122,7 +125,10 @@ def extract_aspects(title: str, content: str) -> List[Dict[str, Any]]:
     if cached is not None:
         return cached
 
-    prompt = _PROMPT.format(title=title, content=content)
+    # 调用 LLM 时才截断，保持 prompt 可控
+    title_lim = (title or "")[:120]
+    content_lim = (content or "")[:1800]
+    prompt = _PROMPT.format(title=title_lim, content=content_lim)
     try:
         raw = chat_with_news(prompt)
     except Exception:
