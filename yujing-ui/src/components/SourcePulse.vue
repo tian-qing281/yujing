@@ -159,10 +159,11 @@ watch(() => props.articles, () => {
 <style scoped>
 .source-pulse {
   margin-bottom: 24px;
-  padding: 24px;
-  background: linear-gradient(135deg, #ffffff 0%, #f1f5f9 100%);
-  border: 1px solid rgba(148, 163, 184, 0.12);
-  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.04);
+  padding: 22px;
+  background: var(--color-surface, #fff);
+  border: 1px solid var(--color-border, #E5E5DD);
+  box-shadow: none;
+  border-top: 3px solid var(--color-accent);
 }
 
 .pulse-header {
@@ -179,31 +180,29 @@ watch(() => props.articles, () => {
 }
 
 .pulse-icon {
-  font-size: 32px;
+  font-size: 28px;
   color: var(--color-accent);
-  background: var(--color-surface-2);
-  padding: 8px;
-  border-radius: 12px;
-  animation: pulse-beat 2s infinite ease-in-out;
-}
-
-@keyframes pulse-beat {
-  0%, 100% { transform: scale(1); opacity: 1; }
-  50% { transform: scale(1.1); opacity: 0.8; }
+  background: transparent;
+  padding: 4px;
+  border: 1px solid var(--color-accent);
+  border-radius: 0;
 }
 
 .pulse-texts h4 {
   margin: 0 0 4px 0;
   font-size: 18px;
   font-weight: 800;
-  color: #0f172a;
+  color: var(--color-text-1, #1c1917);
+  font-family: var(--font-display, "Noto Serif SC", serif);
+  letter-spacing: -0.01em;
 }
 
 .pulse-texts p {
   margin: 0;
-  font-size: 12px;
-  color: #64748b;
+  font-size: 11px;
+  color: var(--color-text-3, #78716c);
   font-weight: 600;
+  letter-spacing: 0.06em;
 }
 
 .pulse-badges {
@@ -220,6 +219,9 @@ watch(() => props.articles, () => {
 .pulse-box {
   padding: 20px;
   min-height: 240px;
+  background: var(--color-surface-2, #F5F5F2);
+  border: 1px solid var(--color-border, #E5E5DD);
+  border-radius: 0;
   display: flex;
   flex-direction: column;
 }
@@ -228,12 +230,13 @@ watch(() => props.articles, () => {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 11px;
-  font-weight: 800;
-  color: #475569;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--color-accent, #B45309);
   text-transform: uppercase;
-  letter-spacing: 0.1em;
-  margin-bottom: 20px;
+  letter-spacing: 0.22em;
+  font-family: var(--font-display, "Noto Serif SC", serif);
+  margin-bottom: 16px;
 }
 
 .pulse-chart {
@@ -251,20 +254,23 @@ watch(() => props.articles, () => {
 }
 
 .pulse-keyword {
-  color: #1e3a8a;
-  background: #f1f5f9;
+  color: var(--color-text-1, #1c1917);
+  background: var(--color-surface, #fff);
   padding: 4px 10px;
-  border-radius: 8px;
+  border-radius: 0;
+  border: 1px solid var(--color-border, #E5E5DD);
   font-weight: 700;
+  font-size: 12px;
   cursor: default;
-  transition: all 0.2s ease;
+  transition: border-color 0.18s, color 0.18s;
   animation: slide-up 0.4s ease both;
 }
 
 .pulse-keyword:hover {
-  background: #e2e8f0;
+  background: var(--color-surface, #fff);
   color: var(--color-accent);
-  transform: translateY(-2px);
+  border-color: var(--color-accent);
+  transform: none;
 }
 
 @media (max-width: 900px) {

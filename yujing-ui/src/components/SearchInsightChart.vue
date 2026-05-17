@@ -235,12 +235,10 @@ onBeforeUnmount(() => {
 <style scoped>
 .search-insight {
   margin: 18px 0 0;
-  border: 1px solid rgba(191, 219, 254, 0.72);
-  border-radius: 28px;
-  background:
-    radial-gradient(circle at 12% 18%, rgba(37, 99, 235, 0.1), transparent 24%),
-    linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(239, 246, 255, 0.88));
-  box-shadow: 0 14px 36px rgba(15, 23, 42, 0.05);
+  border: 1px solid var(--color-border, #E5E5DD);
+  border-radius: 0;
+  background: var(--color-surface, #fff);
+  box-shadow: none;
 }
 
 .search-insight-body {
@@ -256,16 +254,18 @@ onBeforeUnmount(() => {
 }
 
 .insight-copy strong {
-  color: #0f172a;
+  color: var(--color-text-1, #1c1917);
   font-size: 24px;
   line-height: 1.15;
-  letter-spacing: -0.04em;
+  letter-spacing: -0.01em;
+  font-family: var(--font-display, "Noto Serif SC", serif);
+  font-weight: 800;
 }
 
 .insight-copy p {
   flex-basis: 100%;
-  color: #64748b;
-  font-size: 14px;
+  color: var(--color-text-3, #78716c);
+  font-size: 13px;
   line-height: 1.7;
 }
 
@@ -278,18 +278,19 @@ onBeforeUnmount(() => {
 .platform-pill {
   min-height: 38px;
   padding-inline: 14px;
-  color: #475569;
-  border-color: rgba(203, 213, 225, 0.92);
-  background: rgba(255, 255, 255, 0.88);
+  color: var(--color-text-2, #475569);
+  border-color: var(--color-border, #E5E5DD);
+  background: transparent;
+  border-radius: 0;
 }
 
 .chart-shell {
   display: grid;
   grid-template-columns: 300px minmax(0, 1fr);
   gap: 18px;
-  border-radius: 22px;
-  border: 1px solid rgba(226, 232, 240, 0.9);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(248, 250, 252, 0.88));
+  border-radius: 0;
+  border: 1px solid var(--color-border, #E5E5DD);
+  background: var(--color-surface-2, #F5F5F2);
   padding: 18px;
 }
 
@@ -307,9 +308,9 @@ onBeforeUnmount(() => {
 }
 
 .mini-stat {
-  border-radius: 18px;
-  border: 1px solid rgba(226, 232, 240, 0.9);
-  background: rgba(255, 255, 255, 0.88);
+  border-radius: 0;
+  border: 1px solid var(--color-border, #E5E5DD);
+  background: var(--color-surface, #fff);
 }
 
 .mini-stat .card-body {
@@ -318,21 +319,26 @@ onBeforeUnmount(() => {
 }
 
 .mini-stat span {
-  color: #64748b;
-  font-size: 12px;
-  font-weight: 800;
+  color: var(--color-accent, #B45309);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  font-family: var(--font-display, "Noto Serif SC", serif);
 }
 
 .mini-stat strong {
-  color: #0f172a;
+  color: var(--color-text-1, #1c1917);
   font-size: 24px;
-  font-weight: 900;
-  letter-spacing: -0.04em;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  font-family: var(--font-display, "Noto Serif SC", serif);
+  font-variant-numeric: tabular-nums;
 }
 
 .chart-copy-note {
-  color: #64748b;
-  font-size: 13px;
+  color: var(--color-text-3, #78716c);
+  font-size: 12px;
   line-height: 1.7;
 }
 

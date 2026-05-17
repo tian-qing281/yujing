@@ -378,10 +378,11 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .compare-dashboard {
-  border: 1px solid rgba(99, 102, 241, 0.18);
-  border-radius: 14px;
+  border: 1px solid var(--color-border, #E5E5DD);
+  border-radius: 0;
+  border-top: 3px solid var(--color-accent);
   padding: 16px 18px 18px;
-  background: linear-gradient(180deg, #ffffff 0%, #f8faff 100%);
+  background: var(--color-surface, #fff);
   margin: 12px 0;
   animation: cmp-fade-in 0.5s ease-out;
 }
@@ -427,15 +428,16 @@ onBeforeUnmount(() => {
 .cmp-head h3 {
   font-size: 15px;
   font-weight: 800;
-  color: #1e293b;
+  color: var(--color-text-1, #1c1917);
   margin: 0;
-  letter-spacing: 0.2px;
+  letter-spacing: -0.01em;
+  font-family: var(--font-display, "Noto Serif SC", serif);
 }
-.cmp-head em { font-style: normal; color: var(--color-text); margin: 0 6px; font-weight: 700; }
+.cmp-head em { font-style: normal; color: var(--color-accent); margin: 0 6px; font-weight: 700; }
 .cmp-head-icon {
-  width: 28px; height: 28px; border-radius: 8px;
+  width: 28px; height: 28px; border-radius: 0;
   display: inline-flex; align-items: center; justify-content: center;
-  background: linear-gradient(135deg, var(--color-accent), var(--color-text)); color: #fff; font-size: 18px;
+  background: transparent; color: var(--color-accent); border: 1px solid var(--color-accent); font-size: 18px;
 }
 
 .cmp-grid {
@@ -448,33 +450,41 @@ onBeforeUnmount(() => {
 }
 
 .cmp-col {
-  border: 1px solid rgba(148, 163, 184, 0.25);
-  border-radius: 12px;
+  border: 1px solid var(--color-border, #E5E5DD);
+  border-radius: 0;
   padding: 14px;
-  background: #fff;
+  background: var(--color-surface, #fff);
   position: relative;
-  transition: border-color 0.15s ease;
-  /* Grid 子项默认 min-width:auto，内部长标题（代表情报）会撑破 1fr 列，
-     导致左右双列比例失衡（知乎问题通常比微博热搜标题更长）。 */
+  transition: border-color 0.18s ease;
   min-width: 0;
   overflow: hidden;
 }
-.cmp-col.is-leading { border-color: rgba(59, 130, 246, 0.45); box-shadow: 0 6px 18px rgba(59, 130, 246, 0.1); }
+.cmp-col.is-leading { border-color: var(--color-accent); box-shadow: none; }
+.cmp-col.is-leading::before {
+  content: "";
+  position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+  background: var(--color-accent);
+}
 
 .cmp-col-head {
   display: flex; align-items: center; gap: 8px;
   margin-bottom: 12px;
 }
 .cmp-col-head h4 {
-  font-size: 14px; font-weight: 800; color: #0f172a; margin: 0; flex: 1;
+  font-size: 14px; font-weight: 800; color: var(--color-text-1, #1c1917); margin: 0; flex: 1;
+  font-family: var(--font-display, "Noto Serif SC", serif);
 }
 .cmp-side-tag {
-  font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px;
-  background: #f1f5f9; color: #64748b; letter-spacing: 0.5px;
+  font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 0;
+  background: transparent; color: var(--color-text-3, #78716c); letter-spacing: 0.22em;
+  text-transform: uppercase; border: 1px solid var(--color-border, #E5E5DD);
+  font-family: var(--font-display, "Noto Serif SC", serif);
 }
 .cmp-badge {
-  font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 999px;
-  background: linear-gradient(135deg, var(--color-accent), var(--color-text)); color: #fff;
+  font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 0;
+  background: transparent; color: var(--color-accent); border: 1px solid var(--color-accent);
+  letter-spacing: 0.22em; text-transform: uppercase;
+  font-family: var(--font-display, "Noto Serif SC", serif);
 }
 
 .cmp-metrics {
@@ -482,31 +492,38 @@ onBeforeUnmount(() => {
   gap: 10px; margin: 0 0 14px; padding: 0;
 }
 .cmp-metric {
-  background: #f8fafc; border-radius: 8px; padding: 10px 12px;
+  background: var(--color-surface-2, #F5F5F2); border-radius: 0;
+  border: 1px solid var(--color-border, #E5E5DD);
+  padding: 10px 12px;
 }
 .cmp-metric dt {
-  font-size: 11px; color: #94a3b8; font-weight: 700; margin-bottom: 4px;
-  letter-spacing: 0.3px;
+  font-size: 10px; color: var(--color-accent, #B45309); font-weight: 700; margin-bottom: 4px;
+  letter-spacing: 0.22em; text-transform: uppercase;
+  font-family: var(--font-display, "Noto Serif SC", serif);
 }
 .cmp-metric dd {
   margin: 0; display: flex; align-items: baseline; gap: 4px;
 }
 .cmp-metric dd strong {
-  font-size: 20px; font-weight: 800; color: #0f172a;
+  font-size: 20px; font-weight: 800; color: var(--color-text-1, #1c1917);
+  font-variant-numeric: tabular-nums;
+  font-family: var(--font-display, "Noto Serif SC", serif);
 }
-.cmp-metric dd strong.trend-up { color: #16a34a; }
-.cmp-metric dd strong.trend-down { color: #dc2626; }
-.cmp-unit { font-size: 11px; color: #94a3b8; font-weight: 600; }
+.cmp-metric dd strong.trend-up { color: #047857; }
+.cmp-metric dd strong.trend-down { color: #b91c1c; }
+.cmp-unit { font-size: 11px; color: var(--color-text-3, #78716c); font-weight: 600; }
 
 .cmp-sub-title {
-  font-size: 11px; font-weight: 700; color: #64748b;
-  letter-spacing: 0.4px; margin-bottom: 6px;
+  font-size: 10px; font-weight: 700; color: var(--color-accent, #B45309);
+  letter-spacing: 0.22em; text-transform: uppercase; margin-bottom: 8px;
+  font-family: var(--font-display, "Noto Serif SC", serif);
 }
 
 .cmp-sentiment { margin-bottom: 12px; }
 .cmp-sent-bar {
-  display: flex; height: 8px; border-radius: 999px; overflow: hidden;
-  background: #f1f5f9;
+  display: flex; height: 6px; border-radius: 0; overflow: hidden;
+  background: var(--color-surface-2, #F5F5F2);
+  border: 1px solid var(--color-border, #E5E5DD);
 }
 .cmp-sent-seg { transition: flex 0.3s ease; }
 .cmp-sent-legend {
@@ -514,35 +531,36 @@ onBeforeUnmount(() => {
 }
 .cmp-sent-chip {
   display: inline-flex; align-items: center; gap: 4px;
-  font-size: 11px; color: #475569; font-weight: 600;
+  font-size: 11px; color: var(--color-text-2, #475569); font-weight: 600;
 }
 .cmp-sent-dot {
-  width: 8px; height: 8px; border-radius: 999px;
+  width: 8px; height: 8px; border-radius: 0;
 }
 
 .cmp-reps ul { list-style: none; padding: 0; margin: 6px 0 0; }
 .cmp-reps li {
   display: flex; gap: 8px; padding: 6px 8px;
-  border-radius: 6px; cursor: pointer;
-  transition: background 0.15s ease;
+  border-radius: 0; cursor: pointer;
+  border-left: 2px solid transparent;
+  transition: background 0.15s ease, border-color 0.15s ease;
   font-size: 12px; line-height: 1.5;
-  /* li 本身也是 flex 容器，min-width:0 让内部 flex item 能够按 ellipsis 收缩。 */
   min-width: 0;
 }
-.cmp-reps li:hover { background: var(--color-surface-2); }
+.cmp-reps li:hover { background: var(--color-surface-2); border-left-color: var(--color-accent); }
 .cmp-rep-src {
-  flex-shrink: 0; font-weight: 700; color: var(--color-accent); font-size: 11px;
+  flex-shrink: 0; font-weight: 700; color: var(--color-accent); font-size: 10px;
+  letter-spacing: 0.18em; text-transform: uppercase;
+  font-family: var(--font-display, "Noto Serif SC", serif);
 }
-/* flex:1 + min-width:0 是 ellipsis 在 flex 容器里生效的经典组合缺一不可。 */
 .cmp-rep-title {
   flex: 1; min-width: 0;
-  color: #334155;
+  color: var(--color-text-1, #1c1917);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
 .cmp-chart-wrap {
-  margin-top: 14px; padding: 12px; border-radius: 10px;
-  background: #fff; border: 1px solid rgba(148, 163, 184, 0.2);
+  margin-top: 14px; padding: 12px; border-radius: 0;
+  background: var(--color-surface, #fff); border: 1px solid var(--color-border, #E5E5DD);
 }
 .cmp-chart { height: 200px; }
 
@@ -560,16 +578,16 @@ onBeforeUnmount(() => {
   width: 100%;
   min-width: 0;
   height: 380px;
-  background: #fff;
-  border: 1px solid rgba(148, 163, 184, 0.2);
-  border-radius: 12px;
+  background: var(--color-surface, #fff);
+  border: 1px solid var(--color-border, #E5E5DD);
+  border-radius: 0;
   padding: 8px;
   box-sizing: border-box;
 }
 .radar-side {
-  background: #fff;
-  border: 1px solid rgba(148, 163, 184, 0.2);
-  border-radius: 12px;
+  background: var(--color-surface, #fff);
+  border: 1px solid var(--color-border, #E5E5DD);
+  border-radius: 0;
   padding: 12px 14px;
   font-size: 12px;
   display: grid;
@@ -592,15 +610,16 @@ onBeforeUnmount(() => {
 .leader-list li {
   display: flex; align-items: center; gap: 8px;
   padding: 6px 8px;
-  border-radius: 8px;
-  background: #f8fafc;
+  border-radius: 0;
+  border-left: 2px solid var(--color-accent);
+  background: var(--color-surface-2, #F5F5F2);
 }
-.leader-dim { color: #64748b; min-width: 76px; }
-.leader-name { color: #B45309; font-weight: 600; flex: 1; }
+.leader-dim { color: var(--color-text-3, #78716c); min-width: 76px; font-size: 11px; letter-spacing: 0.08em; }
+.leader-name { color: var(--color-accent, #B45309); font-weight: 700; flex: 1; }
 .leader-score {
-  color: #475569; font-variant-numeric: tabular-nums;
-  background: #fff; border: 1px solid #e2e8f0;
-  padding: 1px 6px; border-radius: 6px;
+  color: var(--color-text-1, #1c1917); font-variant-numeric: tabular-nums;
+  background: var(--color-surface, #fff); border: 1px solid var(--color-border, #E5E5DD);
+  padding: 1px 6px; border-radius: 0;
 }
 .radar-raw {
   width: 100%;
@@ -611,8 +630,8 @@ onBeforeUnmount(() => {
 .radar-raw th, .radar-raw td {
   text-align: left;
   padding: 4px 6px;
-  border-bottom: 1px solid #f1f5f9;
+  border-bottom: 1px solid var(--color-border, #E5E5DD);
 }
-.radar-raw th { color: #94a3b8; font-weight: 500; }
-.radar-raw td { color: #475569; font-variant-numeric: tabular-nums; }
+.radar-raw th { color: var(--color-accent, #B45309); font-weight: 700; font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase; font-family: var(--font-display, "Noto Serif SC", serif); }
+.radar-raw td { color: var(--color-text-1, #1c1917); font-variant-numeric: tabular-nums; }
 </style>
