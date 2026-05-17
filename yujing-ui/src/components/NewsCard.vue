@@ -301,6 +301,8 @@ const majorTopBarStyle = computed(() => {
   overflow: hidden;
   overflow-wrap: anywhere;
   word-break: break-word;
+  /* UI-3：让标题换行更平衡（02-05 卡 2 行时不会出现"末行只剩 1-2 字"的孤行） */
+  text-wrap: balance;
 }
 
 .card-excerpt {

@@ -2,6 +2,9 @@
 defineProps({
   currentSourceName: String,
   currentSourceIcon: String,
+  // 新增：平台语义化 kicker（例：BAIDU REAL-TIME · 实时搜索趋势）
+  // 可选，留空时不渲染该行，保证向后兼容
+  currentSourceMeta: { type: String, default: "" },
   loading: Boolean,
   modeLabel: {
     type: String,
@@ -20,6 +23,7 @@ defineEmits(['refresh'])
           <iconify-icon v-if="currentSourceIcon" :icon="currentSourceIcon" class="breadcrumb-icon" />
           <span class="root-node">{{ currentSourceName || '数据加载中' }}</span>
         </div>
+        <div v-if="currentSourceMeta" class="header-meta" aria-hidden="true">{{ currentSourceMeta }}</div>
       </div>
     </div>
     
@@ -62,6 +66,22 @@ defineEmits(['refresh'])
 .breadcrumb { display: flex; align-items: center; gap: 12px; font-size: 22px; font-weight: 900; color: #0f172a; letter-spacing: -0.02em; min-width: 0; overflow: hidden; }
 .breadcrumb-icon { font-size: 24px; color: var(--color-accent, #B45309); display: flex; align-items: center; flex-shrink: 0; }
 .root-node { color: #020617; line-height: 1; display: flex; align-items: center; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* 平台语义化 kicker 副标题：mono 起手的英文 codename + · + 中文简介
+   高度包结、色阶隶属主标题、不抢主体视觉 */
+.header-meta {
+  margin-top: 6px;
+  font-family: var(--font-mono, "JetBrains Mono", monospace);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  color: var(--color-text-3, #A8A29E);
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
 
 .header-right { display: flex; align-items: center; gap: 24px; flex-shrink: 0; }
 .btn-sync-all { 
