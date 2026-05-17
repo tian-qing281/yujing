@@ -6,6 +6,7 @@ import { transformToHDS, recomputeImpactByGroup } from "./utils/dataAdapter";
 import AIConsultant from "./components/AIConsultant.vue";
 import AnalysisModal from "./components/AnalysisModal.vue";
 import AppHeader from "./components/AppHeader.vue";
+import PlatformStatusBar from "./components/PlatformStatusBar.vue";
 import AppSidebar from "./components/AppSidebar.vue";
 import SubscriptionPanel from "./components/SubscriptionPanel.vue";
 import CredentialModal from "./components/CredentialModal.vue";
@@ -101,6 +102,10 @@ const isCredOpen = ref(false);
 const isGlobalSyncing = ref(false);
 const lastSyncTime = ref("正在对齐节点...");
 const lastSyncAt = ref(null);
+// UI-4c：8 平台同步状态 + 跨平台聚合指标，供顶部状态轴使用
+const platformSyncSources = ref([]);
+const platformSyncMeta = ref({ cross_platform_events: 0, top_event_spread: 0, new_24h: 0 });
+let platformSyncTimer = null;
 const aiConsultantRef = ref(null);
 const credentialStatus = ref({});
 const isCredSubmitting = ref(false);
@@ -589,6 +594,10 @@ onMounted(() => {
   // 启动即检查同步状态
   pollSyncStatus();
 
+  // UI-4c：顶部状态轴独立轮询（首次立即，之后 30s 一次，跨平台事件 / 24h 新增 不需要实时更新）
+  fetchPlatformSyncStatus();
+  platformSyncTimer = setInterval(fetchPlatformSyncStatus, 30000);
+
   // 模拟对齐动画
   setTimeout(() => {
     lastSyncTime.value = new Date().toLocaleTimeString("zh-CN", { hour12: false });
@@ -670,6 +679,20 @@ watch(activeSourceFilter, () => {
 
 let syncPollCount = 0;
 const SYNC_POLL_MAX = 90;
+
+// UI-4c：独立拉取 8 平台同步状态 + 跨平台聚合指标（不阻塞 pollSyncStatus，不参与全局同步判定）
+const fetchPlatformSyncStatus = async () => {
+  try {
+    const res = await fetch(buildApiUrl("/api/sync/status"));
+    if (!res.ok) return;
+    const data = await res.json();
+    if (Array.isArray(data.sources)) platformSyncSources.value = data.sources;
+    if (data.meta && typeof data.meta === "object") platformSyncMeta.value = data.meta;
+  } catch {
+    // 静默：状态轴不影响主流程
+  }
+};
+
 const pollSyncStatus = async () => {
   if (!isGlobalSyncing.value) return;
   syncPollCount++;
@@ -1548,6 +1571,12 @@ onMounted(() => {
           :currentSourceIcon="sidebarItems.find((item) => item.id === activePlatform)?.icon"
           :loading="isLoadingArticles || isGlobalSyncing"
           @refresh="handleRefresh"
+        />
+        <!-- UI-4c：8 平台同步状态轴 + 跨平台聚合指标（顶部一行，信息增量优先，不浮于 AppHeader） -->
+        <PlatformStatusBar
+          :sources="platformSyncSources"
+          :meta="platformSyncMeta"
+          @select-source="(sid) => (activePlatform = sid)"
         />
 
         <div class="content-scroll">

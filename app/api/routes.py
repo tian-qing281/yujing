@@ -1056,11 +1056,87 @@ async def warmup_runtime_dependencies():
 
 @router.get("/sync/status")
 async def get_sync_status():
+    """同步状态 + 8 平台分源状态 + 全局聚合指标（供 UI-4c 顶部状态轴使用）。
+
+    向后兼容：保留原 fetching / last_fetch 字段；
+    新增 sources[]（每个源最新抓取时间、在榜条数、stale 判定）+ meta（跨平台事件、全平台齐发、24h 新增）。
+    """
+    from sqlalchemy import func as sa_func
+
     async with swr_state_lock:
-        return {
-            "fetching": swr_cache["fetching"],
-            "last_fetch": swr_cache["last_fetch"]
-        }
+        fetching = swr_cache["fetching"]
+        last_fetch = swr_cache["last_fetch"]
+
+    sources: list[dict] = []
+    meta: dict = {
+        "cross_platform_events": 0,
+        "top_event_spread": 0,
+        "new_24h": 0,
+    }
+
+    db = SessionLocal()
+    try:
+        # 每个源：最新 fetch_time（任意 rank） + 当前在榜条数（rank<999）
+        latest_rows = (
+            db.query(Article.source_id, sa_func.max(Article.fetch_time))
+            .filter(Article.source_id.in_(SOURCE_IDS))
+            .group_by(Article.source_id)
+            .all()
+        )
+        latest_map = {sid: ts for sid, ts in latest_rows}
+
+        in_top_rows = (
+            db.query(Article.source_id, sa_func.count(Article.id))
+            .filter(Article.source_id.in_(SOURCE_IDS), Article.rank < 999)
+            .group_by(Article.source_id)
+            .all()
+        )
+        in_top_map = {sid: cnt for sid, cnt in in_top_rows}
+
+        now_utc = utcnow()
+        stale_threshold = timedelta(minutes=30)
+        for sid in SOURCE_IDS:
+            latest = latest_map.get(sid)
+            # 统一为 UTC ISO + Z 后缀，前端用 Asia/Shanghai 时区渲染
+            latest_iso = None
+            status = "missing"
+            if latest is not None:
+                # DB 中 fetch_time 存储为 naive UTC（与 utcnow() 一致），直接比较
+                latest_naive = latest.replace(tzinfo=None) if latest.tzinfo else latest
+                latest_iso = latest_naive.isoformat() + "Z"
+                status = "active" if (now_utc - latest_naive) <= stale_threshold else "stale"
+            sources.append({
+                "source_id": sid,
+                "name": SOURCE_NAME_MAP.get(sid, sid),
+                "latest_fetch_at": latest_iso,
+                "in_top_count": int(in_top_map.get(sid, 0)),
+                "status": status,
+            })
+
+        # meta：跨 ≥3 平台事件、全平台齐发（>=7 个平台）事件、近 24h 新增 Article
+        meta["cross_platform_events"] = int(
+            db.query(sa_func.count(Event.id))
+            .filter(Event.platform_count >= 3)
+            .scalar() or 0
+        )
+        meta["top_event_spread"] = int(
+            db.query(sa_func.max(Event.platform_count)).scalar() or 0
+        )
+        cutoff_24h = now_utc - timedelta(hours=24)
+        meta["new_24h"] = int(
+            db.query(sa_func.count(Article.id))
+            .filter(Article.fetch_time >= cutoff_24h)
+            .scalar() or 0
+        )
+    finally:
+        db.close()
+
+    return {
+        "fetching": fetching,
+        "last_fetch": last_fetch,
+        "sources": sources,
+        "meta": meta,
+    }
 
 
 def _fetch_balanced_articles(session: Session):
