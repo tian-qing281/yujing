@@ -437,21 +437,7 @@ const majorTopBarStyle = computed(() => {
   border-top: 6px solid var(--color-accent);
 }
 
-/* lead 头条加一个小 kicker：TOP STORY · 今日头条，位于序号右侧 */
-.news-card--lead .card-rank-box::after {
-  content: "TOP STORY · 今日头条";
-  display: inline-block;
-  margin-left: 14px;
-  vertical-align: middle;
-  font-family: var(--font-display, "Noto Serif SC", serif);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.22em;
-  color: var(--color-accent, #B45309);
-  text-transform: uppercase;
-  position: relative;
-  top: -6px;
-}
+/* UI-14 前置清理：去掉 TOP STORY · 今日头条 kicker，保留 lead 顶部赤陶红色带就够仪式感 */
 
 .news-card--lead .card-rank-box {
   font-size: 34px;
