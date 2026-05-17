@@ -974,21 +974,23 @@ onMounted(loadAll);
 
 .sub-rec-reason {
   padding: 2px 8px;
-  background: var(--color-surface-2);
+  background: transparent;
   color: var(--color-accent);
   border: 1px solid var(--color-border);
-  border-radius: 3px;
+  border-radius: 0;
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
+  font-family: var(--font-display, "Noto Serif SC", serif);
+  letter-spacing: 0.06em;
 }
 
 /* A1: 结构化推荐解释徽章 6 色，统一基础样式 */
 .sub-rec-chip {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
-  padding: 2px 7px 2px 5px;
-  border-radius: 999px;
+  gap: 4px;
+  padding: 2px 8px 2px 6px;
+  border-radius: 0;
   font-size: 11px;
   font-weight: 600;
   border: 1px solid transparent;
@@ -1000,6 +1002,9 @@ onMounted(loadAll);
   font-weight: 700;
   opacity: 0.85;
   margin-right: 2px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-family: var(--font-display, "Noto Serif SC", serif);
 }
 .sub-rec-chip-text { font-weight: 600; }
 .sub-rec-chip strong {
