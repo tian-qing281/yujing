@@ -959,6 +959,13 @@ def marshal_topic(topic: Topic, query: str = "", search_hit: dict | None = None)
 
 
 async def sync_trigger_crawlers():
+    # DEMO_MODE：演示模式下任何路径（手动刷新、SWR 后台、定时任务等）触发
+    # 爬虫都会污染 yujing.demo.db，必须在入口处直接短路。
+    from app.config import DEMO_MODE
+    if DEMO_MODE:
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] [DEMO_MODE] sync_trigger_crawlers 已短路（不爬取）")
+        return
+
     crawlers = [
         WeiboHotSearch(),
         BaiduHotSearch(),
@@ -1254,6 +1261,11 @@ def _fetch_balanced_articles(session: Session):
 
 def _refresh_events_cache():
     if _shutting_down.is_set():
+        return
+    # DEMO_MODE：演示模式下事件/话题/Meili 索引全部锁死为 demo 库快照内容；
+    # rebuild_events / rebuild_topics 会改写 events 表，必须短路。
+    from app.config import DEMO_MODE
+    if DEMO_MODE:
         return
     with event_hub_refresh_lock:
         db = SessionLocal()
