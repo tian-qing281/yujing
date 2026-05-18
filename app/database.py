@@ -24,10 +24,15 @@ def _resolve_project_path(path_value: str, fallback: str) -> str:
 os.makedirs(DB_DIR, exist_ok=True)
 # 数据库文件默认名与项目对齐为 yujing.db；保留 DATABASE_PATH 环境变量覆盖入口，
 # 便于老部署通过 .env 指回历史文件（例如 runtime/db/hongsou.db）。
-DATABASE_PATH = _resolve_project_path(
-    os.getenv("DATABASE_PATH"),
-    os.path.join(DB_DIR, "yujing.db"),
-)
+# DEMO_MODE ON 时优先切到独立的演示库，避免污染主库；DATABASE_PATH 显式覆盖优先级最高。
+from app.config import DEMO_MODE as _DEMO_MODE, DEMO_DB_FILENAME as _DEMO_DB_FILENAME  # noqa: E402
+
+if os.getenv("DATABASE_PATH"):
+    DATABASE_PATH = _resolve_project_path(os.getenv("DATABASE_PATH"), os.path.join(DB_DIR, "yujing.db"))
+elif _DEMO_MODE:
+    DATABASE_PATH = os.path.join(DB_DIR, _DEMO_DB_FILENAME)
+else:
+    DATABASE_PATH = os.path.join(DB_DIR, "yujing.db")
 DATABASE_URL = f"sqlite:///{DATABASE_PATH}"
 
 from sqlalchemy import event as sa_event

@@ -104,6 +104,14 @@ def start_scheduler():
     if scheduler.running:
         return
 
+    # DEMO_MODE：答辩演示模式下跳过全部定时任务（不爬虫 / 不增量聚类 / 不早报），
+    # 数据完全使用 yujing.demo.db 快照，避免演示中数据被覆盖或网络抖动出错。
+    from app.config import DEMO_MODE
+    if DEMO_MODE:
+        print("[DEMO_MODE] 已启用，跳过所有 APScheduler 任务注册（爬虫/聚类/校准/早报）")
+        scheduler.start()
+        return
+
     for source in sources:
         scheduler.add_job(
             source.run_and_save,
