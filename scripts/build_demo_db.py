@@ -171,6 +171,31 @@ def prune(top_n: int, dry_run: bool) -> None:
     except sqlite3.OperationalError as e:
         print(f"[跳过] articles_fts: {e}")
 
+    # 8. 校准 topics 表冗余统计字段（events 表的 article_count/platform_count
+    # 经实测已与 event_articles 对齐，无需重算；topics 表则因裁剪后未刷新需修正）
+    cur.execute(
+        """
+        UPDATE topics SET
+          event_count = (
+            SELECT COUNT(*) FROM topic_events WHERE topic_id = topics.id
+          ),
+          article_count = (
+            SELECT COUNT(DISTINCT ea.article_id)
+            FROM topic_events te
+            JOIN event_articles ea ON ea.event_id = te.event_id
+            WHERE te.topic_id = topics.id
+          ),
+          platform_count = (
+            SELECT COUNT(DISTINCT a.source_id)
+            FROM topic_events te
+            JOIN event_articles ea ON ea.event_id = te.event_id
+            JOIN articles a ON a.id = ea.article_id
+            WHERE te.topic_id = topics.id
+          )
+        """
+    )
+    print(f"[校准] topics 统计字段 {cur.rowcount} 行")
+
     conn.commit()
     print("\n[压缩] VACUUM ...")
     t0 = time.time()
