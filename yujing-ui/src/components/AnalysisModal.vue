@@ -72,7 +72,7 @@
                 <p class="status-bright-text" style="color:#ef4444">采集或分析失败</p>
                 <p class="err-detail">{{ item.analyze_error }}</p>
                 <p class="err-hint" v-if="/凭据|登录|cookie|Cookie|验证/.test(item.analyze_error)">
-                  该站点需要有效登录态，请在左侧「凭据资产配置」重新填入 Cookie 后重试。
+                  该站点需要有效登录态，请在左侧「Cookie 配置」重新填入 Cookie 后重试。
                 </p>
                 <p class="err-hint" v-else-if="/JavaScript|前端壳|热点聚合页/.test(item.analyze_error)">
                   原站为纯 JS 渲染页面（或热搜跳转页），无法直接抽取文本。请点击上方「访问网页原文」查看原始内容。
@@ -91,7 +91,7 @@
                   <iconify-icon icon="mdi:alert-circle-outline" />
                   <div class="vis-error-banner__body">
                     <strong>原文采集受限：</strong>{{ item.analyze_error }}
-                    <span v-if="/凭据|登录|cookie|Cookie|验证/.test(item.analyze_error)">（请更新左侧「凭据资产配置」中的 Cookie 后重试）</span>
+                    <span v-if="/凭据|登录|cookie|Cookie|验证/.test(item.analyze_error)">（请更新左侧「Cookie 配置」中的 Cookie 后重试）</span>
                   </div>
                   <button class="vis-error-banner__retry btn btn-xs" @click="$emit('trigger-ai', true)">重试</button>
                 </div>
@@ -269,12 +269,12 @@
                   <div class="report-body markdown-body" v-html="renderedSummary"></div>
               </div>
 
-              <!-- 凭据失效专用提示（后端返回以 ❌ 开头的错误信息） -->
+              <!-- Cookie 失效专用提示（后端返回以 ❌ 开头的错误信息） -->
               <div v-else-if="isCredentialError" class="report-credential-error">
                 <iconify-icon icon="mdi:key-alert-outline" />
-                <p class="empty-title">目标平台凭据失效</p>
+                <p class="empty-title">目标平台 Cookie 失效</p>
                 <p class="empty-hint">{{ credentialErrorMessage }}</p>
-                <p class="empty-hint">请前往侧边栏 <strong>「凭据资产配置」</strong> 更新对应平台的 Cookie 后重试。</p>
+                <p class="empty-hint">请前往侧边栏 <strong>「Cookie 配置」</strong> 更新对应平台的 Cookie 后重试。</p>
               </div>
 
               <!-- 空态：未触发分析时引导用户点击右上角"开始深度分析" -->

@@ -397,6 +397,19 @@ const SENTIMENT_LABEL_MAP = {
   sadness: "悲伤", doubt: "质疑", surprise: "惊讶", disgust: "厌恶",
 };
 
+// 情感演变堆叠面积图的 8 系列配置（顺序＝堆叠从下到上）
+// 颜色与 SENTIMENT_COLOR_MAP 对齐，areaTop/areaBottom 用于渐变填充
+const SENTIMENT_TREND_SERIES = [
+  { key: "neutral",  name: "中性", color: "#A8A29E", areaTop: "rgba(168,162,158,0.50)", areaBottom: "rgba(168,162,158,0.06)" },
+  { key: "concern",  name: "关注", color: "#1E40AF", areaTop: "rgba(30,64,175,0.50)",   areaBottom: "rgba(30,64,175,0.06)" },
+  { key: "joy",      name: "喜悦", color: "#15803D", areaTop: "rgba(21,128,61,0.55)",   areaBottom: "rgba(21,128,61,0.06)" },
+  { key: "surprise", name: "惊讶", color: "#D97706", areaTop: "rgba(217,119,6,0.50)",   areaBottom: "rgba(217,119,6,0.06)" },
+  { key: "doubt",    name: "质疑", color: "#B45309", areaTop: "rgba(180,83,9,0.50)",    areaBottom: "rgba(180,83,9,0.06)" },
+  { key: "sadness",  name: "悲伤", color: "#57534E", areaTop: "rgba(87,83,78,0.50)",    areaBottom: "rgba(87,83,78,0.06)" },
+  { key: "anger",    name: "愤怒", color: "#B91C1C", areaTop: "rgba(185,28,28,0.55)",   areaBottom: "rgba(185,28,28,0.06)" },
+  { key: "disgust",  name: "厌恶", color: "#7F1D1D", areaTop: "rgba(127,29,29,0.55)",   areaBottom: "rgba(127,29,29,0.06)" },
+];
+
 const getSentimentLabel = (sentiment) => {
   const raw = String(sentiment || "").trim();
   if (!raw) return "";
@@ -661,7 +674,12 @@ const renderCharts = () => {
   const timeline = timeSeries.value;
   const sources = sourceBreakdown.value;
   const keywords = keywordBreakdown.value;
-  const sentiment = sentimentSummary.value;
+  // 舆情倾向环图改回 8 分类（与 emotionBreakdown 同源，颜色取自 SENTIMENT_COLOR_MAP）
+  const sentiment = emotionBreakdown.value.map((item) => ({
+    label: item.label,
+    value: item.value,
+    color: SENTIMENT_COLOR_MAP[item.key] || "#94a3b8",
+  }));
 
   // 1. 时间趋势 — 柱状(数量) + 折线(热度) 双轴
   timeTrendChart?.setOption({
@@ -924,17 +942,14 @@ const renderCharts = () => {
         },
       },
       legend: {
-        data: [
-          { name: "正面", icon: "roundRect" },
-          { name: "中性", icon: "roundRect" },
-          { name: "负面", icon: "roundRect" },
-        ],
+        // 情感演变图改回 8 分类：中性/关注/喜悦/愤怒/悲伤/质疑/惊讶/厌恶
+        data: SENTIMENT_TREND_SERIES.map((s) => ({ name: s.name, icon: "roundRect" })),
         top: 6,
         right: 16,
         textStyle: { color: "#475569", fontSize: 11, fontWeight: 700 },
         itemWidth: 14,
         itemHeight: 8,
-        itemGap: 16,
+        itemGap: 12,
       },
       grid: { top: 42, right: 26, bottom: 50, left: 52, containLabel: false },
       xAxis: {
@@ -972,77 +987,29 @@ const renderCharts = () => {
         axisLine: { show: false },
         axisTick: { show: false },
       },
-      series: [
-        {
-          name: "正面",
-          type: "line",
-          stack: "total",
-          smooth: 0.4,
-          symbol: "circle",
-          symbolSize: 6,
-          showSymbol: false,
-          emphasis: { focus: "series", scale: 1.6 },
-          areaStyle: {
-            color: {
-              type: "linear",
-              x: 0, y: 0, x2: 0, y2: 1,
-              colorStops: [
-                { offset: 0, color: "rgba(16,185,129,0.6)" },
-                { offset: 1, color: "rgba(16,185,129,0.08)" },
-              ],
-            },
+      series: SENTIMENT_TREND_SERIES.map((s) => ({
+        name: s.name,
+        type: "line",
+        stack: "total",
+        smooth: 0.4,
+        symbol: "circle",
+        symbolSize: 6,
+        showSymbol: false,
+        emphasis: { focus: "series", scale: 1.6 },
+        areaStyle: {
+          color: {
+            type: "linear",
+            x: 0, y: 0, x2: 0, y2: 1,
+            colorStops: [
+              { offset: 0, color: s.areaTop },
+              { offset: 1, color: s.areaBottom },
+            ],
           },
-          lineStyle: { color: "#15803D", width: 2 },
-          itemStyle: { color: "#15803D", borderColor: "#fff", borderWidth: 2 },
-          data: trend.map((d) => d.positive || 0),
         },
-        {
-          name: "中性",
-          type: "line",
-          stack: "total",
-          smooth: 0.4,
-          symbol: "circle",
-          symbolSize: 6,
-          showSymbol: false,
-          emphasis: { focus: "series", scale: 1.6 },
-          areaStyle: {
-            color: {
-              type: "linear",
-              x: 0, y: 0, x2: 0, y2: 1,
-              colorStops: [
-                { offset: 0, color: "rgba(168,162,158,0.5)" },
-                { offset: 1, color: "rgba(168,162,158,0.06)" },
-              ],
-            },
-          },
-          lineStyle: { color: "#A8A29E", width: 2 },
-          itemStyle: { color: "#A8A29E", borderColor: "#fff", borderWidth: 2 },
-          data: trend.map((d) => d.neutral || 0),
-        },
-        {
-          name: "负面",
-          type: "line",
-          stack: "total",
-          smooth: 0.4,
-          symbol: "circle",
-          symbolSize: 6,
-          showSymbol: false,
-          emphasis: { focus: "series", scale: 1.6 },
-          areaStyle: {
-            color: {
-              type: "linear",
-              x: 0, y: 0, x2: 0, y2: 1,
-              colorStops: [
-                { offset: 0, color: "rgba(185,28,28,0.55)" },
-                { offset: 1, color: "rgba(185,28,28,0.06)" },
-              ],
-            },
-          },
-          lineStyle: { color: "#B91C1C", width: 2 },
-          itemStyle: { color: "#B91C1C", borderColor: "#fff", borderWidth: 2 },
-          data: trend.map((d) => d.negative || 0),
-        },
-      ],
+        lineStyle: { color: s.color, width: 2 },
+        itemStyle: { color: s.color, borderColor: "#fff", borderWidth: 2 },
+        data: trend.map((d) => d[s.key] || 0),
+      })),
     });
   }
 

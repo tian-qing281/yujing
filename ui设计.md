@@ -218,7 +218,7 @@ ECharts 全部图表统一使用 5 阶单色梯度：
 | 全景事件聚合 | ✅ | metric 卡 + 时间过滤器 + EventCard |
 | AI 助手 | ✅ | 早报 banner + 告警卡 + 快速操作 + 会话列表 |
 | 我的订阅 | ✅ | hero（两轮迭代）+ 关键词 + 6 色解释 + 匹配分 chip |
-| 凭据资产配置（模态） | ✅ | 顶部 hairline + 盾牌图标 + status 卡 + 主按钮 |
+| Cookie 配置（模态） | ✅ | 顶部 hairline + 盾牌图标 + status 卡 + 主按钮 |
 | EventModal（事件深度） | ✅ | 4 张图表全部 editorial 单色梯度 |
 | AnalysisModal（分析弹窗） | ✅ | WordCloud + 雷达 + 情感柱条 |
 | CompareDashboard（对照） | ✅ | 单色梯度图表 |

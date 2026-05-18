@@ -8,7 +8,7 @@ import time
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException, Query, Response
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import case, or_, text
@@ -802,16 +802,22 @@ def _cached_search_events_count(db: Session, query: str, *, time_range=None, sou
             _search_events_cache.pop(k, None)
     return count
 
+_SENTIMENT_TREND_LABELS = ("neutral", "concern", "joy", "anger", "sadness", "doubt", "surprise", "disgust")
+
+
 def _build_sentiment_trend(related_articles: List[dict]) -> List[dict]:
-    """根据事件相关文章构造情感演变时间序列。
+    """根据事件相关文章构造情感演变时间序列（8 分类）。
 
     - 按文章发布时间(fetch_time)聚合到时间桶
     - 时间桶粒度自适应：跨度 ≤24h 用 1 小时；≤7 天用 6 小时；>7 天用 1 天
-    - 输出 [{time, positive, neutral, negative}] 升序，前端可直接渲染堆叠面积图
+    - 输出 [{time, neutral, concern, joy, anger, sadness, doubt, surprise, disgust, bucket_hours}]
     - 仅在文章数 ≥3 时返回，否则空列表（前端会隐藏卡片）
     """
     if not related_articles or len(related_articles) < 3:
         return []
+
+    def _empty_bucket() -> dict:
+        return {label: 0 for label in _SENTIMENT_TREND_LABELS}
 
     pairs: list = []
     for art in related_articles:
@@ -827,8 +833,13 @@ def _build_sentiment_trend(related_articles: List[dict]) -> List[dict]:
                 dt = dt.replace(tzinfo=None)
         except Exception:
             continue
-        sentiment = art.get("ai_sentiment") or "neutral"
-        if sentiment not in ("positive", "negative", "neutral"):
+        sentiment = (art.get("ai_sentiment") or "neutral").strip().lower()
+        # 兼容旧 3 分类：positive→joy，negative→anger
+        if sentiment == "positive":
+            sentiment = "joy"
+        elif sentiment == "negative":
+            sentiment = "anger"
+        if sentiment not in _SENTIMENT_TREND_LABELS:
             sentiment = "neutral"
         pairs.append((dt, sentiment))
 
@@ -849,34 +860,26 @@ def _build_sentiment_trend(related_articles: List[dict]) -> List[dict]:
     for dt, sent in pairs:
         epoch = int(dt.timestamp() // bucket_seconds) * bucket_seconds
         bucket_dt = datetime.fromtimestamp(epoch)
-        b = buckets.setdefault(bucket_dt, {"positive": 0, "neutral": 0, "negative": 0})
+        b = buckets.setdefault(bucket_dt, _empty_bucket())
         b[sent] += 1
 
     # P5 优化：补齐缺失桶，输出连续等距时间序列
-    # 之前仅返回有数据的桶 → 前端横轴稀疏（可能只有 3 个点），观感像"折线断裂"
-    # 现在从 min_bucket 到 max_bucket 按 bucket_seconds 步长全量铺一遍，缺口补 0
     if buckets:
         min_epoch = int(min(buckets.keys()).timestamp())
         max_epoch = int(max(buckets.keys()).timestamp())
-        # 安全上限：避免极端跨度产生 1000+ 个桶
         max_points = 200
-        if (max_epoch - min_epoch) // bucket_seconds + 1 > max_points:
-            # 跨度太大时退化为不补齐，保持原稀疏行为
-            pass
-        else:
+        if (max_epoch - min_epoch) // bucket_seconds + 1 <= max_points:
             ts = min_epoch
             while ts <= max_epoch:
                 bdt = datetime.fromtimestamp(ts)
-                buckets.setdefault(bdt, {"positive": 0, "neutral": 0, "negative": 0})
+                buckets.setdefault(bdt, _empty_bucket())
                 ts += bucket_seconds
 
     return [
         {
             "time": bdt.isoformat(),
-            "positive": b["positive"],
-            "neutral": b["neutral"],
-            "negative": b["negative"],
-            "bucket_hours": bucket_hours,  # 前端可在 tooltip 显示桶粒度
+            **{label: b[label] for label in _SENTIMENT_TREND_LABELS},
+            "bucket_hours": bucket_hours,
         }
         for bdt, b in sorted(buckets.items(), key=lambda x: x[0])
     ]
@@ -4006,7 +4009,11 @@ async def get_profile(db: Session = Depends(get_db)):
         # 若刷新过则落库
         if data.get("inferred_at") != before:
             _save_profile_data(db, profile_obj, data)
-        inferred_top = [{"tag": t, "score": round(s, 3)} for t, s in inferred[:12]]
+        # 应用用户拉黑名单（避免自动重算又把已删除的 tag 召回）
+        blacklist = set(data.get("inferred_tags_blacklist") or [])
+        inferred_top = [
+            {"tag": t, "score": round(s, 3)} for t, s in inferred[:24] if t not in blacklist
+        ][:12]
         inferred_meta = data.get("inferred_meta", {})
     except Exception:
         logging.getLogger(__name__).exception("[profile] 推断 tag 失败")
@@ -4015,9 +4022,85 @@ async def get_profile(db: Session = Depends(get_db)):
         "top_sources": [{"source_id": k, "weight": round(v, 2)} for k, v in sources],
         "top_tags": [{"tag": k, "weight": round(v, 2)} for k, v in tags],
         "inferred_tags": inferred_top,
+        "manual_tags": list(data.get("manual_tags") or []),
         "inferred_meta": inferred_meta,
         "recent_views": data["view_history"][:10],
     }
+
+
+# === 用户画像自定义编辑：删除常看源 / 删除兴趣 tag（含拉黑）/ 添加自定义 tag ===
+
+@router.delete("/profile/source/{source_id}")
+async def delete_profile_source(source_id: str, db: Session = Depends(get_db)):
+    """从「常看数据源」移除指定 source_id（用户主动忽略）。"""
+    profile, data = _load_profile_data(db)
+    sw = data.get("source_weights") or {}
+    if source_id in sw:
+        sw.pop(source_id, None)
+        data["source_weights"] = sw
+        _save_profile_data(db, profile, data)
+    return {"ok": True}
+
+
+@router.delete("/profile/tag")
+async def delete_profile_tag(tag: str = Query(..., min_length=1), db: Session = Depends(get_db)):
+    """删除兴趣标签：同时从 tag_weights、manual_tags、inferred_tags 缓存里清掉，
+    并写入 inferred_tags_blacklist，避免下次重算被重新召回。"""
+    profile, data = _load_profile_data(db)
+    tw = data.get("tag_weights") or {}
+    tw.pop(tag, None)
+    data["tag_weights"] = tw
+    data["manual_tags"] = [t for t in (data.get("manual_tags") or []) if t != tag]
+    data["inferred_tags"] = [
+        item for item in (data.get("inferred_tags") or [])
+        if (item[0] if isinstance(item, (list, tuple)) else item) != tag
+    ]
+    bl = set(data.get("inferred_tags_blacklist") or [])
+    bl.add(tag)
+    data["inferred_tags_blacklist"] = sorted(bl)
+    _save_profile_data(db, profile, data)
+    return {"ok": True}
+
+
+@router.post("/profile/tag")
+async def add_profile_tag(payload: dict = Body(...), db: Session = Depends(get_db)):
+    """用户手动添加自定义兴趣标签。"""
+    tag = (payload.get("tag") or "").strip()
+    if not tag:
+        raise HTTPException(status_code=400, detail="tag 不能为空")
+    if len(tag) > 32:
+        raise HTTPException(status_code=400, detail="tag 过长")
+    profile, data = _load_profile_data(db)
+    manual = list(data.get("manual_tags") or [])
+    if tag not in manual:
+        manual.insert(0, tag)
+    data["manual_tags"] = manual[:50]
+    # 解除拉黑（如果之前删过同名）
+    data["inferred_tags_blacklist"] = [
+        t for t in (data.get("inferred_tags_blacklist") or []) if t != tag
+    ]
+    _save_profile_data(db, profile, data)
+    return {"ok": True, "manual_tags": data["manual_tags"]}
+
+
+@router.post("/profile/reset")
+async def reset_profile(db: Session = Depends(get_db)):
+    """一键清空用户画像：行为权重、推断标签、自定义标签、拉黑名单、浏览历史全部归零。
+    订阅 / 屏蔽词不在此处清理（属于显式配置，应由用户在对应卡片单独删）。"""
+    profile, _ = _load_profile_data(db)
+    cleared = {
+        "view_history": [],
+        "source_weights": {},
+        "tag_weights": {},
+        "aspect_weights": {},
+        "inferred_tags": [],
+        "inferred_tags_blacklist": [],
+        "manual_tags": [],
+        "inferred_at": None,
+        "inferred_meta": {},
+    }
+    _save_profile_data(db, profile, cleared)
+    return {"ok": True}
 
 
 @router.get("/subscriptions", response_model=List[SubscriptionResponse])

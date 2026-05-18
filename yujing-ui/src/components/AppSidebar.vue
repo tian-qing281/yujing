@@ -76,7 +76,7 @@
     <div class="sidebar-footer">
       <button class="btn-sidebar-asset btn btn-outline btn-primary" type="button" @click="$emit('open-cred')">
         <iconify-icon icon="mdi:shield-key-outline"></iconify-icon>
-        <span v-if="!isCollapsed">凭据资产配置</span>
+        <span v-if="!isCollapsed">Cookie 配置</span>
       </button>
     </div>
   </aside>

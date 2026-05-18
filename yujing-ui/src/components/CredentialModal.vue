@@ -8,7 +8,7 @@
               <iconify-icon icon="mdi:shield-key-outline" />
             </div>
             <div>
-              <h3>登录凭据配置</h3>
+              <h3>Cookie 配置</h3>
               <p>只保存在本地采集环境，用于需要登录态的平台抓取。</p>
             </div>
           </div>
@@ -42,13 +42,13 @@
           </div>
 
           <label class="field field-block">
-            <span class="field-label label-text">登录凭据内容</span>
+            <span class="field-label label-text">Cookie 内容</span>
             <textarea
               v-model="form.cookie"
               class="textarea textarea-bordered credential-textarea"
               :disabled="currentPublicSource"
               spellcheck="false"
-              :placeholder="currentPublicSource ? '该来源走公开正文接口，不需要登录凭据。' : '粘贴浏览器中复制的完整登录凭据字符串。'"
+              :placeholder="currentPublicSource ? '该来源走公开正文接口，不需要 Cookie。' : '粘贴从浏览器复制的完整 Cookie 字符串。'"
             />
           </label>
 
@@ -60,7 +60,7 @@
             <button class="btn btn-ghost btn-secondary" type="button" @click="$emit('close')">关闭</button>
             <button class="btn btn-primary" type="button" :disabled="submitting || currentPublicSource" @click="emitSubmit">
               <iconify-icon :icon="submitting ? 'mdi:loading' : 'mdi:content-save-outline'" :class="{ spinning: submitting }" />
-              <span>{{ submitting ? "保存中..." : "保存登录凭据" }}</span>
+              <span>{{ submitting ? "保存中..." : "保存 Cookie" }}</span>
             </button>
           </div>
         </div>
@@ -127,8 +127,8 @@ watch(
 const currentConfigured = computed(() => Boolean(props.credentialStatus?.[form.value.source_id]));
 const currentPublicSource = computed(() => publicSourceIds.has(form.value.source_id));
 const currentStatusText = computed(() => {
-  if (currentPublicSource.value) return "公开正文源，已纳入全网同步，不需要本地登录凭据。";
-  return currentConfigured.value ? "本地已存在可用登录凭据文件。" : "保存后会写入本地凭据目录。";
+  if (currentPublicSource.value) return "公开正文源，已纳入全网同步，不需要本地 Cookie。";
+  return currentConfigured.value ? "本地已存在可用 Cookie 文件。" : "保存后会写入本地 Cookie 目录。";
 });
 
 const emitSubmit = () => {

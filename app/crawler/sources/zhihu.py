@@ -31,7 +31,7 @@ class ZhihuHotQuestion(BaseSource):
         if response.status_code in (401, 403):
             print(
                 f"[凭据失效] 知乎热榜返回 HTTP {response.status_code}："
-                "Cookie 已失效或未登录，请在「凭据资产配置」中更新 zhihu_hot_question 的 Cookie。"
+                "Cookie 已失效或未登录，请在「Cookie 配置」中更新 zhihu_hot_question 的 Cookie。"
             )
             return []
         try:

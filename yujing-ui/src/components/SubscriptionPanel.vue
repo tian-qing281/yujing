@@ -1,5 +1,12 @@
 <template>
   <section class="sub-panel">
+    <!-- 操作反馈 toast（重置画像 / 删除等成功提示） -->
+    <transition name="toast-fade">
+      <div v-if="toastText" class="sub-toast" :class="`sub-toast--${toastKind}`">
+        <iconify-icon :icon="toastKind === 'success' ? 'mdi:check-circle' : 'mdi:information'" />
+        <span>{{ toastText }}</span>
+      </div>
+    </transition>
     <header class="sub-hero">
       <div class="sub-hero-bg"></div>
       <div class="sub-hero-content">
@@ -90,38 +97,84 @@
           <iconify-icon icon="mdi:chart-pie" />
           <span>用户画像</span>
           <span class="sub-count">浏览 <NumberFlow :value="Number(profile.history_count) || 0" /> 次</span>
+          <!-- 二次确认的「重置画像」按钮：首次点击转红色「确认清空」状态，3 秒后自动收回 -->
+          <button
+            type="button"
+            class="sub-profile-reset"
+            :class="{ 'is-arm': resetArmed }"
+            :disabled="resetting"
+            :title="resetArmed ? '再点一次确认清空（3 秒内）' : '清空浏览权重 / 推断标签 / 自定义标签，订阅与屏蔽词不动'"
+            @click="onResetProfile"
+          >
+            <iconify-icon :icon="resetting ? 'mdi:loading' : (resetArmed ? 'mdi:alert-circle' : 'mdi:delete-sweep')" :class="{ 'animate-spin': resetting }" />
+            <span>{{ resetting ? '清空中…' : (resetArmed ? '再点一次确认' : '重置画像') }}</span>
+          </button>
         </div>
         <div class="sub-profile-block">
           <div class="sub-profile-label">常看数据源 TOP</div>
-          <div class="sub-tag-cloud">
-            <span v-for="s in profile.top_sources || []" :key="s.source_id" class="sub-tag">
+          <transition-group tag="div" name="chip-fade" class="sub-tag-cloud">
+            <span v-for="s in profile.top_sources || []" :key="'src-' + s.source_id" class="sub-tag sub-tag--removable">
               {{ SOURCE_LABEL[s.source_id] || s.source_id }}
               <strong>{{ s.weight }}</strong>
+              <button
+                type="button"
+                class="sub-tag-x"
+                title="从画像中移除该数据源"
+                @click="removeProfileSource(s.source_id)"
+              >
+                <iconify-icon icon="mdi:close" />
+              </button>
             </span>
-            <span v-if="!profile.top_sources?.length" class="sub-empty-inline">画像数据为空（点开几篇文章即可生成）</span>
-          </div>
+            <span v-if="!profile.top_sources?.length" key="empty-src" class="sub-empty-inline">画像数据为空（点开几篇文章即可生成）</span>
+          </transition-group>
         </div>
-        <div class="sub-profile-block" v-if="(profile.inferred_tags || []).length">
+        <div class="sub-profile-block">
           <div class="sub-profile-label">
             <iconify-icon icon="mdi:vector-link" />
             兴趣标签
-            <span class="sub-profile-hint">（embedding 邻近召回 · 30 min 缓存）</span>
+            <span class="sub-profile-hint">（自动推断 + 自定义 · 可删除）</span>
           </div>
-          <div class="sub-tag-cloud">
-            <span
-              v-for="t in profile.inferred_tags"
-              :key="'inf-' + t.tag"
-              class="sub-tag sub-tag--inferred"
-              :title="`embedding 邻近 cosine 累加分 ${t.score}`"
-            >
-              {{ t.tag }}
-              <strong>{{ t.score }}</strong>
-            </span>
+          <div class="sub-form sub-form--inline">
+            <input
+              v-model.trim="newManualTag"
+              class="sub-input"
+              placeholder="自定义兴趣标签，例如：AI / 经济"
+              maxlength="32"
+              @keydown.enter="addManualTag"
+            />
+            <button class="sub-btn sub-btn--primary" type="button" :disabled="!newManualTag" @click="addManualTag">
+              <iconify-icon icon="mdi:plus" /><span>添加</span>
+            </button>
           </div>
-        </div>
-        <div class="sub-profile-block" v-else>
-          <div class="sub-profile-label">兴趣标签</div>
-          <span class="sub-empty-inline">浏览满 5 篇即可生成 embedding 推断兴趣</span>
+          <div class="sub-tag-cloud" v-if="(profile.manual_tags || []).length || (profile.inferred_tags || []).length">
+            <transition-group tag="div" name="chip-fade" class="sub-tag-cloud" style="padding:0;margin:0;">
+              <span
+                v-for="t in profile.manual_tags || []"
+                :key="'mt-' + t"
+                class="sub-tag sub-tag--manual sub-tag--removable"
+                title="自定义兴趣标签"
+              >
+                <iconify-icon icon="mdi:account-edit" />
+                {{ t }}
+                <button type="button" class="sub-tag-x" title="删除该标签" @click="removeProfileTag(t)">
+                  <iconify-icon icon="mdi:close" />
+                </button>
+              </span>
+              <span
+                v-for="t in profile.inferred_tags || []"
+                :key="'inf-' + t.tag"
+                class="sub-tag sub-tag--inferred sub-tag--removable"
+                :title="`embedding 邻近 cosine 累加分 ${t.score}`"
+              >
+                {{ t.tag }}
+                <strong>{{ t.score }}</strong>
+                <button type="button" class="sub-tag-x" title="删除并不再推荐" @click="removeProfileTag(t.tag)">
+                  <iconify-icon icon="mdi:close" />
+                </button>
+              </span>
+            </transition-group>
+          </div>
+          <span v-else class="sub-empty-inline">浏览满 5 篇可生成推断兴趣，或直接添加自定义标签</span>
         </div>
       </section>
     </div>
@@ -414,6 +467,43 @@ const restoreDismissed = () => {
 const newSubKind = ref("keyword");
 const newSubValue = ref("");
 const newBlockTerm = ref("");
+const newManualTag = ref("");
+
+/* 重置画像：二次确认 + 进行中状态 + toast */
+const resetArmed = ref(false);
+const resetting = ref(false);
+let resetArmTimer = null;
+const toastText = ref("");
+const toastKind = ref("success");
+let toastTimer = null;
+const showToast = (text, kind = "success", duration = 2400) => {
+  toastText.value = text;
+  toastKind.value = kind;
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { toastText.value = ""; }, duration);
+};
+const onResetProfile = async () => {
+  if (resetting.value) return;
+  if (!resetArmed.value) {
+    resetArmed.value = true;
+    if (resetArmTimer) clearTimeout(resetArmTimer);
+    resetArmTimer = setTimeout(() => { resetArmed.value = false; }, 3000);
+    return;
+  }
+  if (resetArmTimer) { clearTimeout(resetArmTimer); resetArmTimer = null; }
+  resetArmed.value = false;
+  resetting.value = true;
+  try {
+    await fetchJSON("/api/profile/reset", { method: "POST" });
+    await loadAll();
+    showToast("画像已重置：浏览权重 / 推断标签 / 自定义标签已清空");
+  } catch (e) {
+    console.error("[SubscriptionPanel] reset profile failed", e);
+    showToast("重置失败，请稍后再试", "error");
+  } finally {
+    resetting.value = false;
+  }
+};
 
 const fetchJSON = async (path, init) => {
   const res = await fetch(buildApiUrl(path), init);
@@ -499,6 +589,29 @@ const addBlock = async () => {
 
 const removeBlock = async (id) => {
   await fetch(buildApiUrl(`/api/blocklist/${id}`), { method: "DELETE" });
+  await loadAll();
+};
+
+/* === 用户画像自定义编辑 === */
+const removeProfileSource = async (sourceId) => {
+  await fetch(buildApiUrl(`/api/profile/source/${encodeURIComponent(sourceId)}`), { method: "DELETE" });
+  await loadAll();
+};
+
+const removeProfileTag = async (tag) => {
+  await fetch(buildApiUrl(`/api/profile/tag?tag=${encodeURIComponent(tag)}`), { method: "DELETE" });
+  await loadAll();
+};
+
+const addManualTag = async () => {
+  const tag = newManualTag.value.trim();
+  if (!tag) return;
+  await fetchJSON("/api/profile/tag", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ tag }),
+  });
+  newManualTag.value = "";
   await loadAll();
 };
 
@@ -872,6 +985,137 @@ onMounted(loadAll);
 
 .sub-tag--inferred strong {
   color: var(--color-accent);
+}
+
+/* 用户自定义兴趣标签：与 inferred（虚线 accent）区分，用实线 brand 蓝 */
+.sub-tag--manual {
+  background: var(--color-surface-2);
+  color: var(--color-text);
+  border: 1px solid var(--color-brand, var(--color-accent));
+}
+.sub-tag--manual iconify-icon {
+  font-size: 12px;
+  color: var(--color-brand, var(--color-accent));
+}
+
+/* 可删除 tag 的 × 小按钮 */
+.sub-tag--removable {
+  padding-right: 4px;
+}
+.sub-tag-x {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  margin-left: 2px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-2);
+  cursor: pointer;
+  border-radius: 0;
+  font-size: 12px;
+  line-height: 1;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+.sub-tag-x:hover {
+  background: rgba(220, 38, 38, 0.12);
+  color: #dc2626;
+}
+
+/* 自定义 tag 输入行 */
+.sub-form--inline {
+  margin-bottom: 8px;
+}
+
+/* 重置画像按钮（在 sub-card-head 右侧） */
+.sub-profile-reset {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--color-text-2);
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: 0;
+  cursor: pointer;
+  transition: color 0.2s ease, border-color 0.2s ease, background 0.2s ease, transform 0.15s ease;
+  font-family: var(--font-display, "Noto Serif SC", serif);
+}
+.sub-profile-reset:hover {
+  color: var(--color-text);
+  border-color: var(--color-text-2);
+}
+.sub-profile-reset.is-arm {
+  color: #fff;
+  background: #dc2626;
+  border-color: #dc2626;
+  animation: reset-pulse 0.9s ease-in-out infinite;
+}
+.sub-profile-reset:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+@keyframes reset-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.45); }
+  50% { box-shadow: 0 0 0 6px rgba(220, 38, 38, 0); }
+}
+
+/* chip 渐隐过渡（用于 transition-group） */
+.chip-fade-enter-active,
+.chip-fade-leave-active {
+  transition: opacity 0.35s ease, transform 0.35s ease;
+}
+.chip-fade-enter-from {
+  opacity: 0;
+  transform: translateY(-4px) scale(0.92);
+}
+.chip-fade-leave-to {
+  opacity: 0;
+  transform: translateY(4px) scale(0.92);
+}
+.chip-fade-leave-active {
+  position: absolute;
+}
+
+/* 顶部 toast */
+.sub-toast {
+  position: fixed;
+  top: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 999;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+  background: var(--color-text, #111);
+  border-left: 4px solid var(--color-accent, #b45309);
+  border-radius: 0;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
+  pointer-events: none;
+}
+.sub-toast--error {
+  border-left-color: #dc2626;
+}
+.sub-toast iconify-icon {
+  font-size: 18px;
+}
+.toast-fade-enter-active,
+.toast-fade-leave-active {
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+.toast-fade-enter-from,
+.toast-fade-leave-to {
+  opacity: 0;
+  transform: translate(-50%, -12px);
 }
 
 .sub-profile-hint {
