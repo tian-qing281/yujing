@@ -1,8 +1,10 @@
 # 舆镜 · DEMO 模式一键启动（答辩演示专用）
-# 行为：
-#   - 后端 YUJING_DEMO_MODE=1（用 yujing.demo.db、跳过全部定时任务）
-#   - 前端 VITE_DEMO_MODE=1（拉长轮询、错误静默）
-#   - 不启用 BERT/HF 在线下载，避免无网络时卡顿
+# 行为：数据冻结，不启动任何爬虫；其他功能（聚类/早报/AI/检索）照常。
+#   - 后端 YUJING_DEMO_MODE=1
+#     * 跳过 8 个爬虫 source 定时 job
+#     * sync_trigger_crawlers 入口短路（手动刷新/SWR 也不爬）
+#     * 数据库仍是主库 runtime/db/yujing.db
+#   - 前端 VITE_DEMO_MODE=1（供 UI 显示「演示模式」角标用）
 #
 # 使用：powershell -ExecutionPolicy Bypass -File scripts\start_demo.ps1
 
@@ -11,18 +13,8 @@ $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
 
 Write-Host "============================================" -ForegroundColor Cyan
-Write-Host "  舆镜 DEMO 模式启动" -ForegroundColor Cyan
-Write-Host "  - 数据库: runtime\db\yujing.demo.db" -ForegroundColor Cyan
-Write-Host "  - 定时任务: 全部跳过" -ForegroundColor Cyan
+Write-Host "  舆镜 DEMO 模式启动（数据冻结，不爬取）" -ForegroundColor Cyan
 Write-Host "============================================" -ForegroundColor Cyan
-
-# 验证 demo 库存在
-$demoDb = Join-Path $root 'runtime\db\yujing.demo.db'
-if (-not (Test-Path $demoDb)) {
-    Write-Warning "未找到 $demoDb"
-    Write-Warning "请先运行: Copy-Item runtime\db\yujing.db runtime\db\yujing.demo.db"
-    exit 1
-}
 
 # 后端
 $env:YUJING_DEMO_MODE = '1'
@@ -48,4 +40,4 @@ try {
 Write-Host ""
 Write-Host "前端: http://localhost:5173" -ForegroundColor Cyan
 Write-Host "后端: http://127.0.0.1:8000" -ForegroundColor Cyan
-Write-Host "停止: scripts\stop_demo.ps1 或手动 kill PID $($backend.Id), $($frontend.Id)" -ForegroundColor Cyan
+Write-Host "停止: 手动 kill PID $($backend.Id), $($frontend.Id)" -ForegroundColor Cyan

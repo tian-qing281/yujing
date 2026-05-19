@@ -1262,11 +1262,6 @@ def _fetch_balanced_articles(session: Session):
 def _refresh_events_cache():
     if _shutting_down.is_set():
         return
-    # DEMO_MODE：演示模式下事件/话题/Meili 索引全部锁死为 demo 库快照内容；
-    # rebuild_events / rebuild_topics 会改写 events 表，必须短路。
-    from app.config import DEMO_MODE
-    if DEMO_MODE:
-        return
     with event_hub_refresh_lock:
         db = SessionLocal()
         try:

@@ -17,15 +17,14 @@ def _is_truthy(value: str | None) -> bool:
 
 
 # ========== DEMO_MODE 总开关 ==========
-# YUJING_DEMO_MODE=1 时进入「答辩演示模式」：
-#   1. 数据库切换到 yujing.demo.db（不污染主库）
-#   2. 所有 APScheduler 定时任务跳过注册（不爬虫、不增量聚类、不早报）
-#   3. 前端通过 VITE_DEMO_MODE=1 同步进入对应模式（轮询拉长、错误静默）
+# YUJING_DEMO_MODE=1 时进入「答辩演示模式」：仅冻结数据，不爬取实时数据。
+#   - 跳过 8 个爬虫 source 的 APScheduler 定时 job
+#   - sync_trigger_crawlers 入口短路（手动刷新 / SWR 后台刷新也不爬）
+#   - 其余维护任务（增量聚类 / centroid 校准 / 早报）照常运行
+#   - 数据库仍使用主库 runtime/db/yujing.db（不切库）
+# 前端通过 VITE_DEMO_MODE=1 同步显示「演示模式」角标。
 # 默认 0，普通启动行为完全不变。
 DEMO_MODE: bool = _is_truthy(os.getenv("YUJING_DEMO_MODE"))
 
-# DEMO 模式专用数据库文件名（相对项目根 runtime/db/ 目录）
-DEMO_DB_FILENAME: str = os.getenv("YUJING_DEMO_DB_FILENAME", "yujing.demo.db")
 
-
-__all__ = ["DEMO_MODE", "DEMO_DB_FILENAME"]
+__all__ = ["DEMO_MODE"]
