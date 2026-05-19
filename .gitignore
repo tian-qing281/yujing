@@ -55,3 +55,7 @@ _backups/
 
 
 runtime/db/*.cleanup_bak_*
+
+# 临时备份与文档压缩包
+runtime/backup-*/
+docs.zip
